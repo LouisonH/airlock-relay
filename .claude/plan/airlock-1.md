@@ -356,5 +356,10 @@ internal/audit          脱敏审计
 - Clash 兼容的 HTTP/HTTPS CONNECT、SOCKS5/SOCKS5H 出口，代理 URL 与认证信息作为 Secret 进入 Keychain。
 - 每路由 `Direct` / `Proxy` / `Auto` 出口；`Auto` 仅在无 Body 的 GET/HEAD 遇到拨号或 DNS 错误时回退，不对 TLS、已收到响应或非幂等请求重试。
 - 桌面设置页的代理安全录入、出口状态、开发者 LouisonH 与本地头像资源。
+- SSH 原始 TCP 出口支持 HTTP/HTTPS CONNECT、SOCKS5/SOCKS5H 与安全 `Auto`；`Auto` 只在 TCP 拨号阶段回退，Host Key 和认证失败不会二次拨号。
+- SSH Target 将真实地址、上游用户名、密码或加密私钥、私钥口令与固定 Host Key 整体存入 SecretStore；普通路由对象仅保存 `ssh/<alias>` 引用。
+- 线程安全的 SSH 路由注册表、本地 Capability/公钥指纹认证、严格 Host Key 字节固定、现代算法集合与双会话 `exec` 桥接。
+- 默认仅允许完整命令 allowlist，并拒绝 stdin、shell、PTY、window change、SFTP/subsystem、agent/X11 forwarding、local/remote port forwarding 和非回环监听。
+- 端到端测试覆盖上游密码/加密私钥、本地 Capability/公钥、退出码、拒绝请求不触达上游、错误脱敏、Host Key/认证失败关闭、CONNECT 代理与 `-race` 并发检查。
 
-当前仍是技术验证版，不是已完成发布安全评审的 MVP。下一个高风险技术里程碑是 SSH 双会话网关、known_hosts 验证与默认受限 exec；LLM 路由在安全预设完成前保持禁用。
+当前仍是技术验证版，不是已完成发布安全评审的 MVP。SSH 安全核心已经通过隔离测试，但持久 listener、本地 Host Key 生命周期、控制协议、限时/限并发和原生安全录入尚未接入，因此桌面 SSH 创建入口保持关闭。下一里程碑是完成这些集成，再开放 SSH 路由；LLM 路由在安全预设完成前同样保持禁用。

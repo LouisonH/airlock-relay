@@ -18,13 +18,16 @@ Airlock 是一个运行在本机的凭据隔离型安全转发器，面向不受
 - 路由删除会先持久化撤销 Capability，再清理 Keychain 目标；存储失败时会回滚内存状态。
 - Clash 兼容的 HTTP/HTTPS CONNECT 与 SOCKS5/SOCKS5H 出口；代理 URL 和认证只进入 Keychain，不经过 WebView。
 - 每路由 `Direct` / `Proxy` / `Auto` 策略；`Auto` 仅对无 Body 的 GET/HEAD 在拨号或 DNS 错误时回退，TLS 和非幂等请求失败关闭。
+- 已通过端到端与 race 测试的 SSH 双会话安全核心：本地 Capability/公钥认证、上游密码/加密私钥注入、精确 Host Key 固定和完整命令 allowlist。
+- SSH 默认拒绝 stdin、shell、PTY、SFTP/subsystem、agent/X11 forwarding 与端口转发；Host Key 或认证失败不会触发代理回退，也不会向客户端暴露受保护目标。
 - 简洁的 Tauri 2 + React 桌面控制台，包含三步 HTTP 路由编辑器、安全删除、紧急停止、系统托盘、轻量动画、系统/浅色/深色模式与三套可持久化配色。
 - macOS、Windows、Linux 所需应用图标资产。
 
 ## 待实现
 
 - sidecar 异常恢复与元数据迁移工具。
-- SSH 双会话网关与 OpenAI/Anthropic 路由预设。
+- SSH 持久监听、本地主机密钥、控制协议和原生安全录入接入；在此之前桌面端 SSH 创建入口保持关闭。
+- OpenAI/Anthropic 路由预设。
 - 速率、并发、TTL、一次性 Capability 与脱敏审计。
 
 ## 本地开发
@@ -45,11 +48,11 @@ npm run build
 npm run tauri dev
 ```
 
-`airlockd` 默认仅监听 `127.0.0.1:4768`，并在 macOS 上使用 Keychain SecretStore。桌面端可以安全创建、启停和删除 HTTP 路由；重启后从受保护的本地元数据恢复路由，真实 URL 和 Authorization 仍仅存在 Keychain。
+`airlockd` 默认仅监听 `127.0.0.1:4768`，并在 macOS 上使用 Keychain SecretStore。桌面端可以安全创建、启停和删除 HTTP 路由；重启后从受保护的本地元数据恢复路由，真实 URL 和 Authorization 仍仅存在 Keychain。SSH 核心当前只作为经过隔离测试的后端组件存在，尚未由桌面端开放。
 
 ## 安全边界
 
-Airlock 用最小能力和固定目标减少凭据暴露，但不是操作系统级沙箱。本机管理员、可调试 Airlock 进程或已控制操作系统的攻击者不在保护范围内。普通同用户进程无法从磁盘、环境变量或进程参数读取控制令牌；上游账号仍必须保持最小权限。
+Airlock 用最小能力和固定目标减少凭据暴露，但不是操作系统级沙箱。本机管理员、可调试 Airlock 进程或已控制操作系统的攻击者不在保护范围内。普通同用户进程无法从磁盘、环境变量或进程参数读取控制令牌；上游账号仍必须保持最小权限。SSH 的完整命令匹配是能力边界，不是远端 shell 沙箱；强隔离仍应使用专用低权限账号或远端 forced command。
 
 详细威胁模型与实施计划见 [.claude/plan/airlock-1.md](.claude/plan/airlock-1.md)，桌面交互规范见 [docs/ui-spec.md](docs/ui-spec.md)。
 
