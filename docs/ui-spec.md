@@ -9,7 +9,7 @@ Airlock Desktop is a native control plane for the local relay. It is not a web a
 - Activity: sanitized metadata only. Never show request bodies, commands, targets, headers, or secrets.
 - Settings: startup behavior, loopback listeners, proxy profiles, security defaults, and diagnostics.
 
-The default window is 1120x720 with a minimum size of 960x640. Navigation uses a fixed 200px sidebar. Narrow windows hide secondary table columns rather than converting operational rows into cards.
+The default window is 1120x720 with a minimum size of 960x640. Navigation uses a fixed 192px sidebar. Narrow windows hide secondary table columns rather than converting operational rows into cards.
 
 ## Security Rules
 
@@ -20,15 +20,25 @@ The default window is 1120x720 with a minimum size of 960x640. Navigation uses a
 - Sanitized events contain route alias, caller label, decision, latency, egress, and an opaque event ID.
 - Closing the window does not stop the daemon. Emergency stop is a separate confirmed action.
 
+## Theme System
+
+- Theme preference is `system`, `light`, or `dark`; `system` responds to live OS appearance changes.
+- Store the preference under the UI-only `airlock.ui.theme` key. Never share this object with route or Secret data.
+- Apply the resolved theme to `html[data-theme]`, `color-scheme`, and the native Tauri window theme.
+- Light mode uses a quiet neutral sidebar rather than a permanently dark navigation rail. Dark mode avoids pure black and pure white.
+
 ## Visual System
 
 - System font, 13-14px body text, 12-13px tables, 22px maximum page heading.
 - 4px spacing scale and no radius above 6px.
-- Background `#F6F7F8`, surface `#FFFFFF`, text `#171A1F`, border `#D9DEE5`.
-- Action `#2563EB`, success `#16855B`, warning `#9A5B00`, danger `#C2363F`.
+- Light canvas `#F4F6F8`, surface `#FFFFFF`, text `#18202A`, border `#DFE4EA`.
+- Dark canvas `#0F1215`, surface `#171B20`, text `#EDF2F7`, border `#2F3740`.
+- Action blue, success green, warning amber, and danger red each have distinct foreground and soft-surface tokens.
 - Status always uses an icon and text, never color alone.
 - Lucide icons, visible 2px focus rings, tooltips for icon-only actions, and reduced-motion support.
 
 ## Route Creation
 
 The in-window editor has five steps: type and alias, protected target, policy and limits, egress, review and enable. Existing secrets are replace-only. Enabling shell, PTY, SFTP, agent forwarding, or port forwarding requires an explicit high-risk acknowledgement.
+
+Route enablement uses a switch. Whole-service startup and emergency stop remain explicit commands. At widths up to 1050px, route and activity tables hide their own secondary columns through table-specific selectors.
