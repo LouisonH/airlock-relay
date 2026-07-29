@@ -2,8 +2,10 @@ package egress
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -131,6 +133,46 @@ func TestProxyConfigurationValidation(t *testing.T) {
 	}
 }
 
+func TestRawTCPDialUsesConnectSOCKS5AndAuto(t *testing.T) {
+	targetAddress := startEchoServer(t)
+	connectProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodConnect {
+			http.Error(w, "CONNECT required", http.StatusMethodNotAllowed)
+			return
+		}
+		tunnelHTTPConnect(t, w, request)
+	}))
+	defer connectProxy.Close()
+
+	manager := NewManager(nil)
+	connectURL, _ := url.Parse(connectProxy.URL)
+	if err := manager.Configure(connectURL); err != nil {
+		t.Fatal(err)
+	}
+	assertEchoDial(t, manager, Proxy, targetAddress)
+
+	socksAddress := startSOCKS5Server(t)
+	socksURL, _ := url.Parse("socks5://" + socksAddress)
+	if err := manager.Configure(socksURL); err != nil {
+		t.Fatal(err)
+	}
+	assertEchoDial(t, manager, Proxy, targetAddress)
+
+	directDialer := &net.Dialer{Timeout: 5 * time.Second}
+	template := http.DefaultTransport.(*http.Transport).Clone()
+	template.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == targetAddress {
+			return nil, &net.OpError{Op: "dial", Net: network, Err: errors.New("direct unavailable")}
+		}
+		return directDialer.DialContext(ctx, network, address)
+	}
+	manager = NewManager(template)
+	if err := manager.Configure(connectURL); err != nil {
+		t.Fatal(err)
+	}
+	assertEchoDial(t, manager, Auto, targetAddress)
+}
+
 func assertBody(t *testing.T, manager *Manager, policy, target, want string) {
 	t.Helper()
 	request, err := http.NewRequest(http.MethodGet, target, nil)
@@ -149,6 +191,54 @@ func assertBody(t *testing.T, manager *Manager, policy, target, want string) {
 	if string(payload) != want {
 		t.Fatalf("body = %q, want %q", payload, want)
 	}
+}
+
+func assertEchoDial(t *testing.T, manager *Manager, policy, address string) {
+	t.Helper()
+	connection, err := manager.DialContext(t.Context(), policy, "tcp", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	payload := []byte("airlock-echo")
+	if _, err := connection.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	response := make([]byte, len(payload))
+	if _, err := io.ReadFull(connection, response); err != nil {
+		t.Fatal(err)
+	}
+	if string(response) != string(payload) {
+		t.Fatalf("echo = %q", response)
+	}
+}
+
+func startEchoServer(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wait sync.WaitGroup
+	wait.Add(1)
+	go func() {
+		defer wait.Done()
+		for {
+			connection, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer connection.Close()
+				_, _ = io.Copy(connection, connection)
+			}()
+		}
+	}()
+	t.Cleanup(func() {
+		_ = listener.Close()
+		wait.Wait()
+	})
+	return listener.Addr().String()
 }
 
 func closedAddress(t *testing.T) string {
@@ -249,7 +339,12 @@ func handleSOCKS5(client net.Conn) {
 	if _, err := client.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0}); err != nil {
 		return
 	}
-	go func() { _, _ = io.Copy(upstream, reader) }()
+	go func() {
+		_, _ = io.Copy(upstream, reader)
+		if tcp, ok := upstream.(*net.TCPConn); ok {
+			_ = tcp.CloseWrite()
+		}
+	}()
 	_, _ = io.Copy(client, upstream)
 }
 

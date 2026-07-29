@@ -11,6 +11,7 @@ import (
 
 const targetFormatVersion = 1
 const proxyFormatVersion = 1
+const sshTargetFormatVersion = 1
 
 var referencePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9/_-]{0,127}$`)
 
@@ -33,6 +34,16 @@ type persistedHTTPTarget struct {
 type persistedProxyConfig struct {
 	Version int    `json:"version"`
 	URL     string `json:"url"`
+}
+
+type persistedSSHTarget struct {
+	Version            int    `json:"version"`
+	Address            string `json:"address"`
+	Username           string `json:"username"`
+	Password           []byte `json:"password,omitempty"`
+	PrivateKey         []byte `json:"private_key,omitempty"`
+	PrivateKeyPassword []byte `json:"private_key_password,omitempty"`
+	ExpectedHostKey    []byte `json:"expected_host_key"`
 }
 
 func newKeychainStore(backend keychainBackend) *KeychainStore {
@@ -132,6 +143,67 @@ func (s *KeychainStore) ResolveProxyConfig(ctx context.Context, reference string
 		return ProxyConfig{}, errors.New("decode protected proxy")
 	}
 	return config, nil
+}
+
+func (s *KeychainStore) PutSSHTarget(ctx context.Context, reference string, target SSHTarget) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := validateReference(reference); err != nil {
+		return err
+	}
+	if err := validateSSHTarget(target); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(persistedSSHTarget{
+		Version:            sshTargetFormatVersion,
+		Address:            target.Address,
+		Username:           target.Username,
+		Password:           target.Password,
+		PrivateKey:         target.PrivateKey,
+		PrivateKeyPassword: target.PrivateKeyPassword,
+		ExpectedHostKey:    target.ExpectedHostKey,
+	})
+	if err != nil {
+		return errors.New("encode protected SSH target")
+	}
+	defer clear(payload)
+	if err := s.backend.Put(reference, payload); err != nil {
+		return errors.New("store protected SSH target")
+	}
+	return nil
+}
+
+func (s *KeychainStore) ResolveSSHTarget(ctx context.Context, reference string) (SSHTarget, error) {
+	if err := ctx.Err(); err != nil {
+		return SSHTarget{}, err
+	}
+	if err := validateReference(reference); err != nil {
+		return SSHTarget{}, err
+	}
+	payload, err := s.backend.Get(reference)
+	if err != nil {
+		return SSHTarget{}, err
+	}
+	defer clear(payload)
+
+	var stored persistedSSHTarget
+	if err := json.Unmarshal(payload, &stored); err != nil || stored.Version != sshTargetFormatVersion {
+		return SSHTarget{}, errors.New("decode protected SSH target")
+	}
+	target := SSHTarget{
+		Address:            stored.Address,
+		Username:           stored.Username,
+		Password:           stored.Password,
+		PrivateKey:         stored.PrivateKey,
+		PrivateKeyPassword: stored.PrivateKeyPassword,
+		ExpectedHostKey:    stored.ExpectedHostKey,
+	}
+	if err := validateSSHTarget(target); err != nil {
+		clearSSHTarget(&target)
+		return SSHTarget{}, errors.New("decode protected SSH target")
+	}
+	return target, nil
 }
 
 func (s *KeychainStore) DeleteTarget(ctx context.Context, reference string) error {

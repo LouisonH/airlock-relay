@@ -1,11 +1,16 @@
 package secrets
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/url"
 	"testing"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type memoryKeychainBackend struct {
@@ -117,4 +122,110 @@ func TestKeychainStoreRejectsInvalidReferences(t *testing.T) {
 			t.Errorf("ResolveHTTPTarget(%q) error = %v", reference, err)
 		}
 	}
+}
+
+func TestSSHSecretsRoundTripWithoutAliasing(t *testing.T) {
+	backend := newMemoryKeychainBackend()
+	store := newKeychainStore(backend)
+	hostKey := testSSHPublicKey(t)
+	target := SSHTarget{
+		Address:         "ssh.internal.invalid:2222",
+		Username:        "protected-user",
+		Password:        []byte("upstream-password-sentinel"),
+		ExpectedHostKey: hostKey.Marshal(),
+	}
+	if err := store.PutSSHTarget(t.Context(), "ssh/build", target); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := store.ResolveSSHTarget(t.Context(), "ssh/build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Address != target.Address || resolved.Username != target.Username || string(resolved.Password) != string(target.Password) {
+		t.Fatal("protected SSH target changed during round trip")
+	}
+	resolved.Password[0] = 'X'
+	resolved.ExpectedHostKey[0] ^= 0xff
+	again, err := store.ResolveSSHTarget(t.Context(), "ssh/build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again.Password) != "upstream-password-sentinel" {
+		t.Fatal("stored SSH password was mutated")
+	}
+	if string(again.ExpectedHostKey) != string(hostKey.Marshal()) {
+		t.Fatal("stored SSH host key was mutated")
+	}
+}
+
+func TestMemoryStoreRejectsAmbiguousSSHAuthentication(t *testing.T) {
+	store := NewMemoryStore()
+	base := SSHTarget{
+		Address:         "127.0.0.1:22",
+		Username:        "build",
+		ExpectedHostKey: testSSHPublicKey(t).Marshal(),
+	}
+	for _, target := range []SSHTarget{
+		base,
+		func() SSHTarget {
+			target := base.Clone()
+			target.Password = []byte("password")
+			target.PrivateKey = []byte("key")
+			return target
+		}(),
+		func() SSHTarget {
+			target := base.Clone()
+			target.PrivateKeyPassword = []byte("orphaned")
+			return target
+		}(),
+	} {
+		if err := store.PutSSHTarget(t.Context(), "ssh/build", target); err == nil {
+			t.Fatal("invalid SSH authentication was accepted")
+		}
+	}
+}
+
+func TestKeychainStorePreservesEncryptedSSHPrivateKey(t *testing.T) {
+	store := newKeychainStore(newMemoryKeychainBackend())
+	privateKey := ed25519.NewKeyFromSeed(bytesOf(7, ed25519.SeedSize))
+	block, err := ssh.MarshalPrivateKeyWithPassphrase(privateKey, "airlock test", []byte("key-passphrase-sentinel"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := SSHTarget{
+		Address:            "ssh.internal.invalid:22",
+		Username:           "private-key-user",
+		PrivateKey:         pem.EncodeToMemory(block),
+		PrivateKeyPassword: []byte("key-passphrase-sentinel"),
+		ExpectedHostKey:    testSSHPublicKey(t).Marshal(),
+	}
+	if err := store.PutSSHTarget(t.Context(), "ssh/private", target); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := store.ResolveSSHTarget(t.Context(), "ssh/private")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(resolved.PrivateKey, target.PrivateKey) || !bytes.Equal(resolved.PrivateKeyPassword, target.PrivateKeyPassword) {
+		t.Fatal("encrypted SSH private key changed during round trip")
+	}
+}
+
+func bytesOf(value byte, length int) []byte {
+	result := make([]byte, length)
+	for index := range result {
+		result[index] = value
+	}
+	return result
+}
+
+func testSSHPublicKey(t *testing.T) ssh.PublicKey {
+	t.Helper()
+	privateKey := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+	publicKey, err := ssh.NewPublicKey(privateKey.Public())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return publicKey
 }
