@@ -346,10 +346,12 @@ internal/audit          脱敏审计
 - HTTP/Wget GET/HEAD 固定路由、Query allowlist、Range、上游认证注入、多层编码路径防护、同源重定向重写和响应 Header 白名单。
 - `airlockd` loopback-only 监听和健康检查。
 - Tauri 2 + React 桌面控制台、系统托盘、紧急停止确认和全平台图标资产。
-- 跟随系统/浅色/深色主题与可持久化的 UI-only 主题偏好。
+- 跟随系统/浅色/深色模式、青峦/海岸/暖阳配色与可持久化的 UI-only 主题偏好。
 - 可写、读取和删除的 macOS Keychain SecretStore；哨兵 Secret 测试使用内存后端，不触碰真实钥匙串。
 - 权限为 `0600` 的 Unix Socket 控制通道；控制令牌由 Tauri 生成、通过 sidecar stdin 传递且不落盘、不进入环境变量或进程参数。
 - macOS 原生隐藏输入窗口和一次性 Capability 窗口；真实目标与认证不经过 WebView/IPC 参数。
 - Tauri sidecar 启停、健康检查和退出清理，以及更简洁的三步 HTTP 路由流程与 reduced-motion 动画降级。
+- 权限为 `0600` 的版本化路由元数据，仅持久化别名、策略、Keychain 引用和 Capability SHA-256 摘要。
+- 路由删除、Capability 持久化撤销与 Keychain 清理；创建/启停/删除在元数据写入失败时回滚。
 
-当前仍是技术验证版，不是可保存生产凭据的 MVP。下一个安全里程碑是路由元数据持久化与删除清理，然后接入 Clash HTTP/SOCKS5 出口；SSH 和 LLM 路由在各自安全核心完成前保持禁用。
+当前仍是技术验证版，不是已完成发布安全评审的 MVP。下一个里程碑是 Clash HTTP/SOCKS5 出口和安全的 `auto` 回退策略；SSH 和 LLM 路由在各自安全核心完成前保持禁用。

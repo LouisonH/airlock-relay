@@ -4,7 +4,7 @@ Airlock 是一个运行在本机的凭据隔离型安全转发器，面向不受
 
 调用者只接触本地路由和受限 Capability Token。真实上游 URL、SSH 地址、API Key、密码、私钥和代理凭据由 Airlock 保存并注入，不进入桌面 WebView，也不暴露给调用者。
 
-> 当前是 P0 技术验证版，尚不适合保存真实生产凭据。
+> 当前是 P0 技术验证版。路由元数据与凭据已持久化，但在完成代理出口、完整审计和发布安全评审前，仍不建议保存高价值生产凭据。
 
 ## 已实现
 
@@ -14,12 +14,14 @@ Airlock 是一个运行在本机的凭据隔离型安全转发器，面向不受
 - 可更新、删除的 SecretStore 接口与 macOS Keychain 后端；目标和 Secret 不出现在 GUI IPC 类型中。
 - Tauri 管理的 `airlockd` sidecar 与权限为 `0600` 的 Unix Socket 控制通道；随机控制令牌只经 stdin 传递并保留在内存中。
 - macOS 原生安全录入窗口；完整 URL、Authorization 和一次性 Capability 均不经过 WebView。
-- 简洁的 Tauri 2 + React 桌面控制台，包含三步 HTTP 路由编辑器、紧急停止、系统托盘、轻量动画和跟随系统/浅色/深色主题。
+- 版本化的路由元数据持久化；`routes.json` 权限为 `0600`，仅保存别名、策略、Keychain 引用和 Capability 摘要。
+- 路由删除会先持久化撤销 Capability，再清理 Keychain 目标；存储失败时会回滚内存状态。
+- 简洁的 Tauri 2 + React 桌面控制台，包含三步 HTTP 路由编辑器、安全删除、紧急停止、系统托盘、轻量动画、系统/浅色/深色模式与三套可持久化配色。
 - macOS、Windows、Linux 所需应用图标资产。
 
 ## 待实现
 
-- 路由元数据持久化、路由删除/凭据清理和 sidecar 异常恢复。
+- sidecar 异常恢复与元数据迁移工具。
 - Clash HTTP/SOCKS5 代理出口和安全的 `auto` 回退策略。
 - SSH 双会话网关与 OpenAI/Anthropic 路由预设。
 - 速率、并发、TTL、一次性 Capability 与脱敏审计。
@@ -42,7 +44,7 @@ npm run build
 npm run tauri dev
 ```
 
-`airlockd` 默认仅监听 `127.0.0.1:4768`，并在 macOS 上使用 Keychain SecretStore。桌面端目前可以安全创建和启停 HTTP 路由，但路由元数据仍只保存在当前 sidecar 进程内；完成持久化和删除清理前，请勿录入生产凭据。
+`airlockd` 默认仅监听 `127.0.0.1:4768`，并在 macOS 上使用 Keychain SecretStore。桌面端可以安全创建、启停和删除 HTTP 路由；重启后从受保护的本地元数据恢复路由，真实 URL 和 Authorization 仍仅存在 Keychain。
 
 ## 安全边界
 
