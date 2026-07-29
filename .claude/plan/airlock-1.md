@@ -1,6 +1,6 @@
 # Airlock 项目规划 v2
 
-> 状态：讨论迭代草案
+> 状态：已确认，P0 开发中
 > 日期：2026-07-29
 > 取代：`airlock.md`
 > 一句话定位：向不受信任的 LLM、Agent 和脚本提供受限的本地转发能力，同时隐藏真实目标地址和上游凭据。
@@ -314,28 +314,37 @@ internal/audit          脱敏审计
 - 删除 Route 并选择删除 Secret 后，旧 Capability 立即失效且系统钥匙串条目被清理。
 - GUI、错误通知和活动页不显示真实 Target 或 Secret。
 
-## 12. Git 与 GitHub 计划
+## 12. Git 与 GitHub 状态
 
-当前本地状态：已初始化 Git，默认分支为 `main`；尚未创建提交或远程仓库。
+仓库已以 Private 可见性创建并推送到 `LouisonH/airlock-relay`，默认分支为 `main`。
 
-首次上传前完成：
+已完成：
 
 1. 设置仓库级 `user.name` 与 `user.email`，不修改用户未确认的全局身份。
 2. 增加 `.gitignore`，排除 Secret、私有配置、数据库、日志、构建产物和签名材料。
-3. 增加 README、SECURITY、许可证和贡献说明。
-4. 创建首次 Conventional Commit。
-5. 安装/使用 GitHub CLI 完成浏览器登录，创建远程仓库并推送 `main`。
-6. 首次建议创建 **Private** 仓库，完成秘密扫描和安全边界审查后再决定公开。
-7. CI 至少包含 Go 测试、前端检查、Rust/Tauri 检查和 Secret 扫描，任何真实凭据不得进入 Git 历史。
+3. 创建首次 Conventional Commit。
+4. 安装/使用 GitHub CLI 完成浏览器登录，创建 Private 远程仓库并推送 `main`。
 
-GitHub 创建前仍需用户确认：GitHub 用户名、提交姓名/邮箱、仓库可见性，以及许可证选择。推荐仓库名 `airlock-local` 或 `airlock-relay`，降低与已有 Airlock 项目的同名冲突。
+发布前仍需补充 SECURITY、许可证、贡献说明，以及包含 Go、前端、Rust 和 Secret 扫描的 CI；在安全边界审查完成前保持 Private。
 
 ## 13. 当前推荐决策
 
-- 产品名：Airlock；仓库名优先 `airlock-relay`。
+- 产品名：Airlock；仓库名为 `airlock-relay`。
 - 产品类型：纯本地凭据隔离转发器。
 - GUI：Tauri 2 + React，网络核心为 Go sidecar。
 - 首发：macOS，结构保持跨平台。
 - 首版路由：HTTP/Wget、SSH、OpenAI-compatible、Anthropic-compatible。
 - GitHub：先 Private，安全审查后再公开。
 - 路由目标：地址和凭据同等级保护，默认不在 GUI 中回显。
+
+## 14. P0 实施记录（2026-07-29）
+
+已完成：
+
+- Capability 生成、摘要存储与常数时间验证。
+- 线程安全的 HTTP 路由注册表与内存 SecretStore 原型。
+- HTTP/Wget GET/HEAD 固定路由、Query allowlist、Range、上游认证注入、多层编码路径防护、同源重定向重写和响应 Header 白名单。
+- `airlockd` loopback-only 监听和健康检查。
+- Tauri 2 + React 桌面控制台、系统托盘、紧急停止确认和全平台图标资产。
+
+当前仍是协议与交互骨架，不是可保存生产凭据的 MVP。下一个安全里程碑是 macOS Keychain SecretStore + 本地受保护控制通道，然后接入 Clash HTTP/SOCKS5 出口。
