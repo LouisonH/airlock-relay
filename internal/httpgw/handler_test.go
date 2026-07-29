@@ -165,9 +165,11 @@ func newTestHandler(t *testing.T, baseURL string, queryKeys []string) (*Handler,
 		t.Fatalf("url.Parse() error = %v", err)
 	}
 	store := secrets.NewMemoryStore()
-	store.PutHTTPTarget("target/manual", secrets.HTTPTarget{
+	if err := store.PutHTTPTarget(t.Context(), "target/manual", secrets.HTTPTarget{
 		BaseURL: parsed,
 		Headers: http.Header{"Authorization": {"Bearer upstream-secret-sentinel"}},
-	})
+	}); err != nil {
+		t.Fatalf("PutHTTPTarget() error = %v", err)
+	}
 	return NewHandler(registry, store, nil), token
 }

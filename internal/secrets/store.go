@@ -9,6 +9,8 @@ import (
 )
 
 var ErrNotFound = errors.New("secret not found")
+var ErrInvalidReference = errors.New("invalid secret reference")
+var ErrUnsupported = errors.New("platform secret store is not supported")
 
 type HTTPTarget struct {
 	BaseURL *url.URL
@@ -28,6 +30,12 @@ type Store interface {
 	ResolveHTTPTarget(ctx context.Context, reference string) (HTTPTarget, error)
 }
 
+type MutableStore interface {
+	Store
+	PutHTTPTarget(ctx context.Context, reference string, target HTTPTarget) error
+	DeleteTarget(ctx context.Context, reference string) error
+}
+
 // MemoryStore is intended for tests and the protocol spike only. Production
 // targets will be supplied by an OS-backed SecretStore implementation.
 type MemoryStore struct {
@@ -39,13 +47,20 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{targets: make(map[string]HTTPTarget)}
 }
 
-func (s *MemoryStore) PutHTTPTarget(reference string, target HTTPTarget) {
+func (s *MemoryStore) PutHTTPTarget(_ context.Context, reference string, target HTTPTarget) error {
+	if err := validateReference(reference); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.targets[reference] = target.Clone()
+	return nil
 }
 
 func (s *MemoryStore) ResolveHTTPTarget(_ context.Context, reference string) (HTTPTarget, error) {
+	if err := validateReference(reference); err != nil {
+		return HTTPTarget{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	target, ok := s.targets[reference]
@@ -53,4 +68,17 @@ func (s *MemoryStore) ResolveHTTPTarget(_ context.Context, reference string) (HT
 		return HTTPTarget{}, ErrNotFound
 	}
 	return target.Clone(), nil
+}
+
+func (s *MemoryStore) DeleteTarget(_ context.Context, reference string) error {
+	if err := validateReference(reference); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.targets[reference]; !ok {
+		return ErrNotFound
+	}
+	delete(s.targets, reference)
+	return nil
 }

@@ -36,7 +36,10 @@ func run(address string) error {
 	if err != nil {
 		return err
 	}
-	secretStore := secrets.NewMemoryStore()
+	secretStore, err := secrets.NewPlatformStore()
+	if err != nil {
+		return fmt.Errorf("initialize platform secret store: %w", err)
+	}
 	gateway := httpgw.NewHandler(registry, secretStore, nil)
 
 	mux := http.NewServeMux()
