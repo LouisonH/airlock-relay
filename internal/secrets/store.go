@@ -17,6 +17,19 @@ type HTTPTarget struct {
 	Headers http.Header
 }
 
+type ProxyConfig struct {
+	URL *url.URL
+}
+
+func (c ProxyConfig) Clone() ProxyConfig {
+	cloned := ProxyConfig{}
+	if c.URL != nil {
+		urlCopy := *c.URL
+		cloned.URL = &urlCopy
+	}
+	return cloned
+}
+
 func (t HTTPTarget) Clone() HTTPTarget {
 	cloned := HTTPTarget{Headers: t.Headers.Clone()}
 	if t.BaseURL != nil {
@@ -28,11 +41,13 @@ func (t HTTPTarget) Clone() HTTPTarget {
 
 type Store interface {
 	ResolveHTTPTarget(ctx context.Context, reference string) (HTTPTarget, error)
+	ResolveProxyConfig(ctx context.Context, reference string) (ProxyConfig, error)
 }
 
 type MutableStore interface {
 	Store
 	PutHTTPTarget(ctx context.Context, reference string, target HTTPTarget) error
+	PutProxyConfig(ctx context.Context, reference string, config ProxyConfig) error
 	DeleteTarget(ctx context.Context, reference string) error
 }
 
@@ -41,10 +56,37 @@ type MutableStore interface {
 type MemoryStore struct {
 	mu      sync.RWMutex
 	targets map[string]HTTPTarget
+	proxies map[string]ProxyConfig
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{targets: make(map[string]HTTPTarget)}
+	return &MemoryStore{targets: make(map[string]HTTPTarget), proxies: make(map[string]ProxyConfig)}
+}
+
+func (s *MemoryStore) PutProxyConfig(_ context.Context, reference string, config ProxyConfig) error {
+	if err := validateReference(reference); err != nil {
+		return err
+	}
+	if err := validateProxyConfig(config); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.proxies[reference] = config.Clone()
+	return nil
+}
+
+func (s *MemoryStore) ResolveProxyConfig(_ context.Context, reference string) (ProxyConfig, error) {
+	if err := validateReference(reference); err != nil {
+		return ProxyConfig{}, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	config, ok := s.proxies[reference]
+	if !ok {
+		return ProxyConfig{}, ErrNotFound
+	}
+	return config.Clone(), nil
 }
 
 func (s *MemoryStore) PutHTTPTarget(_ context.Context, reference string, target HTTPTarget) error {
@@ -76,9 +118,24 @@ func (s *MemoryStore) DeleteTarget(_ context.Context, reference string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.targets[reference]; !ok {
+	_, targetExists := s.targets[reference]
+	_, proxyExists := s.proxies[reference]
+	if !targetExists && !proxyExists {
 		return ErrNotFound
 	}
 	delete(s.targets, reference)
+	delete(s.proxies, reference)
 	return nil
+}
+
+func validateProxyConfig(config ProxyConfig) error {
+	if config.URL == nil || config.URL.Host == "" || config.URL.RawQuery != "" || config.URL.Fragment != "" || (config.URL.Path != "" && config.URL.Path != "/") {
+		return errors.New("invalid proxy config")
+	}
+	switch config.URL.Scheme {
+	case "http", "https", "socks5", "socks5h":
+		return nil
+	default:
+		return errors.New("invalid proxy config")
+	}
 }

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/LouisonH/airlock-relay/internal/capability"
+	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
 )
@@ -48,17 +49,19 @@ type Server struct {
 	registry    *routes.Registry
 	secrets     secrets.MutableStore
 	persistence routes.MetadataStore
+	egress      *egress.Manager
 	token       string
 	mutationMu  sync.Mutex
 }
 
 type Request struct {
-	Version int              `json:"version"`
-	Token   string           `json:"token"`
-	Action  string           `json:"action"`
-	Create  *CreateHTTPRoute `json:"create,omitempty"`
-	Alias   string           `json:"alias,omitempty"`
-	Enabled bool             `json:"enabled,omitempty"`
+	Version  int              `json:"version"`
+	Token    string           `json:"token"`
+	Action   string           `json:"action"`
+	Create   *CreateHTTPRoute `json:"create,omitempty"`
+	Alias    string           `json:"alias,omitempty"`
+	Enabled  bool             `json:"enabled,omitempty"`
+	ProxyURL string           `json:"proxy_url,omitempty"`
 }
 
 type CreateHTTPRoute struct {
@@ -66,15 +69,17 @@ type CreateHTTPRoute struct {
 	Alias         string `json:"alias"`
 	BaseURL       string `json:"base_url"`
 	Authorization string `json:"authorization,omitempty"`
+	Egress        string `json:"egress,omitempty"`
 }
 
 type Response struct {
-	OK      bool           `json:"ok"`
-	Error   string         `json:"error,omitempty"`
-	Warning string         `json:"warning,omitempty"`
-	Running bool           `json:"running"`
-	Routes  []RouteSummary `json:"routes,omitempty"`
-	Created *CreatedRoute  `json:"created,omitempty"`
+	OK              bool           `json:"ok"`
+	Error           string         `json:"error,omitempty"`
+	Warning         string         `json:"warning,omitempty"`
+	Running         bool           `json:"running"`
+	Routes          []RouteSummary `json:"routes,omitempty"`
+	Created         *CreatedRoute  `json:"created,omitempty"`
+	ProxyConfigured bool           `json:"proxy_configured"`
 }
 
 type CreatedRoute struct {
@@ -96,12 +101,15 @@ type RouteSummary struct {
 	CurrentConnections int    `json:"currentConnections"`
 }
 
-func Listen(paths Paths, token string, registry *routes.Registry, store secrets.MutableStore, persistence routes.MetadataStore) (net.Listener, *Server, error) {
+func Listen(paths Paths, token string, registry *routes.Registry, store secrets.MutableStore, persistence routes.MetadataStore, egressManager *egress.Manager) (net.Listener, *Server, error) {
 	if len(token) < 32 || len(token) > 128 {
 		return nil, nil, errors.New("invalid in-memory control token")
 	}
 	if persistence == nil {
 		return nil, nil, errors.New("route metadata store is required")
+	}
+	if egressManager == nil {
+		return nil, nil, errors.New("egress manager is required")
 	}
 	if err := prepareDirectory(paths.Directory); err != nil {
 		return nil, nil, err
@@ -117,7 +125,7 @@ func Listen(paths Paths, token string, registry *routes.Registry, store secrets.
 		_ = listener.Close()
 		return nil, nil, errors.New("protect control socket")
 	}
-	return listener, &Server{registry: registry, secrets: store, persistence: persistence, token: token}, nil
+	return listener, &Server{registry: registry, secrets: store, persistence: persistence, egress: egressManager, token: token}, nil
 }
 
 func (s *Server) Serve(listener net.Listener) error {
@@ -152,7 +160,7 @@ func (s *Server) dispatch(request Request) Response {
 
 	switch request.Action {
 	case "status", "list_routes":
-		return Response{OK: true, Running: true, Routes: summaries(s.registry.List())}
+		return Response{OK: true, Running: true, Routes: summaries(s.registry.List()), ProxyConfigured: s.proxyConfigured()}
 	case "create_http_route":
 		return s.createHTTPRoute(request.Create)
 	case "set_route_enabled":
@@ -161,6 +169,10 @@ func (s *Server) dispatch(request Request) Response {
 		return s.stopAll()
 	case "delete_route":
 		return s.deleteRoute(request.Alias)
+	case "configure_proxy":
+		return s.configureProxy(request.ProxyURL)
+	case "clear_proxy":
+		return s.clearProxy()
 	default:
 		return Response{Error: "unsupported control action"}
 	}
@@ -193,10 +205,14 @@ func (s *Server) createHTTPRoute(input *CreateHTTPRoute) Response {
 	if err := s.secrets.PutHTTPTarget(context.Background(), reference, secrets.HTTPTarget{BaseURL: baseURL, Headers: headers}); err != nil {
 		return Response{Error: "could not store protected target"}
 	}
+	policy := input.Egress
+	if policy == "" {
+		policy = egress.Direct
+	}
 	route := routes.HTTPRoute{
 		Name: input.Name, Alias: input.Alias, TargetSecretRef: reference,
 		CapabilityDigest: digest, Policy: routes.NewHTTPPolicy([]string{http.MethodGet, http.MethodHead}, nil),
-		Egress: "Direct", Enabled: false,
+		Egress: policy, Enabled: false,
 	}
 	if err := s.registry.Upsert(route); err != nil {
 		_ = s.secrets.DeleteTarget(context.Background(), reference)
@@ -208,7 +224,7 @@ func (s *Server) createHTTPRoute(input *CreateHTTPRoute) Response {
 		return Response{Error: "could not persist route metadata"}
 	}
 	summary := summarize(route)
-	return Response{OK: true, Running: true, Routes: summaries(s.registry.List()), Created: &CreatedRoute{Route: summary, Capability: token}}
+	return Response{OK: true, Running: true, Routes: summaries(s.registry.List()), Created: &CreatedRoute{Route: summary, Capability: token}, ProxyConfigured: s.proxyConfigured()}
 }
 
 func (s *Server) setRouteEnabled(alias string, enabled bool) Response {
@@ -225,7 +241,7 @@ func (s *Server) setRouteEnabled(alias string, enabled bool) Response {
 		_ = s.registry.SetEnabled(alias, previous.Enabled)
 		return Response{Error: "could not persist route status"}
 	}
-	return Response{OK: true, Running: true, Routes: summaries(s.registry.List())}
+	return Response{OK: true, Running: true, Routes: summaries(s.registry.List()), ProxyConfigured: s.proxyConfigured()}
 }
 
 func (s *Server) stopAll() Response {
@@ -239,7 +255,7 @@ func (s *Server) stopAll() Response {
 		}
 		return Response{Error: "could not persist stopped routes"}
 	}
-	return Response{OK: true, Running: true, Routes: summaries(s.registry.List())}
+	return Response{OK: true, Running: true, Routes: summaries(s.registry.List()), ProxyConfigured: s.proxyConfigured()}
 }
 
 func (s *Server) deleteRoute(alias string) Response {
@@ -257,7 +273,39 @@ func (s *Server) deleteRoute(alias string) Response {
 	if err := s.secrets.DeleteTarget(context.Background(), deleted.TargetSecretRef); err != nil && !errors.Is(err, secrets.ErrNotFound) {
 		warning = "route deleted, but protected target cleanup needs attention"
 	}
-	return Response{OK: true, Warning: warning, Running: true, Routes: summaries(s.registry.List())}
+	return Response{OK: true, Warning: warning, Running: true, Routes: summaries(s.registry.List()), ProxyConfigured: s.proxyConfigured()}
+}
+
+func (s *Server) configureProxy(rawURL string) Response {
+	proxyURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || egress.ValidateProxyURL(proxyURL) != nil {
+		return Response{Error: "proxy must use HTTP, HTTPS, SOCKS5, or SOCKS5H"}
+	}
+	proxyURL.Scheme = strings.ToLower(proxyURL.Scheme)
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	if err := s.secrets.PutProxyConfig(context.Background(), egress.DefaultSecretReference, secrets.ProxyConfig{URL: proxyURL}); err != nil {
+		return Response{Error: "could not store protected proxy"}
+	}
+	if err := s.egress.Configure(proxyURL); err != nil {
+		_ = s.secrets.DeleteTarget(context.Background(), egress.DefaultSecretReference)
+		return Response{Error: "could not configure proxy egress"}
+	}
+	return Response{OK: true, Running: true, Routes: summaries(s.registry.List()), ProxyConfigured: true}
+}
+
+func (s *Server) clearProxy() Response {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	if err := s.secrets.DeleteTarget(context.Background(), egress.DefaultSecretReference); err != nil && !errors.Is(err, secrets.ErrNotFound) {
+		return Response{Error: "could not remove protected proxy"}
+	}
+	s.egress.Clear()
+	return Response{OK: true, Running: true, Routes: summaries(s.registry.List()), ProxyConfigured: false}
+}
+
+func (s *Server) proxyConfigured() bool {
+	return s.egress != nil && s.egress.Configured()
 }
 
 func summaries(all []routes.HTTPRoute) []RouteSummary {

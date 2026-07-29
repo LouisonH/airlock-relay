@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/LouisonH/airlock-relay/internal/capability"
+	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
 )
@@ -55,14 +56,14 @@ func TestProtectedControlChannelCreatesSanitizedRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := "airlock_control_test_token_32_bytes"
-	server := &Server{registry: registry, secrets: store, persistence: metadata, token: token}
+	server := &Server{registry: registry, secrets: store, persistence: metadata, egress: egress.NewManager(nil), token: token}
 	request := Request{
 		Version: protocolVersion,
 		Token:   token,
 		Action:  "create_http_route",
 		Create: &CreateHTTPRoute{
 			Name: "Downloads", Alias: "downloads", BaseURL: "https://secret.example/private/",
-			Authorization: "Bearer sentinel-secret",
+			Authorization: "Bearer sentinel-secret", Egress: egress.Auto,
 		},
 	}
 	response, raw := sendRequest(t, server, request)
@@ -74,6 +75,9 @@ func TestProtectedControlChannelCreatesSanitizedRoute(t *testing.T) {
 	}
 	if response.Created.Route.LocalEndpoint != "127.0.0.1:4768/r/downloads" {
 		t.Fatalf("unexpected local endpoint: %s", response.Created.Route.LocalEndpoint)
+	}
+	if response.Created.Route.Egress != egress.Auto {
+		t.Fatalf("egress = %q", response.Created.Route.Egress)
 	}
 	target, err := store.ResolveHTTPTarget(t.Context(), "routes/downloads")
 	if err != nil {
@@ -101,6 +105,39 @@ func TestProtectedControlChannelCreatesSanitizedRoute(t *testing.T) {
 	loaded, err := metadata.Load()
 	if err != nil || len(loaded) != 0 {
 		t.Fatalf("persisted routes after delete = %+v, %v", loaded, err)
+	}
+}
+
+func TestProtectedProxyConfigurationNeverReturnsURL(t *testing.T) {
+	registry, _ := routes.NewRegistry()
+	store := secrets.NewMemoryStore()
+	manager := egress.NewManager(nil)
+	server := &Server{
+		registry: registry, secrets: store, persistence: routes.NewFileStore(filepath.Join(t.TempDir(), "routes.json")),
+		egress: manager, token: "airlock_control_test_token_32_bytes",
+	}
+	request := Request{
+		Version: protocolVersion, Token: server.token, Action: "configure_proxy",
+		ProxyURL: "socks5://proxy-user:proxy-secret-sentinel@127.0.0.1:7890",
+	}
+	response, raw := sendRequest(t, server, request)
+	if !response.OK || !response.ProxyConfigured || !manager.Configured() {
+		t.Fatalf("configure response = %+v", response)
+	}
+	if strings.Contains(raw, "127.0.0.1:7890") || strings.Contains(raw, "proxy-secret-sentinel") {
+		t.Fatalf("control response leaked protected proxy: %s", raw)
+	}
+	config, err := store.ResolveProxyConfig(t.Context(), egress.DefaultSecretReference)
+	if err != nil || config.URL.String() != request.ProxyURL {
+		t.Fatalf("stored proxy = %v, %v", config.URL, err)
+	}
+
+	response, _ = sendRequest(t, server, Request{Version: protocolVersion, Token: server.token, Action: "clear_proxy"})
+	if !response.OK || response.ProxyConfigured || manager.Configured() {
+		t.Fatalf("clear response = %+v", response)
+	}
+	if _, err := store.ResolveProxyConfig(t.Context(), egress.DefaultSecretReference); !errors.Is(err, secrets.ErrNotFound) {
+		t.Fatalf("cleared proxy error = %v", err)
 	}
 }
 

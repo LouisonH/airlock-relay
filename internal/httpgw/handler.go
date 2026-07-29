@@ -4,14 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/LouisonH/airlock-relay/internal/capability"
+	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
 )
@@ -49,24 +48,19 @@ type RouteLookup interface {
 	Lookup(alias string) (routes.HTTPRoute, error)
 }
 
+type RouteTransport interface {
+	RoundTrip(policy string, request *http.Request) (*http.Response, error)
+}
+
 type Handler struct {
 	routes    RouteLookup
 	secrets   secrets.Store
-	transport http.RoundTripper
+	transport RouteTransport
 }
 
-func NewHandler(registry RouteLookup, secretStore secrets.Store, transport http.RoundTripper) *Handler {
+func NewHandler(registry RouteLookup, secretStore secrets.Store, transport RouteTransport) *Handler {
 	if transport == nil {
-		dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-		transport = &http.Transport{
-			Proxy:                 nil,
-			DialContext:           dialer.DialContext,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 30 * time.Second,
-		}
+		transport = egress.NewManager(nil)
 	}
 	return &Handler{routes: registry, secrets: secretStore, transport: transport}
 }
@@ -125,7 +119,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		}
 	}
 
-	response, err := h.transport.RoundTrip(upstreamRequest)
+	response, err := h.transport.RoundTrip(route.Egress, upstreamRequest)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "upstream request failed")
 		return

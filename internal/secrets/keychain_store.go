@@ -10,6 +10,7 @@ import (
 )
 
 const targetFormatVersion = 1
+const proxyFormatVersion = 1
 
 var referencePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9/_-]{0,127}$`)
 
@@ -27,6 +28,11 @@ type persistedHTTPTarget struct {
 	Version int                 `json:"version"`
 	BaseURL string              `json:"base_url"`
 	Headers map[string][]string `json:"headers,omitempty"`
+}
+
+type persistedProxyConfig struct {
+	Version int    `json:"version"`
+	URL     string `json:"url"`
 }
 
 func newKeychainStore(backend keychainBackend) *KeychainStore {
@@ -80,6 +86,52 @@ func (s *KeychainStore) ResolveHTTPTarget(ctx context.Context, reference string)
 		return HTTPTarget{}, errors.New("decode protected target")
 	}
 	return HTTPTarget{BaseURL: baseURL, Headers: http.Header(stored.Headers).Clone()}, nil
+}
+
+func (s *KeychainStore) PutProxyConfig(ctx context.Context, reference string, config ProxyConfig) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := validateReference(reference); err != nil {
+		return err
+	}
+	if err := validateProxyConfig(config); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(persistedProxyConfig{Version: proxyFormatVersion, URL: config.URL.String()})
+	if err != nil {
+		return errors.New("encode protected proxy")
+	}
+	defer clear(payload)
+	if err := s.backend.Put(reference, payload); err != nil {
+		return errors.New("store protected proxy")
+	}
+	return nil
+}
+
+func (s *KeychainStore) ResolveProxyConfig(ctx context.Context, reference string) (ProxyConfig, error) {
+	if err := ctx.Err(); err != nil {
+		return ProxyConfig{}, err
+	}
+	if err := validateReference(reference); err != nil {
+		return ProxyConfig{}, err
+	}
+	payload, err := s.backend.Get(reference)
+	if err != nil {
+		return ProxyConfig{}, err
+	}
+	defer clear(payload)
+
+	var stored persistedProxyConfig
+	if err := json.Unmarshal(payload, &stored); err != nil || stored.Version != proxyFormatVersion {
+		return ProxyConfig{}, errors.New("decode protected proxy")
+	}
+	proxyURL, err := url.Parse(stored.URL)
+	config := ProxyConfig{URL: proxyURL}
+	if err != nil || validateProxyConfig(config) != nil {
+		return ProxyConfig{}, errors.New("decode protected proxy")
+	}
+	return config, nil
 }
 
 func (s *KeychainStore) DeleteTarget(ctx context.Context, reference string) error {

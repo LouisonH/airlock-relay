@@ -80,6 +80,36 @@ func TestKeychainStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestKeychainStoreProtectsProxyConfig(t *testing.T) {
+	backend := newMemoryKeychainBackend()
+	store := newKeychainStore(backend)
+	proxyURL, err := url.Parse("socks5://proxy-user:proxy-secret-sentinel@127.0.0.1:7890")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutProxyConfig(context.Background(), "egress/default", ProxyConfig{URL: proxyURL}); err != nil {
+		t.Fatalf("PutProxyConfig() error = %v", err)
+	}
+	resolved, err := store.ResolveProxyConfig(context.Background(), "egress/default")
+	if err != nil {
+		t.Fatalf("ResolveProxyConfig() error = %v", err)
+	}
+	if resolved.URL.String() != proxyURL.String() {
+		t.Fatalf("proxy URL = %q", resolved.URL)
+	}
+	resolved.URL.Host = "changed.invalid"
+	again, err := store.ResolveProxyConfig(context.Background(), "egress/default")
+	if err != nil || again.URL.Host != "127.0.0.1:7890" {
+		t.Fatalf("stored proxy was mutated: %v, %v", again.URL, err)
+	}
+	if err := store.DeleteTarget(context.Background(), "egress/default"); err != nil {
+		t.Fatalf("DeleteTarget() error = %v", err)
+	}
+	if _, err := store.ResolveProxyConfig(context.Background(), "egress/default"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ResolveProxyConfig() after delete error = %v", err)
+	}
+}
+
 func TestKeychainStoreRejectsInvalidReferences(t *testing.T) {
 	store := newKeychainStore(newMemoryKeychainBackend())
 	for _, reference := range []string{"", "../target", "Target/UPPER", "target with spaces"} {

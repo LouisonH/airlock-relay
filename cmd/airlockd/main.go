@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/LouisonH/airlock-relay/internal/control"
+	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/httpgw"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
@@ -64,8 +65,17 @@ func run(address, controlToken string) error {
 	if err != nil {
 		return fmt.Errorf("initialize platform secret store: %w", err)
 	}
-	gateway := httpgw.NewHandler(registry, secretStore, nil)
-	controlListener, controlServer, err := control.Listen(controlPaths, controlToken, registry, secretStore, metadata)
+	egressManager := egress.NewManager(nil)
+	proxyConfig, err := secretStore.ResolveProxyConfig(context.Background(), egress.DefaultSecretReference)
+	if err == nil {
+		if err := egressManager.Configure(proxyConfig.URL); err != nil {
+			return fmt.Errorf("initialize proxy egress: %w", err)
+		}
+	} else if !errors.Is(err, secrets.ErrNotFound) {
+		return fmt.Errorf("load protected proxy: %w", err)
+	}
+	gateway := httpgw.NewHandler(registry, secretStore, egressManager)
+	controlListener, controlServer, err := control.Listen(controlPaths, controlToken, registry, secretStore, metadata, egressManager)
 	if err != nil {
 		return fmt.Errorf("initialize control channel: %w", err)
 	}
