@@ -5,6 +5,7 @@
 
 # Go
 bin/
+.cache/
 *.test
 coverage.out
 
@@ -31,8 +32,8 @@ airlock.local.*
 *.key
 *.p12
 *.pfx
-secrets/
-private/
+/secrets/
+/private/
 
 # Release artifacts
 dist/
