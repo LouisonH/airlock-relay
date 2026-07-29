@@ -346,5 +346,7 @@ internal/audit          脱敏审计
 - HTTP/Wget GET/HEAD 固定路由、Query allowlist、Range、上游认证注入、多层编码路径防护、同源重定向重写和响应 Header 白名单。
 - `airlockd` loopback-only 监听和健康检查。
 - Tauri 2 + React 桌面控制台、系统托盘、紧急停止确认和全平台图标资产。
+- 跟随系统/浅色/深色主题与可持久化的 UI-only 主题偏好。
+- 可写、读取和删除的 macOS Keychain SecretStore；哨兵 Secret 测试使用内存后端，不触碰真实钥匙串。
 
-当前仍是协议与交互骨架，不是可保存生产凭据的 MVP。下一个安全里程碑是 macOS Keychain SecretStore + 本地受保护控制通道，然后接入 Clash HTTP/SOCKS5 出口。
+当前仍是协议与交互骨架，不是可保存生产凭据的 MVP。下一个安全里程碑是原生安全录入窗口 + 本地受保护控制通道，然后接入 Clash HTTP/SOCKS5 出口。

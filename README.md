@@ -11,14 +11,13 @@ Airlock 是一个运行在本机的凭据隔离型安全转发器，面向不受
 - Go `airlockd` 原型，严格限制为 loopback 监听，并提供健康检查。
 - 256-bit 不透明 Capability Token，服务端仅保存 SHA-256 摘要并使用常数时间校验。
 - HTTP/Wget 固定目标转发：GET/HEAD、Query allowlist、Range、认证注入、路径逃逸防护、同源重定向重写和响应 Header 白名单。
-- 内存 SecretStore 接口原型；目标和 Secret 不出现在 GUI IPC 类型中。
-- Tauri 2 + React 原生桌面壳，包含概览、路由、活动、设置、五步路由编辑器、紧急停止确认和系统托盘。
+- 可更新、删除的 SecretStore 接口与 macOS Keychain 后端；目标和 Secret 不出现在 GUI IPC 类型中。
+- Tauri 2 + React 原生桌面壳，包含概览、路由、活动、设置、五步路由编辑器、紧急停止确认、系统托盘和跟随系统/浅色/深色主题。
 - macOS、Windows、Linux 所需应用图标资产。
 
 ## 待实现
 
-- 桌面端与 `airlockd` 的本地受保护控制通道及 sidecar 生命周期。
-- macOS Keychain SecretStore、路由持久化和真实的原生安全录入窗口。
+- 路由元数据持久化、原生安全录入窗口，以及桌面端到 `airlockd` 的受保护控制通道与 sidecar 生命周期。
 - Clash HTTP/SOCKS5 代理出口和安全的 `auto` 回退策略。
 - SSH 双会话网关与 OpenAI/Anthropic 路由预设。
 - 速率、并发、TTL、一次性 Capability 与脱敏审计。
@@ -41,7 +40,7 @@ npm run build
 npm run tauri dev
 ```
 
-`airlockd` 默认仅监听 `127.0.0.1:4768`。当前运行时注册表为空，可转发路由由测试代码构造；在 Keychain 和本地控制通道完成前，请勿向内存 Store 填入真实凭据。
+`airlockd` 默认仅监听 `127.0.0.1:4768`，并在 macOS 上使用 Keychain SecretStore。当前运行时注册表仍为空，原生安全录入窗口和受保护控制通道尚未完成，因此请勿用开发界面录入真实凭据。
 
 ## 安全边界
 
