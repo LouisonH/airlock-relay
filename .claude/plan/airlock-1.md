@@ -348,5 +348,8 @@ internal/audit          脱敏审计
 - Tauri 2 + React 桌面控制台、系统托盘、紧急停止确认和全平台图标资产。
 - 跟随系统/浅色/深色主题与可持久化的 UI-only 主题偏好。
 - 可写、读取和删除的 macOS Keychain SecretStore；哨兵 Secret 测试使用内存后端，不触碰真实钥匙串。
+- 权限为 `0600` 的 Unix Socket 控制通道；控制令牌由 Tauri 生成、通过 sidecar stdin 传递且不落盘、不进入环境变量或进程参数。
+- macOS 原生隐藏输入窗口和一次性 Capability 窗口；真实目标与认证不经过 WebView/IPC 参数。
+- Tauri sidecar 启停、健康检查和退出清理，以及更简洁的三步 HTTP 路由流程与 reduced-motion 动画降级。
 
-当前仍是协议与交互骨架，不是可保存生产凭据的 MVP。下一个安全里程碑是原生安全录入窗口 + 本地受保护控制通道，然后接入 Clash HTTP/SOCKS5 出口。
+当前仍是技术验证版，不是可保存生产凭据的 MVP。下一个安全里程碑是路由元数据持久化与删除清理，然后接入 Clash HTTP/SOCKS5 出口；SSH 和 LLM 路由在各自安全核心完成前保持禁用。
