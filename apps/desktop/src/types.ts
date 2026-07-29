@@ -34,3 +34,8 @@ export interface ControlState {
   routes: RouteSummary[];
   message?: string;
 }
+
+export interface ControlUpdate {
+  routes: RouteSummary[];
+  message?: string;
+}

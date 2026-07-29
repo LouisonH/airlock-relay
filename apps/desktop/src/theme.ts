@@ -2,8 +2,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
+export type AccentTheme = "forest" | "ocean" | "amber";
 
 const storageKey = "airlock.ui.theme";
+const accentStorageKey = "airlock.ui.accent";
 const darkModeQuery = "(prefers-color-scheme: dark)";
 
 export function getThemePreference(): ThemePreference {
@@ -32,6 +34,16 @@ export function saveThemePreference(preference: ThemePreference): void {
   applyTheme(preference);
 }
 
+export function getAccentTheme(): AccentTheme {
+  const stored = localStorage.getItem(accentStorageKey);
+  return stored === "forest" || stored === "ocean" || stored === "amber" ? stored : "forest";
+}
+
+export function saveAccentTheme(accent: AccentTheme): void {
+  localStorage.setItem(accentStorageKey, accent);
+  document.documentElement.dataset.accent = accent;
+}
+
 export function watchSystemTheme(onChange: () => void): () => void {
   const media = window.matchMedia(darkModeQuery);
   media.addEventListener("change", onChange);
@@ -39,3 +51,4 @@ export function watchSystemTheme(onChange: () => void): () => void {
 }
 
 applyTheme(getThemePreference());
+saveAccentTheme(getAccentTheme());

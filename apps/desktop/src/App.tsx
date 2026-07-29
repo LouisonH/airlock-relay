@@ -21,11 +21,12 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  Trash2,
   TriangleAlert,
   X,
 } from "lucide-react";
-import { applyTheme, getThemePreference, saveThemePreference, watchSystemTheme, type ThemePreference } from "./theme";
-import type { ActivityEvent, ControlState, RouteKind, RouteSummary } from "./types";
+import { applyTheme, getAccentTheme, getThemePreference, saveAccentTheme, saveThemePreference, watchSystemTheme, type AccentTheme, type ThemePreference } from "./theme";
+import type { ActivityEvent, ControlState, ControlUpdate, RouteKind, RouteSummary } from "./types";
 
 type Page = "overview" | "routes" | "activity" | "settings";
 type RouteFilter = "All" | RouteKind;
@@ -56,7 +57,9 @@ export default function App() {
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference);
+  const [accent, setAccent] = useState<AccentTheme>(getAccentTheme);
   const [notice, setNotice] = useState<string>();
+  const [pendingDelete, setPendingDelete] = useState<RouteSummary>();
 
   const refresh = async () => {
     if (!isTauri) return;
@@ -69,6 +72,10 @@ export default function App() {
     if (theme !== "system") return;
     return watchSystemTheme(() => applyTheme("system"));
   }, [theme]);
+
+  useEffect(() => {
+    saveAccentTheme(accent);
+  }, [accent]);
 
   useEffect(() => {
     void refresh();
@@ -108,6 +115,20 @@ export default function App() {
     }
   };
 
+  const deleteRoute = async () => {
+    if (!pendingDelete) return;
+    try {
+      const update: ControlUpdate = isTauri
+        ? await invoke<ControlUpdate>("delete_route", { alias: pendingDelete.alias })
+        : { routes: control.routes.filter((route) => route.alias !== pendingDelete.alias) };
+      setControl((current) => ({ ...current, routes: update.routes }));
+      setNotice(update.message ?? `已删除 ${pendingDelete.name} 并清理凭据`);
+      setPendingDelete(undefined);
+    } catch (error) {
+      setNotice(String(error));
+    }
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -135,14 +156,15 @@ export default function App() {
 
         <div className="page-content" key={page}>
           {page === "overview" && <Overview control={control} onRoutes={() => setPage("routes")} onAdd={() => setEditorOpen(true)} />}
-          {page === "routes" && <Routes routes={control.routes} connected={control.connected} onToggle={toggleRoute} onAdd={() => setEditorOpen(true)} />}
+          {page === "routes" && <Routes routes={control.routes} connected={control.connected} onToggle={toggleRoute} onDelete={setPendingDelete} onAdd={() => setEditorOpen(true)} />}
           {page === "activity" && <ActivityPage />}
-          {page === "settings" && <SettingsPage theme={theme} onTheme={setTheme} connected={control.connected} />}
+          {page === "settings" && <SettingsPage theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} connected={control.connected} />}
         </div>
       </main>
 
       {notice && <div className="toast" role="status">{notice}</div>}
       {emergencyOpen && <Modal title="停止全部路由" onClose={() => setEmergencyOpen(false)}><div className="warning-panel"><AlertTriangle size={19} /><p>新请求将立即被拒绝，已建立的连接会进入关闭流程。</p></div><div className="modal-actions"><button className="secondary-button" onClick={() => setEmergencyOpen(false)}>取消</button><button className="danger-button" onClick={() => void stopAll()}><CircleStop size={16} />确认停止</button></div></Modal>}
+      {pendingDelete && <Modal title="删除路由" onClose={() => setPendingDelete(undefined)}><div className="danger-panel"><Trash2 size={19} /><div><strong>{pendingDelete.name}</strong><p>本地入口、Capability 和 Keychain 中的受保护目标都会被永久删除。</p></div></div><div className="modal-actions"><button className="secondary-button" onClick={() => setPendingDelete(undefined)}>取消</button><button className="danger-button" onClick={() => void deleteRoute()}><Trash2 size={16} />删除路由</button></div></Modal>}
       {editorOpen && <RouteEditor connected={control.connected} onClose={() => setEditorOpen(false)} onCreated={(route) => setControl((current) => ({ ...current, routes: [...current.routes.filter((item) => item.id !== route.id), route] }))} onError={setNotice} />}
     </div>
   );
@@ -169,7 +191,7 @@ function Overview({ control, onRoutes, onAdd }: { control: ControlState; onRoute
   </>;
 }
 
-function Routes({ routes, connected, onToggle, onAdd }: { routes: RouteSummary[]; connected: boolean; onToggle: (alias: string, enabled: boolean) => void; onAdd: () => void }) {
+function Routes({ routes, connected, onToggle, onDelete, onAdd }: { routes: RouteSummary[]; connected: boolean; onToggle: (alias: string, enabled: boolean) => void; onDelete: (route: RouteSummary) => void; onAdd: () => void }) {
   const [filter, setFilter] = useState<RouteFilter>("All");
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => routes.filter((route) => (filter === "All" || route.kind === filter) && `${route.name} ${route.alias}`.toLowerCase().includes(query.toLowerCase())), [routes, filter, query]);
@@ -179,13 +201,13 @@ function Routes({ routes, connected, onToggle, onAdd }: { routes: RouteSummary[]
       <label className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称或别名" /></label>
       <div className="segmented" aria-label="路由类型">{(["All", "HTTP", "SSH", "LLM"] as RouteFilter[]).map((value) => <button key={value} className={filter === value ? "selected" : ""} onClick={() => setFilter(value)}>{value === "All" ? "全部" : value}</button>)}</div>
     </div>
-    <RouteTable routes={filtered} onToggle={(route) => onToggle(route.alias, route.status !== "enabled")} />
+    <RouteTable routes={filtered} onToggle={(route) => onToggle(route.alias, route.status !== "enabled")} onDelete={onDelete} />
   </>;
 }
 
-function RouteTable({ routes, compact = false, onToggle }: { routes: RouteSummary[]; compact?: boolean; onToggle?: (route: RouteSummary) => void }) {
+function RouteTable({ routes, compact = false, onToggle, onDelete }: { routes: RouteSummary[]; compact?: boolean; onToggle?: (route: RouteSummary) => void; onDelete?: (route: RouteSummary) => void }) {
   if (routes.length === 0) return <EmptyState icon={Route} title="暂无路由" detail="创建后，本地入口会显示在这里。" />;
-  return <div className="table-wrap"><table className="route-table"><thead><tr><th>状态</th><th>名称</th><th>类型</th><th>本地入口</th><th>权限</th><th>出口</th><th>健康</th>{!compact && <th>最近使用</th>}<th aria-label="操作" /></tr></thead><tbody>{routes.map((route, index) => <tr key={route.id} style={{ animationDelay: `${index * 24}ms` }}><td><StatusBadge status={route.status} /></td><td><strong>{route.name}</strong><span className="cell-subtext">{route.alias}</span></td><td><span className={`kind kind-${route.kind.toLowerCase()}`}>{route.kind}</span></td><td><code>{route.localEndpoint}</code></td><td>{route.permissionSummary}</td><td>{route.egress}</td><td><HealthBadge health={route.health} /></td>{!compact && <td>{route.lastUsed}</td>}<td>{onToggle && <button className="route-switch" role="switch" aria-checked={route.status === "enabled"} title={route.status === "enabled" ? "停用路由" : "启用路由"} aria-label={route.status === "enabled" ? "停用路由" : "启用路由"} onClick={() => onToggle(route)}><span /></button>}</td></tr>)}</tbody></table></div>;
+  return <div className="table-wrap"><table className="route-table"><thead><tr><th>状态</th><th>名称</th><th>类型</th><th>本地入口</th><th>权限</th><th>出口</th><th>健康</th>{!compact && <th>最近使用</th>}<th aria-label="操作" /></tr></thead><tbody>{routes.map((route, index) => <tr key={route.id} style={{ animationDelay: `${index * 24}ms` }}><td><StatusBadge status={route.status} /></td><td><strong>{route.name}</strong><span className="cell-subtext">{route.alias}</span></td><td><span className={`kind kind-${route.kind.toLowerCase()}`}>{route.kind}</span></td><td><code>{route.localEndpoint}</code></td><td>{route.permissionSummary}</td><td>{route.egress}</td><td><HealthBadge health={route.health} /></td>{!compact && <td>{route.lastUsed}</td>}<td>{onToggle && <div className="route-actions"><button className="route-switch" role="switch" aria-checked={route.status === "enabled"} title={route.status === "enabled" ? "停用路由" : "启用路由"} aria-label={route.status === "enabled" ? "停用路由" : "启用路由"} onClick={() => onToggle(route)}><span /></button>{onDelete && <button className="row-icon-button danger" title="删除路由" aria-label={`删除 ${route.name}`} onClick={() => onDelete(route)}><Trash2 size={14} /></button>}</div>}</td></tr>)}</tbody></table></div>;
 }
 
 function ActivityPage() {
@@ -198,11 +220,11 @@ function ActivityTable({ events }: { events: ActivityEvent[] }) {
   return <div className="table-wrap"><table className="activity-table"><thead><tr><th>时间</th><th>路由</th><th>调用者</th><th>动作</th><th>结果</th><th>延迟</th><th>出口</th><th>事件 ID</th></tr></thead><tbody>{events.map((event) => <tr key={event.id}><td>{event.time}</td><td><strong>{event.routeName}</strong></td><td>{event.caller}</td><td>{event.action}</td><td><StatusBadge status={event.result} /></td><td>{event.latency}</td><td>{event.egress}</td><td><code>{event.id}</code></td></tr>)}</tbody></table></div>;
 }
 
-function SettingsPage({ theme, onTheme, connected }: { theme: ThemePreference; onTheme: (theme: ThemePreference) => void; connected: boolean }) {
+function SettingsPage({ theme, onTheme, accent, onAccent, connected }: { theme: ThemePreference; onTheme: (theme: ThemePreference) => void; accent: AccentTheme; onAccent: (accent: AccentTheme) => void; connected: boolean }) {
   return <><PageHeader title="设置" subtitle="本地外观、网络与安全状态" />
-    <section className="settings-section"><div><h2>外观</h2><p>主题偏好保存在本机</p></div><div className="settings-controls"><div className="setting-row"><span>主题</span><ThemeControl value={theme} onChange={onTheme} /></div></div></section>
+    <section className="settings-section"><div><h2>外观</h2><p>主题偏好保存在本机</p></div><div className="settings-controls"><div className="setting-row"><span>显示模式</span><ThemeControl value={theme} onChange={onTheme} /></div><div className="setting-row"><span>配色风格</span><AccentControl value={accent} onChange={onAccent} /></div></div></section>
     <section className="settings-section"><div><h2>网络</h2><p>入口固定在 loopback</p></div><div className="settings-controls"><ReadOnlyField label="HTTP 入口" value="127.0.0.1:4768" /><ReadOnlyField label="控制通道" value={connected ? "Unix Socket · 已连接" : "等待 airlockd"} tone={connected ? "success" : "warning"} /></div></section>
-    <section className="settings-section"><div><h2>安全</h2><p>Secret 不进入 WebView</p></div><div className="settings-controls"><ReadOnlyField label="SecretStore" value="macOS Keychain" tone="success" /><ReadOnlyField label="安全录入" value="macOS 原生窗口" tone="success" /></div></section>
+    <section className="settings-section"><div><h2>安全</h2><p>Secret 不进入 WebView</p></div><div className="settings-controls"><ReadOnlyField label="SecretStore" value="macOS Keychain" tone="success" /><ReadOnlyField label="路由元数据" value="0600 · 已持久化" tone="success" /><ReadOnlyField label="安全录入" value="macOS 原生窗口" tone="success" /></div></section>
   </>;
 }
 
@@ -255,4 +277,5 @@ function StatusBadge({ status }: { status: string }) { const labels: Record<stri
 function HealthBadge({ health }: { health: RouteSummary["health"] }) { const labels = { healthy: "健康", degraded: "异常", unknown: "未测试" }; const Icon = health === "healthy" ? CircleCheck : health === "degraded" ? TriangleAlert : CircleMinus; return <span className={`health health-${health}`}><Icon size={13} />{labels[health]}</span>; }
 function ReadOnlyField({ label, value, tone }: { label: string; value: string; tone?: "success" | "warning" }) { return <div className="readonly-field"><span>{label}</span><strong className={tone ? `setting-value ${tone}` : "setting-value"}>{value}</strong></div>; }
 function ThemeControl({ value, onChange }: { value: ThemePreference; onChange: (value: ThemePreference) => void }) { const options: Array<{ value: ThemePreference; label: string; icon: typeof Monitor }> = [{ value: "system", label: "系统", icon: Monitor }, { value: "light", label: "浅色", icon: Sun }, { value: "dark", label: "深色", icon: Moon }]; return <div className="theme-control" role="group" aria-label="界面主题">{options.map((option) => { const Icon = option.icon; return <button key={option.value} className={value === option.value ? "selected" : ""} onClick={() => onChange(option.value)} aria-pressed={value === option.value}><Icon size={14} />{option.label}</button>; })}</div>; }
+function AccentControl({ value, onChange }: { value: AccentTheme; onChange: (value: AccentTheme) => void }) { const options: Array<{ value: AccentTheme; label: string }> = [{ value: "forest", label: "青峦" }, { value: "ocean", label: "海岸" }, { value: "amber", label: "暖阳" }]; return <div className="accent-control" role="group" aria-label="配色风格">{options.map((option) => <button key={option.value} className={value === option.value ? "selected" : ""} onClick={() => onChange(option.value)} aria-pressed={value === option.value}><span className={`accent-swatch ${option.value}`} />{option.label}</button>)}</div>; }
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) { return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="modal" role="dialog" aria-modal="true"><header className="modal-header"><h2>{title}</h2><button className="icon-button small" onClick={onClose} aria-label="关闭"><X size={16} /></button></header>{children}</div></div>; }

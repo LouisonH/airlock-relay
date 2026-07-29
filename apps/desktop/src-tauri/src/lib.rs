@@ -93,6 +93,8 @@ struct ControlResponse {
     #[serde(default)]
     error: String,
     #[serde(default)]
+    warning: String,
+    #[serde(default)]
     running: bool,
     #[serde(default)]
     routes: Vec<RouteSummary>,
@@ -110,6 +112,13 @@ struct CreatedRoute {
 struct ControlState {
     connected: bool,
     running: bool,
+    routes: Vec<RouteSummary>,
+    message: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ControlUpdate {
     routes: Vec<RouteSummary>,
     message: Option<String>,
 }
@@ -225,6 +234,29 @@ fn stop_all_routes(client: tauri::State<'_, ControlClient>) -> Result<Vec<RouteS
         enabled: None,
     };
     client.request(&request).map(|response| response.routes)
+}
+
+#[tauri::command]
+fn delete_route(
+    client: tauri::State<'_, ControlClient>,
+    alias: String,
+) -> Result<ControlUpdate, String> {
+    let request = ControlRequest {
+        version: CONTROL_PROTOCOL_VERSION,
+        token: "",
+        action: "delete_route",
+        create: None,
+        alias: Some(&alias),
+        enabled: None,
+    };
+    client.request(&request).map(|response| ControlUpdate {
+        routes: response.routes,
+        message: if response.warning.is_empty() {
+            None
+        } else {
+            Some("路由已删除，但 Keychain 清理需要检查".to_string())
+        },
+    })
 }
 
 #[tauri::command]
@@ -533,6 +565,7 @@ pub fn run() {
             get_control_state,
             set_route_enabled,
             stop_all_routes,
+            delete_route,
             create_http_route
         ])
         .on_window_event(|window, event| {
