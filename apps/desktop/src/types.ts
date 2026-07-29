@@ -33,6 +33,7 @@ export interface ControlState {
   running: boolean;
   routes: RouteSummary[];
   message?: string;
+  proxyConfigured: boolean;
 }
 
 export interface ControlUpdate {

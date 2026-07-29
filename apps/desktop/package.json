@@ -2,6 +2,7 @@
   "name": "airlock-desktop",
   "private": true,
   "version": "0.1.0",
+  "author": "LouisonH",
   "type": "module",
   "scripts": {
     "sidecar:build": "cd ../.. && go build -o bin/airlockd ./cmd/airlockd",

@@ -76,6 +76,8 @@ struct ControlRequest<'a> {
     alias: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proxy_url: Option<&'a str>,
 }
 
 #[derive(Serialize)]
@@ -85,6 +87,7 @@ struct CreateHTTPRoute<'a> {
     base_url: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]
     authorization: &'a str,
+    egress: &'a str,
 }
 
 #[derive(Deserialize)]
@@ -99,6 +102,8 @@ struct ControlResponse {
     #[serde(default)]
     routes: Vec<RouteSummary>,
     created: Option<CreatedRoute>,
+    #[serde(default)]
+    proxy_configured: bool,
 }
 
 #[derive(Deserialize)]
@@ -114,6 +119,7 @@ struct ControlState {
     running: bool,
     routes: Vec<RouteSummary>,
     message: Option<String>,
+    proxy_configured: bool,
 }
 
 #[derive(Serialize)]
@@ -134,9 +140,11 @@ impl ControlClient {
                 alias: create.alias,
                 base_url: create.base_url,
                 authorization: create.authorization,
+                egress: create.egress,
             }),
             alias: request.alias,
             enabled: request.enabled,
+            proxy_url: request.proxy_url,
         };
         let mut payload =
             serde_json::to_vec(&authenticated).map_err(|_| "无法编码控制请求".to_string())?;
@@ -189,6 +197,7 @@ fn get_control_state(client: tauri::State<'_, ControlClient>) -> ControlState {
         create: None,
         alias: None,
         enabled: None,
+        proxy_url: None,
     };
     match client.request(&request) {
         Ok(response) => ControlState {
@@ -196,12 +205,14 @@ fn get_control_state(client: tauri::State<'_, ControlClient>) -> ControlState {
             running: response.running,
             routes: response.routes,
             message: None,
+            proxy_configured: response.proxy_configured,
         },
         Err(message) => ControlState {
             connected: false,
             running: false,
             routes: Vec::new(),
             message: Some(message),
+            proxy_configured: false,
         },
     }
 }
@@ -219,6 +230,7 @@ fn set_route_enabled(
         create: None,
         alias: Some(&alias),
         enabled: Some(enabled),
+        proxy_url: None,
     };
     client.request(&request).map(|response| response.routes)
 }
@@ -232,6 +244,7 @@ fn stop_all_routes(client: tauri::State<'_, ControlClient>) -> Result<Vec<RouteS
         create: None,
         alias: None,
         enabled: None,
+        proxy_url: None,
     };
     client.request(&request).map(|response| response.routes)
 }
@@ -248,6 +261,7 @@ fn delete_route(
         create: None,
         alias: Some(&alias),
         enabled: None,
+        proxy_url: None,
     };
     client.request(&request).map(|response| ControlUpdate {
         routes: response.routes,
@@ -264,17 +278,21 @@ async fn create_http_route(
     client: tauri::State<'_, ControlClient>,
     name: String,
     alias: String,
+    egress: String,
 ) -> Result<RouteSummary, String> {
     let client = client.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || create_http_route_blocking(client, name, alias))
-        .await
-        .map_err(|_| "原生安全录入意外终止".to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        create_http_route_blocking(client, name, alias, egress)
+    })
+    .await
+    .map_err(|_| "原生安全录入意外终止".to_string())?
 }
 
 fn create_http_route_blocking(
     client: ControlClient,
     name: String,
     alias: String,
+    egress: String,
 ) -> Result<RouteSummary, String> {
     if name.trim().is_empty() || name.len() > 80 {
         return Err("请输入 1 到 80 个字符的路由名称".to_string());
@@ -286,6 +304,9 @@ fn create_http_route_blocking(
         })
     {
         return Err("别名只能包含小写字母、数字和连字符".to_string());
+    }
+    if egress != "Direct" && egress != "Proxy" && egress != "Auto" {
+        return Err("出口策略无效".to_string());
     }
 
     let mut base_url = prompt_protected_value(
@@ -305,9 +326,11 @@ fn create_http_route_blocking(
             alias: &alias,
             base_url: &base_url,
             authorization: &authorization,
+            egress: &egress,
         }),
         alias: None,
         enabled: None,
+        proxy_url: None,
     };
     let result = client.request(&request);
     clear_string(&mut base_url);
@@ -329,6 +352,7 @@ fn create_http_route_blocking(
         create: None,
         alias: Some(&alias),
         enabled: Some(true),
+        proxy_url: None,
     };
     client
         .request(&enable)?
@@ -336,6 +360,49 @@ fn create_http_route_blocking(
         .into_iter()
         .find(|route| route.alias == alias)
         .ok_or_else(|| "新路由未出现在控制状态中".to_string())
+}
+
+#[tauri::command]
+async fn configure_proxy(client: tauri::State<'_, ControlClient>) -> Result<bool, String> {
+    let client = client.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || configure_proxy_blocking(client))
+        .await
+        .map_err(|_| "原生代理录入意外终止".to_string())?
+}
+
+fn configure_proxy_blocking(client: ControlClient) -> Result<bool, String> {
+    let mut proxy_url = prompt_protected_value(
+        "输入 Clash 或其他本地代理 URL，例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:7890。认证信息可写在 URL 中，内容仅进入 Keychain。",
+        false,
+    )?;
+    let request = ControlRequest {
+        version: CONTROL_PROTOCOL_VERSION,
+        token: "",
+        action: "configure_proxy",
+        create: None,
+        alias: None,
+        enabled: None,
+        proxy_url: Some(&proxy_url),
+    };
+    let result = client.request(&request);
+    clear_string(&mut proxy_url);
+    result.map(|response| response.proxy_configured)
+}
+
+#[tauri::command]
+fn clear_proxy(client: tauri::State<'_, ControlClient>) -> Result<bool, String> {
+    let request = ControlRequest {
+        version: CONTROL_PROTOCOL_VERSION,
+        token: "",
+        action: "clear_proxy",
+        create: None,
+        alias: None,
+        enabled: None,
+        proxy_url: None,
+    };
+    client
+        .request(&request)
+        .map(|response| response.proxy_configured)
 }
 
 #[cfg(target_os = "macos")]
@@ -566,7 +633,9 @@ pub fn run() {
             set_route_enabled,
             stop_all_routes,
             delete_route,
-            create_http_route
+            create_http_route,
+            configure_proxy,
+            clear_proxy
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

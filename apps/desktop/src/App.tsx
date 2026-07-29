@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  Cable,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -10,16 +11,20 @@ import {
   CircleMinus,
   CircleStop,
   Gauge,
+  GitBranch,
+  Github,
   KeyRound,
   LockKeyhole,
   Monitor,
   Moon,
+  Network,
   Plus,
   RefreshCw,
   Route,
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   Sun,
   Trash2,
   TriangleAlert,
@@ -48,6 +53,7 @@ const emptyControl: ControlState = {
   connected: !isTauri,
   running: !isTauri,
   routes: previewRoutes,
+  proxyConfigured: false,
   message: isTauri ? "正在连接 airlockd" : undefined,
 };
 
@@ -129,6 +135,26 @@ export default function App() {
     }
   };
 
+  const configureProxy = async () => {
+    try {
+      const configured = isTauri ? await invoke<boolean>("configure_proxy") : true;
+      setControl((current) => ({ ...current, proxyConfigured: configured }));
+      setNotice("代理出口已安全保存");
+    } catch (error) {
+      setNotice(String(error));
+    }
+  };
+
+  const clearProxy = async () => {
+    try {
+      const configured = isTauri ? await invoke<boolean>("clear_proxy") : false;
+      setControl((current) => ({ ...current, proxyConfigured: configured }));
+      setNotice("代理出口已清除");
+    } catch (error) {
+      setNotice(String(error));
+    }
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -158,14 +184,14 @@ export default function App() {
           {page === "overview" && <Overview control={control} onRoutes={() => setPage("routes")} onAdd={() => setEditorOpen(true)} />}
           {page === "routes" && <Routes routes={control.routes} connected={control.connected} onToggle={toggleRoute} onDelete={setPendingDelete} onAdd={() => setEditorOpen(true)} />}
           {page === "activity" && <ActivityPage />}
-          {page === "settings" && <SettingsPage theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} connected={control.connected} />}
+          {page === "settings" && <SettingsPage theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} connected={control.connected} proxyConfigured={control.proxyConfigured} onConfigureProxy={configureProxy} onClearProxy={clearProxy} />}
         </div>
       </main>
 
       {notice && <div className="toast" role="status">{notice}</div>}
       {emergencyOpen && <Modal title="停止全部路由" onClose={() => setEmergencyOpen(false)}><div className="warning-panel"><AlertTriangle size={19} /><p>新请求将立即被拒绝，已建立的连接会进入关闭流程。</p></div><div className="modal-actions"><button className="secondary-button" onClick={() => setEmergencyOpen(false)}>取消</button><button className="danger-button" onClick={() => void stopAll()}><CircleStop size={16} />确认停止</button></div></Modal>}
       {pendingDelete && <Modal title="删除路由" onClose={() => setPendingDelete(undefined)}><div className="danger-panel"><Trash2 size={19} /><div><strong>{pendingDelete.name}</strong><p>本地入口、Capability 和 Keychain 中的受保护目标都会被永久删除。</p></div></div><div className="modal-actions"><button className="secondary-button" onClick={() => setPendingDelete(undefined)}>取消</button><button className="danger-button" onClick={() => void deleteRoute()}><Trash2 size={16} />删除路由</button></div></Modal>}
-      {editorOpen && <RouteEditor connected={control.connected} onClose={() => setEditorOpen(false)} onCreated={(route) => setControl((current) => ({ ...current, routes: [...current.routes.filter((item) => item.id !== route.id), route] }))} onError={setNotice} />}
+      {editorOpen && <RouteEditor connected={control.connected} proxyConfigured={control.proxyConfigured} onClose={() => setEditorOpen(false)} onCreated={(route) => setControl((current) => ({ ...current, routes: [...current.routes.filter((item) => item.id !== route.id), route] }))} onError={setNotice} />}
     </div>
   );
 }
@@ -220,20 +246,22 @@ function ActivityTable({ events }: { events: ActivityEvent[] }) {
   return <div className="table-wrap"><table className="activity-table"><thead><tr><th>时间</th><th>路由</th><th>调用者</th><th>动作</th><th>结果</th><th>延迟</th><th>出口</th><th>事件 ID</th></tr></thead><tbody>{events.map((event) => <tr key={event.id}><td>{event.time}</td><td><strong>{event.routeName}</strong></td><td>{event.caller}</td><td>{event.action}</td><td><StatusBadge status={event.result} /></td><td>{event.latency}</td><td>{event.egress}</td><td><code>{event.id}</code></td></tr>)}</tbody></table></div>;
 }
 
-function SettingsPage({ theme, onTheme, accent, onAccent, connected }: { theme: ThemePreference; onTheme: (theme: ThemePreference) => void; accent: AccentTheme; onAccent: (accent: AccentTheme) => void; connected: boolean }) {
+function SettingsPage({ theme, onTheme, accent, onAccent, connected, proxyConfigured, onConfigureProxy, onClearProxy }: { theme: ThemePreference; onTheme: (theme: ThemePreference) => void; accent: AccentTheme; onAccent: (accent: AccentTheme) => void; connected: boolean; proxyConfigured: boolean; onConfigureProxy: () => void; onClearProxy: () => void }) {
   return <><PageHeader title="设置" subtitle="本地外观、网络与安全状态" />
     <section className="settings-section"><div><h2>外观</h2><p>主题偏好保存在本机</p></div><div className="settings-controls"><div className="setting-row"><span>显示模式</span><ThemeControl value={theme} onChange={onTheme} /></div><div className="setting-row"><span>配色风格</span><AccentControl value={accent} onChange={onAccent} /></div></div></section>
-    <section className="settings-section"><div><h2>网络</h2><p>入口固定在 loopback</p></div><div className="settings-controls"><ReadOnlyField label="HTTP 入口" value="127.0.0.1:4768" /><ReadOnlyField label="控制通道" value={connected ? "Unix Socket · 已连接" : "等待 airlockd"} tone={connected ? "success" : "warning"} /></div></section>
+    <section className="settings-section"><div><h2>网络</h2><p>入口固定在 loopback</p></div><div className="settings-controls"><ReadOnlyField label="HTTP 入口" value="127.0.0.1:4768" /><ReadOnlyField label="控制通道" value={connected ? "Unix Socket · 已连接" : "等待 airlockd"} tone={connected ? "success" : "warning"} /><div className="proxy-setting"><div><span>Clash / SOCKS5 出口</span><strong className={proxyConfigured ? "setting-value success" : "setting-value"}>{proxyConfigured ? "Keychain · 已配置" : "未配置"}</strong></div><div className="inline-actions"><button className="secondary-button compact" onClick={onConfigureProxy} disabled={!connected}><Network size={14} />{proxyConfigured ? "更换" : "配置"}</button>{proxyConfigured && <button className="row-icon-button danger visible" onClick={onClearProxy} aria-label="清除代理出口" title="清除代理出口"><Trash2 size={14} /></button>}</div></div></div></section>
     <section className="settings-section"><div><h2>安全</h2><p>Secret 不进入 WebView</p></div><div className="settings-controls"><ReadOnlyField label="SecretStore" value="macOS Keychain" tone="success" /><ReadOnlyField label="路由元数据" value="0600 · 已持久化" tone="success" /><ReadOnlyField label="安全录入" value="macOS 原生窗口" tone="success" /></div></section>
+    <DeveloperCard />
   </>;
 }
 
-function RouteEditor({ connected, onClose, onCreated, onError }: { connected: boolean; onClose: () => void; onCreated: (route: RouteSummary) => void; onError: (message: string) => void }) {
+function RouteEditor({ connected, proxyConfigured, onClose, onCreated, onError }: { connected: boolean; proxyConfigured: boolean; onClose: () => void; onCreated: (route: RouteSummary) => void; onError: (message: string) => void }) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [alias, setAlias] = useState("");
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<RouteSummary>();
+  const [egress, setEgress] = useState<RouteSummary["egress"]>("Direct");
   const validIdentity = name.trim().length > 0 && /^[a-z0-9][a-z0-9-]{0,62}$/.test(alias);
 
   useEffect(() => {
@@ -246,8 +274,8 @@ function RouteEditor({ connected, onClose, onCreated, onError }: { connected: bo
     setSaving(true);
     try {
       const route = isTauri
-        ? await invoke<RouteSummary>("create_http_route", { name: name.trim(), alias })
-        : { id: alias, name: name.trim(), alias, kind: "HTTP" as const, status: "enabled" as const, localEndpoint: `127.0.0.1:4768/r/${alias}`, permissionSummary: "GET, HEAD · Range", egress: "Direct" as const, health: "unknown" as const, lastUsed: "从未", currentConnections: 0 };
+        ? await invoke<RouteSummary>("create_http_route", { name: name.trim(), alias, egress })
+        : { id: alias, name: name.trim(), alias, kind: "HTTP" as const, status: "enabled" as const, localEndpoint: `127.0.0.1:4768/r/${alias}`, permissionSummary: "GET, HEAD · Range", egress, health: "unknown" as const, lastUsed: "从未", currentConnections: 0 };
       setCreated(route);
       onCreated(route);
       setStep(3);
@@ -262,12 +290,21 @@ function RouteEditor({ connected, onClose, onCreated, onError }: { connected: bo
     <header className="editor-header"><div><h2>新增 HTTP 路由</h2><p>目标与认证由系统安全窗口处理</p></div><button className="icon-button" onClick={onClose} disabled={saving} aria-label="关闭"><X size={18} /></button></header>
     <ol className="step-list">{["本地身份", "安全录入", "完成"].map((label, index) => <li key={label} className={step === index + 1 ? "current" : step > index + 1 ? "done" : ""}><span>{step > index + 1 ? <Check size={14} /> : index + 1}</span>{label}</li>)}</ol>
     <div className="editor-body" key={step}>
-      {step === 1 && <><h3>路由身份</h3><div className="type-grid"><button className="selected"><Route size={18} /><strong>HTTP</strong><span>固定 URL · GET / HEAD</span></button><button disabled><KeyRound size={18} /><strong>SSH</strong><span>下一阶段</span></button><button disabled><ShieldCheck size={18} /><strong>LLM</strong><span>下一阶段</span></button></div><label className="form-field"><span>名称</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="Release downloads" autoFocus /></label><label className="form-field"><span>本地别名</span><input value={alias} onChange={(event) => setAlias(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={63} placeholder="release-downloads" /></label></>}
+      {step === 1 && <><h3>路由身份</h3><div className="type-grid"><button className="selected"><Route size={18} /><strong>HTTP</strong><span>固定 URL · GET / HEAD</span></button><button disabled><KeyRound size={18} /><strong>SSH</strong><span>下一阶段</span></button><button disabled><ShieldCheck size={18} /><strong>LLM</strong><span>下一阶段</span></button></div><label className="form-field"><span>名称</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="Release downloads" autoFocus /></label><label className="form-field"><span>本地别名</span><input value={alias} onChange={(event) => setAlias(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={63} placeholder="release-downloads" /></label><div className="egress-field"><span>出口策略</span><div className="egress-control" role="group" aria-label="出口策略">{([{ value: "Direct", label: "直连", icon: Cable }, { value: "Proxy", label: "代理", icon: Network }, { value: "Auto", label: "自动", icon: GitBranch }] as const).map((option) => { const Icon = option.icon; return <button key={option.value} className={egress === option.value ? "selected" : ""} onClick={() => setEgress(option.value)} aria-pressed={egress === option.value}><Icon size={14} />{option.label}</button>; })}</div></div>{egress !== "Direct" && !proxyConfigured && <div className="inline-warning"><TriangleAlert size={15} />代理出口尚未在设置中安全配置。</div>}</>}
       {step === 2 && <><h3>受保护目标</h3><div className="protected-box"><span className="protected-icon"><KeyRound size={20} /></span><div><strong>macOS 安全录入</strong><p>完整 URL 与 Authorization 直接写入 Keychain。</p></div><button className="primary-button" onClick={() => void secureCreate()} disabled={!connected || saving}>{saving ? <><RefreshCw className="spin" size={16} />等待系统窗口</> : <><KeyRound size={16} />打开安全窗口</>}</button></div>{!connected && <div className="inline-error"><TriangleAlert size={16} />airlockd 未连接，暂时无法保存。</div>}</>}
       {step === 3 && created && <div className="success-state"><CircleCheck size={32} /><h3>路由已启用</h3><p>Capability 已在原生窗口中一次性显示。</p><code>{created.localEndpoint}</code></div>}
     </div>
     <footer className="editor-footer"><button className="secondary-button" onClick={step === 1 || step === 3 ? onClose : () => setStep(1)} disabled={saving}>{step === 2 && <ChevronLeft size={16} />}{step === 3 ? "完成" : step === 1 ? "取消" : "上一步"}</button>{step === 1 && <button className="primary-button" onClick={() => setStep(2)} disabled={!validIdentity}>继续<ChevronRight size={16} /></button>}</footer>
   </div></div>;
+}
+
+function DeveloperCard() {
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  return <section className="settings-section about-section"><div><h2>关于</h2><p>Airlock 的开发者信息</p></div><div className="developer-card">
+    <div className={`developer-avatar ${avatarFailed ? "fallback" : ""}`}>{avatarFailed ? <span>LH</span> : <img src="/louisonh.png" alt="LouisonH" onError={() => setAvatarFailed(true)} />}</div>
+    <div className="developer-copy"><span className="developer-label">Developer</span><strong>LouisonH</strong><p>产品设计与核心开发</p></div>
+    <div className="developer-meta"><span><Github size={14} />@LouisonH</span><span><Sparkles size={14} />AI 协作 · GPT-5.6 Sol</span></div>
+  </div></section>;
 }
 
 function EmptyState({ icon: Icon, title, detail }: { icon: typeof Route; title: string; detail: string }) { return <div className="empty-state"><Icon size={22} /><strong>{title}</strong><span>{detail}</span></div>; }

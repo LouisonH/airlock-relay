@@ -199,6 +199,7 @@ code { color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, 
 .route-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 60px; }
 .row-icon-button { display: inline-grid; place-items: center; width: 25px; height: 25px; padding: 0; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 4px; opacity: 0; transform: translateX(3px); transition: color 130ms ease, background-color 130ms ease, border-color 130ms ease, opacity 130ms ease, transform 130ms ease; }
 tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transform: translateX(0); }
+.row-icon-button.visible { opacity: 1; transform: none; }
 .row-icon-button.danger:hover { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 24%, var(--border)); }
 
 .filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -222,6 +223,10 @@ tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transfor
 .setting-value.success { color: var(--success); }
 .setting-value.warning { color: var(--warning); }
 .theme-control button { min-width: 68px; }
+.proxy-setting { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 6px 9px 6px 11px; border-bottom: 1px solid var(--border); }
+.proxy-setting > div:first-child { display: grid; gap: 3px; color: var(--text-secondary); font-size: 10px; }
+.inline-actions { display: flex; align-items: center; gap: 5px; }
+.secondary-button.compact { min-height: 27px; padding: 0 8px; font-size: 9px; }
 .accent-control { display: flex; align-items: center; gap: 4px; }
 .accent-control button { display: inline-flex; align-items: center; gap: 5px; min-height: 27px; padding: 0 7px; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: 4px; font-size: 9px; transition: color 130ms ease, background-color 130ms ease, border-color 130ms ease, transform 130ms ease; }
 .accent-control button:hover { color: var(--text); background: var(--surface-hover); }
@@ -231,6 +236,18 @@ tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transfor
 .accent-swatch.forest { background: #258a68; }
 .accent-swatch.ocean { background: #347fb7; }
 .accent-swatch.amber { background: #b7771d; }
+.developer-card { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 74px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.developer-avatar { display: grid; place-items: center; width: 52px; height: 52px; color: #fff; background: var(--accent-solid); border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; }
+.developer-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.developer-avatar.fallback span { font-size: 14px; font-weight: 750; }
+.developer-copy { min-width: 0; }
+.developer-copy > strong, .developer-copy > p { display: block; }
+.developer-copy > strong { margin-top: 2px; color: var(--text); font-size: 13px; }
+.developer-copy > p { margin-top: 3px; color: var(--text-secondary); font-size: 9px; }
+.developer-label { color: var(--accent); font-size: 8px; font-weight: 750; text-transform: uppercase; }
+.developer-meta { display: grid; justify-items: start; gap: 6px; min-width: 150px; color: var(--text-secondary); font-size: 9px; }
+.developer-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.developer-meta svg { color: var(--accent); }
 
 .empty-state { display: grid; place-items: center; min-height: 180px; padding: 24px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; text-align: center; }
 .empty-state svg { margin-bottom: 9px; animation: empty-breathe 3s ease-in-out infinite; }
@@ -269,6 +286,13 @@ tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transfor
 .type-grid > button span { color: var(--text-secondary); font-size: 9px; line-height: 15px; }
 .form-field { display: grid; gap: 5px; margin-top: 11px; color: var(--text-secondary); font-size: 10px; }
 .form-field input { height: 33px; padding: 0 9px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 4px; }
+.egress-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 13px; color: var(--text-secondary); font-size: 10px; }
+.egress-control { display: flex; height: 31px; padding: 2px; background: var(--surface-hover); border: 1px solid var(--border); border-radius: 5px; }
+.egress-control button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 72px; padding: 0 8px; color: var(--text-secondary); background: transparent; border: 0; border-radius: 4px; font-size: 9px; transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
+.egress-control button:hover { color: var(--text); }
+.egress-control button:active { transform: scale(.97); }
+.egress-control button.selected { color: var(--text); background: var(--surface); box-shadow: 0 1px 3px rgb(20 29 24 / 12%); }
+.inline-warning { display: flex; align-items: center; gap: 7px; margin-top: 9px; color: var(--warning); font-size: 9px; }
 .protected-box { display: flex; align-items: center; gap: 12px; padding: 15px; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; }
 .protected-box > div { flex: 1; }
 .protected-box p { margin-top: 3px; color: var(--text-secondary); font-size: 9px; }
@@ -297,6 +321,8 @@ tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transfor
   .route-table th:nth-child(8), .route-table td:nth-child(8),
   .activity-table th:nth-child(3), .activity-table td:nth-child(3),
   .activity-table th:nth-child(8), .activity-table td:nth-child(8) { display: none; }
+  .developer-card { grid-template-columns: 52px minmax(0, 1fr); }
+  .developer-meta { grid-column: 2; grid-template-columns: repeat(2, max-content); }
 }
 
 @media (prefers-reduced-motion: reduce) {
