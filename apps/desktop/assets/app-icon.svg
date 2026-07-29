@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">Airlock application icon</title>
+  <rect width="1024" height="1024" rx="220" fill="#20252b"/>
+  <path d="M224 278c0-30 24-54 54-54h180v116H340v344h118v116H278c-30 0-54-24-54-54V278Z" fill="#2563eb"/>
+  <path d="M800 278c0-30-24-54-54-54H566v116h118v344H566v116h180c30 0 54-24 54-54V278Z" fill="#2563eb"/>
+  <rect x="420" y="438" width="184" height="210" rx="36" fill="#f6f7f8"/>
+  <path d="M464 438v-48c0-27 21-48 48-48s48 21 48 48v48" fill="none" stroke="#f6f7f8" stroke-width="48" stroke-linecap="round"/>
+  <circle cx="512" cy="526" r="25" fill="#20252b"/>
+  <path d="M512 546v42" stroke="#20252b" stroke-width="24" stroke-linecap="round"/>
+</svg>
