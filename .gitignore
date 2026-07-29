@@ -1,0 +1,43 @@
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Go
+bin/
+*.test
+coverage.out
+
+# Tauri / frontend
+node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Local runtime state
+data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+config.local.*
+airlock.local.*
+
+# Secrets and signing material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+private/
+
+# Release artifacts
+dist/
+build/
+release/
+*.dmg
+*.msi
+*.AppImage
