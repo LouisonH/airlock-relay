@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "sidecar:build": "cd ../.. && go build -o bin/airlockd ./cmd/airlockd",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

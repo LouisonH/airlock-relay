@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRequireLoopback(t *testing.T) {
 	for _, address := range []string{"127.0.0.1:4768", "[::1]:4768"} {
@@ -12,5 +15,19 @@ func TestRequireLoopback(t *testing.T) {
 		if err := requireLoopback(address); err == nil {
 			t.Errorf("requireLoopback(%q) succeeded", address)
 		}
+	}
+}
+
+func TestReadControlToken(t *testing.T) {
+	want := "airlock_control_ephemeral_token_32_bytes"
+	got, err := readControlToken(strings.NewReader(want + "\n"))
+	if err != nil {
+		t.Fatalf("readControlToken() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("readControlToken() = %q", got)
+	}
+	if _, err := readControlToken(strings.NewReader("too-short\n")); err == nil {
+		t.Fatal("readControlToken() accepted a short token")
 	}
 }

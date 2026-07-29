@@ -27,3 +27,10 @@ export interface ActivityEvent {
   latency: string;
   egress: "Direct" | "Proxy" | "Auto";
 }
+
+export interface ControlState {
+  connected: boolean;
+  running: boolean;
+  routes: RouteSummary[];
+  message?: string;
+}

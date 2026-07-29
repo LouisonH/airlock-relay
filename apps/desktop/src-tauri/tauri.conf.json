@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "io.airlock.relay",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run sidecar:build && npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run sidecar:build && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -27,6 +27,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "resources": {
+      "../../../bin/airlockd": "airlockd"
+    }
   }
 }

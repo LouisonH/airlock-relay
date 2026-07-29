@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -13,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LouisonH/airlock-relay/internal/control"
 	"github.com/LouisonH/airlock-relay/internal/httpgw"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
@@ -20,15 +24,25 @@ import (
 
 func main() {
 	listenAddress := flag.String("listen", "127.0.0.1:4768", "HTTP relay listen address")
+	controlTokenStdin := flag.Bool("control-token-stdin", false, "read the ephemeral desktop control token from stdin")
 	flag.Parse()
 
-	if err := run(*listenAddress); err != nil {
+	if !*controlTokenStdin {
+		slog.Error("airlockd requires an ephemeral desktop control token")
+		os.Exit(2)
+	}
+	controlToken, err := readControlToken(os.Stdin)
+	if err != nil {
+		slog.Error("airlockd could not read the desktop control token", "error", err)
+		os.Exit(2)
+	}
+	if err := run(*listenAddress, controlToken); err != nil {
 		slog.Error("airlockd stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(address string) error {
+func run(address, controlToken string) error {
 	if err := requireLoopback(address); err != nil {
 		return err
 	}
@@ -41,6 +55,18 @@ func run(address string) error {
 		return fmt.Errorf("initialize platform secret store: %w", err)
 	}
 	gateway := httpgw.NewHandler(registry, secretStore, nil)
+	controlPaths, err := control.DefaultPaths()
+	if err != nil {
+		return err
+	}
+	controlListener, controlServer, err := control.Listen(controlPaths, controlToken, registry, secretStore)
+	if err != nil {
+		return fmt.Errorf("initialize control channel: %w", err)
+	}
+	defer func() {
+		_ = controlListener.Close()
+		_ = os.Remove(controlPaths.Socket)
+	}()
 
 	mux := http.NewServeMux()
 	mux.Handle("/r/", gateway)
@@ -67,6 +93,10 @@ func run(address string) error {
 	go func() {
 		serverErrors <- server.Serve(listener)
 	}()
+	controlErrors := make(chan error, 1)
+	go func() {
+		controlErrors <- controlServer.Serve(controlListener)
+	}()
 
 	shutdownContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -80,7 +110,28 @@ func run(address string) error {
 			return nil
 		}
 		return err
+	case err := <-controlErrors:
+		if errors.Is(err, net.ErrClosed) {
+			return nil
+		}
+		return fmt.Errorf("control channel stopped: %w", err)
 	}
+}
+
+func readControlToken(reader io.Reader) (string, error) {
+	buffered := bufio.NewReader(io.LimitReader(reader, 256))
+	tokenBytes, err := buffered.ReadBytes('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", errors.New("read control token")
+	}
+	tokenBytes = bytes.TrimSpace(tokenBytes)
+	if len(tokenBytes) < 32 || len(tokenBytes) > 128 {
+		clear(tokenBytes)
+		return "", errors.New("invalid control token")
+	}
+	token := string(tokenBytes)
+	clear(tokenBytes)
+	return token, nil
 }
 
 func requireLoopback(address string) error {

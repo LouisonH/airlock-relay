@@ -46,10 +46,12 @@ func (p HTTPPolicy) AllowsQueryKey(key string) bool {
 }
 
 type HTTPRoute struct {
+	Name             string
 	Alias            string
 	TargetSecretRef  string
 	CapabilityDigest capability.Digest
 	Policy           HTTPPolicy
+	Egress           string
 	Enabled          bool
 }
 
@@ -62,6 +64,9 @@ func (r HTTPRoute) Validate() error {
 	}
 	if len(r.Policy.AllowedMethods) == 0 {
 		return fmt.Errorf("%w: at least one HTTP method is required", ErrInvalidRoute)
+	}
+	if r.Egress != "" && r.Egress != "Direct" && r.Egress != "Proxy" && r.Egress != "Auto" {
+		return fmt.Errorf("%w: invalid egress", ErrInvalidRoute)
 	}
 	return nil
 }
@@ -101,6 +106,40 @@ func (r *Registry) Lookup(alias string) (HTTPRoute, error) {
 		return HTTPRoute{}, ErrNotFound
 	}
 	return cloneRoute(route), nil
+}
+
+func (r *Registry) List() []HTTPRoute {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]HTTPRoute, 0, len(r.routes))
+	for _, route := range r.routes {
+		result = append(result, cloneRoute(route))
+	}
+	return result
+}
+
+func (r *Registry) SetEnabled(alias string, enabled bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	route, ok := r.routes[alias]
+	if !ok {
+		return ErrNotFound
+	}
+	route.Enabled = enabled
+	r.routes[alias] = route
+	return nil
+}
+
+func (r *Registry) DisableAll() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for alias, route := range r.routes {
+		route.Enabled = false
+		r.routes[alias] = route
+	}
 }
 
 func cloneRoute(route HTTPRoute) HTTPRoute {
