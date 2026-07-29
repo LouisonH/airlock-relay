@@ -18,6 +18,7 @@ The default window is 1120x720 with a minimum size of 960x640. Navigation uses a
 - Secret entry uses a native secure flow. The WebView receives only completion status.
 - A newly created capability is displayed once. Closing the dialog makes it unrecoverable; rotation is required.
 - Sanitized events contain route alias, caller label, decision, latency, egress, and an opaque event ID.
+- Proxy URLs and credentials are entered only in a native protected prompt; the WebView receives only configured/unconfigured state.
 - Closing the window does not stop the daemon. Emergency stop is a separate confirmed action.
 
 ## Theme System

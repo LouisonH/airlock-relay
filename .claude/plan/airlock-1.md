@@ -353,5 +353,8 @@ internal/audit          脱敏审计
 - Tauri sidecar 启停、健康检查和退出清理，以及更简洁的三步 HTTP 路由流程与 reduced-motion 动画降级。
 - 权限为 `0600` 的版本化路由元数据，仅持久化别名、策略、Keychain 引用和 Capability SHA-256 摘要。
 - 路由删除、Capability 持久化撤销与 Keychain 清理；创建/启停/删除在元数据写入失败时回滚。
+- Clash 兼容的 HTTP/HTTPS CONNECT、SOCKS5/SOCKS5H 出口，代理 URL 与认证信息作为 Secret 进入 Keychain。
+- 每路由 `Direct` / `Proxy` / `Auto` 出口；`Auto` 仅在无 Body 的 GET/HEAD 遇到拨号或 DNS 错误时回退，不对 TLS、已收到响应或非幂等请求重试。
+- 桌面设置页的代理安全录入、出口状态、开发者 LouisonH 与本地头像资源。
 
-当前仍是技术验证版，不是已完成发布安全评审的 MVP。下一个里程碑是 Clash HTTP/SOCKS5 出口和安全的 `auto` 回退策略；SSH 和 LLM 路由在各自安全核心完成前保持禁用。
+当前仍是技术验证版，不是已完成发布安全评审的 MVP。下一个高风险技术里程碑是 SSH 双会话网关、known_hosts 验证与默认受限 exec；LLM 路由在安全预设完成前保持禁用。
