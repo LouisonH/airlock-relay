@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -46,7 +47,16 @@ func run(address, controlToken string) error {
 	if err := requireLoopback(address); err != nil {
 		return err
 	}
-	registry, err := routes.NewRegistry()
+	controlPaths, err := control.DefaultPaths()
+	if err != nil {
+		return err
+	}
+	metadata := routes.NewFileStore(filepath.Join(controlPaths.Directory, "routes.json"))
+	persistedRoutes, err := metadata.Load()
+	if err != nil {
+		return fmt.Errorf("load route metadata: %w", err)
+	}
+	registry, err := routes.NewRegistry(persistedRoutes...)
 	if err != nil {
 		return err
 	}
@@ -55,11 +65,7 @@ func run(address, controlToken string) error {
 		return fmt.Errorf("initialize platform secret store: %w", err)
 	}
 	gateway := httpgw.NewHandler(registry, secretStore, nil)
-	controlPaths, err := control.DefaultPaths()
-	if err != nil {
-		return err
-	}
-	controlListener, controlServer, err := control.Listen(controlPaths, controlToken, registry, secretStore)
+	controlListener, controlServer, err := control.Listen(controlPaths, controlToken, registry, secretStore, metadata)
 	if err != nil {
 		return fmt.Errorf("initialize control channel: %w", err)
 	}

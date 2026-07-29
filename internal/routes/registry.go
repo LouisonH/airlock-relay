@@ -108,6 +108,17 @@ func (r *Registry) Lookup(alias string) (HTTPRoute, error) {
 	return cloneRoute(route), nil
 }
 
+func (r *Registry) Get(alias string) (HTTPRoute, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	route, ok := r.routes[alias]
+	if !ok {
+		return HTTPRoute{}, ErrNotFound
+	}
+	return cloneRoute(route), nil
+}
+
 func (r *Registry) List() []HTTPRoute {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -130,6 +141,18 @@ func (r *Registry) SetEnabled(alias string, enabled bool) error {
 	route.Enabled = enabled
 	r.routes[alias] = route
 	return nil
+}
+
+func (r *Registry) Delete(alias string) (HTTPRoute, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	route, ok := r.routes[alias]
+	if !ok {
+		return HTTPRoute{}, ErrNotFound
+	}
+	delete(r.routes, alias)
+	return cloneRoute(route), nil
 }
 
 func (r *Registry) DisableAll() {

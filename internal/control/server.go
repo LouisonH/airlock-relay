@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/LouisonH/airlock-relay/internal/capability"
@@ -44,9 +45,11 @@ func DefaultPaths() (Paths, error) {
 }
 
 type Server struct {
-	registry *routes.Registry
-	secrets  secrets.MutableStore
-	token    string
+	registry    *routes.Registry
+	secrets     secrets.MutableStore
+	persistence routes.MetadataStore
+	token       string
+	mutationMu  sync.Mutex
 }
 
 type Request struct {
@@ -68,6 +71,7 @@ type CreateHTTPRoute struct {
 type Response struct {
 	OK      bool           `json:"ok"`
 	Error   string         `json:"error,omitempty"`
+	Warning string         `json:"warning,omitempty"`
 	Running bool           `json:"running"`
 	Routes  []RouteSummary `json:"routes,omitempty"`
 	Created *CreatedRoute  `json:"created,omitempty"`
@@ -92,9 +96,12 @@ type RouteSummary struct {
 	CurrentConnections int    `json:"currentConnections"`
 }
 
-func Listen(paths Paths, token string, registry *routes.Registry, store secrets.MutableStore) (net.Listener, *Server, error) {
+func Listen(paths Paths, token string, registry *routes.Registry, store secrets.MutableStore, persistence routes.MetadataStore) (net.Listener, *Server, error) {
 	if len(token) < 32 || len(token) > 128 {
 		return nil, nil, errors.New("invalid in-memory control token")
+	}
+	if persistence == nil {
+		return nil, nil, errors.New("route metadata store is required")
 	}
 	if err := prepareDirectory(paths.Directory); err != nil {
 		return nil, nil, err
@@ -110,7 +117,7 @@ func Listen(paths Paths, token string, registry *routes.Registry, store secrets.
 		_ = listener.Close()
 		return nil, nil, errors.New("protect control socket")
 	}
-	return listener, &Server{registry: registry, secrets: store, token: token}, nil
+	return listener, &Server{registry: registry, secrets: store, persistence: persistence, token: token}, nil
 }
 
 func (s *Server) Serve(listener net.Listener) error {
@@ -149,13 +156,11 @@ func (s *Server) dispatch(request Request) Response {
 	case "create_http_route":
 		return s.createHTTPRoute(request.Create)
 	case "set_route_enabled":
-		if err := s.registry.SetEnabled(request.Alias, request.Enabled); err != nil {
-			return Response{Error: "route was not found"}
-		}
-		return Response{OK: true, Running: true, Routes: summaries(s.registry.List())}
+		return s.setRouteEnabled(request.Alias, request.Enabled)
 	case "stop_all":
-		s.registry.DisableAll()
-		return Response{OK: true, Running: true, Routes: summaries(s.registry.List())}
+		return s.stopAll()
+	case "delete_route":
+		return s.deleteRoute(request.Alias)
 	default:
 		return Response{Error: "unsupported control action"}
 	}
@@ -168,6 +173,13 @@ func (s *Server) createHTTPRoute(input *CreateHTTPRoute) Response {
 	baseURL, err := url.Parse(input.BaseURL)
 	if err != nil || baseURL.Host == "" || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
 		return Response{Error: "target must be an HTTP or HTTPS URL"}
+	}
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	if _, err := s.registry.Get(input.Alias); err == nil {
+		return Response{Error: "route alias already exists"}
+	} else if !errors.Is(err, routes.ErrNotFound) {
+		return Response{Error: "could not inspect route registry"}
 	}
 	token, digest, err := capability.Generate()
 	if err != nil {
@@ -190,8 +202,62 @@ func (s *Server) createHTTPRoute(input *CreateHTTPRoute) Response {
 		_ = s.secrets.DeleteTarget(context.Background(), reference)
 		return Response{Error: "invalid route alias or policy"}
 	}
+	if err := s.persistence.Save(s.registry.List()); err != nil {
+		_, _ = s.registry.Delete(route.Alias)
+		_ = s.secrets.DeleteTarget(context.Background(), reference)
+		return Response{Error: "could not persist route metadata"}
+	}
 	summary := summarize(route)
 	return Response{OK: true, Running: true, Routes: summaries(s.registry.List()), Created: &CreatedRoute{Route: summary, Capability: token}}
+}
+
+func (s *Server) setRouteEnabled(alias string, enabled bool) Response {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	previous, err := s.registry.Get(alias)
+	if err != nil {
+		return Response{Error: "route was not found"}
+	}
+	if err := s.registry.SetEnabled(alias, enabled); err != nil {
+		return Response{Error: "route was not found"}
+	}
+	if err := s.persistence.Save(s.registry.List()); err != nil {
+		_ = s.registry.SetEnabled(alias, previous.Enabled)
+		return Response{Error: "could not persist route status"}
+	}
+	return Response{OK: true, Running: true, Routes: summaries(s.registry.List())}
+}
+
+func (s *Server) stopAll() Response {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	previous := s.registry.List()
+	s.registry.DisableAll()
+	if err := s.persistence.Save(s.registry.List()); err != nil {
+		for _, route := range previous {
+			_ = s.registry.SetEnabled(route.Alias, route.Enabled)
+		}
+		return Response{Error: "could not persist stopped routes"}
+	}
+	return Response{OK: true, Running: true, Routes: summaries(s.registry.List())}
+}
+
+func (s *Server) deleteRoute(alias string) Response {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	deleted, err := s.registry.Delete(alias)
+	if err != nil {
+		return Response{Error: "route was not found"}
+	}
+	if err := s.persistence.Save(s.registry.List()); err != nil {
+		_ = s.registry.Upsert(deleted)
+		return Response{Error: "could not persist route deletion"}
+	}
+	warning := ""
+	if err := s.secrets.DeleteTarget(context.Background(), deleted.TargetSecretRef); err != nil && !errors.Is(err, secrets.ErrNotFound) {
+		warning = "route deleted, but protected target cleanup needs attention"
+	}
+	return Response{OK: true, Warning: warning, Running: true, Routes: summaries(s.registry.List())}
 }
 
 func summaries(all []routes.HTTPRoute) []RouteSummary {

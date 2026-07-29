@@ -1,0 +1,191 @@
+package routes
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+
+	"github.com/LouisonH/airlock-relay/internal/capability"
+)
+
+const (
+	metadataVersion  = 1
+	maxMetadataBytes = 1 << 20
+)
+
+type MetadataStore interface {
+	Load() ([]HTTPRoute, error)
+	Save([]HTTPRoute) error
+}
+
+type FileStore struct {
+	path string
+}
+
+type metadataDocument struct {
+	Version int              `json:"version"`
+	Routes  []persistedRoute `json:"routes"`
+}
+
+type persistedRoute struct {
+	Name             string   `json:"name"`
+	Alias            string   `json:"alias"`
+	TargetSecretRef  string   `json:"target_secret_ref"`
+	CapabilityDigest string   `json:"capability_digest"`
+	AllowedMethods   []string `json:"allowed_methods"`
+	AllowedQueryKeys []string `json:"allowed_query_keys,omitempty"`
+	Egress           string   `json:"egress"`
+	Enabled          bool     `json:"enabled"`
+}
+
+func NewFileStore(path string) *FileStore {
+	return &FileStore{path: path}
+}
+
+func (s *FileStore) Load() ([]HTTPRoute, error) {
+	if err := secureDirectory(filepath.Dir(s.path)); err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(s.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || info.Size() > maxMetadataBytes {
+		return nil, errors.New("invalid route metadata file")
+	}
+	file, err := os.Open(s.path)
+	if err != nil {
+		return nil, errors.New("open route metadata")
+	}
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil || !os.SameFile(info, openedInfo) {
+		return nil, errors.New("route metadata changed while opening")
+	}
+
+	decoder := json.NewDecoder(io.LimitReader(file, maxMetadataBytes+1))
+	decoder.DisallowUnknownFields()
+	var document metadataDocument
+	if err := decoder.Decode(&document); err != nil || document.Version != metadataVersion {
+		return nil, errors.New("decode route metadata")
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return nil, err
+	}
+	routes := make([]HTTPRoute, 0, len(document.Routes))
+	seen := make(map[string]struct{}, len(document.Routes))
+	for _, stored := range document.Routes {
+		if _, exists := seen[stored.Alias]; exists || stored.TargetSecretRef != "routes/"+stored.Alias {
+			return nil, errors.New("invalid route metadata entry")
+		}
+		digestBytes, err := hex.DecodeString(stored.CapabilityDigest)
+		if err != nil || len(digestBytes) != len(capability.Digest{}) {
+			return nil, errors.New("invalid capability digest")
+		}
+		var digest capability.Digest
+		copy(digest[:], digestBytes)
+		clear(digestBytes)
+		route := HTTPRoute{
+			Name: stored.Name, Alias: stored.Alias, TargetSecretRef: stored.TargetSecretRef,
+			CapabilityDigest: digest, Policy: NewHTTPPolicy(stored.AllowedMethods, stored.AllowedQueryKeys),
+			Egress: stored.Egress, Enabled: stored.Enabled,
+		}
+		if err := route.Validate(); err != nil {
+			return nil, errors.New("invalid persisted route")
+		}
+		seen[stored.Alias] = struct{}{}
+		routes = append(routes, route)
+	}
+	return routes, nil
+}
+
+func (s *FileStore) Save(routes []HTTPRoute) error {
+	if err := secureDirectory(filepath.Dir(s.path)); err != nil {
+		return err
+	}
+	document := metadataDocument{Version: metadataVersion, Routes: make([]persistedRoute, 0, len(routes))}
+	for _, route := range routes {
+		if err := route.Validate(); err != nil || route.TargetSecretRef != "routes/"+route.Alias {
+			return errors.New("refuse to persist invalid route")
+		}
+		methods := sortedKeys(route.Policy.AllowedMethods)
+		queries := sortedKeys(route.Policy.AllowedQueryKeys)
+		document.Routes = append(document.Routes, persistedRoute{
+			Name: route.Name, Alias: route.Alias, TargetSecretRef: route.TargetSecretRef,
+			CapabilityDigest: hex.EncodeToString(route.CapabilityDigest[:]), AllowedMethods: methods,
+			AllowedQueryKeys: queries, Egress: route.Egress, Enabled: route.Enabled,
+		})
+	}
+	sort.Slice(document.Routes, func(i, j int) bool { return document.Routes[i].Alias < document.Routes[j].Alias })
+
+	temporary, err := os.CreateTemp(filepath.Dir(s.path), ".routes-*.tmp")
+	if err != nil {
+		return errors.New("create route metadata")
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return errors.New("protect route metadata")
+	}
+	encoder := json.NewEncoder(temporary)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(document); err != nil {
+		temporary.Close()
+		return errors.New("encode route metadata")
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return errors.New("sync route metadata")
+	}
+	if err := temporary.Close(); err != nil {
+		return errors.New("close route metadata")
+	}
+	if err := os.Rename(temporaryPath, s.path); err != nil {
+		return errors.New("install route metadata")
+	}
+	directory, err := os.Open(filepath.Dir(s.path))
+	if err != nil {
+		return errors.New("open route metadata directory")
+	}
+	defer directory.Close()
+	if err := directory.Sync(); err != nil {
+		return errors.New("sync route metadata directory")
+	}
+	return nil
+}
+
+func secureDirectory(path string) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return errors.New("create route metadata directory")
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("invalid route metadata directory")
+	}
+	if err := os.Chmod(path, 0o700); err != nil {
+		return errors.New("protect route metadata directory")
+	}
+	return nil
+}
+
+func sortedKeys(values map[string]struct{}) []string {
+	keys := make([]string, 0, len(values))
+	for value := range values {
+		keys = append(keys, value)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func ensureJSONEOF(decoder *json.Decoder) error {
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return errors.New("route metadata has trailing data")
+	}
+	return nil
+}
