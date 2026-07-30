@@ -6,10 +6,11 @@
   <p>
     <a href="README.md">English</a> |
     <a href="README.zh-CN.md">简体中文</a> |
-    <a href="https://louisonh.github.io/airlock-relay/">Documentation website</a>
+    <a href="docs/README.md">Documentation</a> |
+    <a href="website/en/index.html">Static website</a>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/status-P0%20technical%20preview-b26b25" alt="P0 technical preview" />
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/release-v0.1.0%20technical%20preview-b26b25" alt="v0.1.0 technical preview" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 desktop" />
     <img src="https://img.shields.io/badge/core-Go%201.24%2B-267d5f" alt="Go 1.24 or newer" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -17,7 +18,7 @@
 </div>
 
 > [!WARNING]
-> Airlock is currently a P0 technical preview. Route metadata, credentials, and proxy configuration use protected storage, but high-value production credentials should not be stored until the release security review is complete.
+> Airlock v0.1.0 is a technical preview. Route metadata, credentials, and proxy configuration use protected storage, but this release has not completed an independent production security audit.
 
 ## Why Airlock?
 
@@ -48,7 +49,8 @@ Airlock is a fixed-route relay, not an open proxy, VPN, or general provider-mana
 - Terminates the local and upstream SSH sessions separately to isolate identities and credentials.
 - Local random capability, custom password, or public-key authentication.
 - Protected upstream password or encrypted private-key authentication with strict host-key pinning.
-- Exact-command mode by default; unrestricted non-interactive `exec` requires native high-risk confirmation.
+- A user-defined exact command by default; unrestricted non-interactive `exec`
+  requires native high-risk confirmation.
 - Shell, PTY, SFTP, agent/X11 forwarding, and port forwarding remain denied.
 - Optional per-route command audit stored in a user-only `0600` rolling file.
 
@@ -67,7 +69,8 @@ Airlock is a fixed-route relay, not an open proxy, VPN, or general provider-mana
 - Native protected prompts keep target URLs and credentials outside the WebView.
 - System/light/dark themes, three accents, density, refresh cadence, and motion preferences.
 - Loopback by default, with explicit native confirmation before private-LAN exposure.
-- macOS Keychain by default; an explicitly lower-security local `0600` file store is optional.
+- A password-prompt-free local `0600` file store by default; macOS Keychain is
+  available as the stricter, opt-in protection mode.
 - Clash-compatible HTTP CONNECT and SOCKS5/SOCKS5H proxy egress.
 
 ## How It Works
@@ -90,7 +93,15 @@ flowchart LR
 
 The desktop GUI never needs an ordinary TCP management port. Closing the window does not have to stop the local relay.
 
-## Quick Start
+## Install the Technical Preview
+
+The v0.1.0 download supports Apple Silicon Macs running macOS 12 or newer. Get
+the DMG and checksum from [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0),
+then follow the [installation guide](docs/installation.md). The package is
+ad-hoc signed but is not Developer ID signed or notarized, so read the
+Gatekeeper instructions before opening it.
+
+## Development Quick Start
 
 Requirements: Go 1.24+, Node.js 20+, Rust/Cargo, and the Tauri 2 platform dependencies.
 
@@ -146,7 +157,7 @@ Airlock reduces secret exposure through fixed targets, least privilege, credenti
 - A capability credential limits access to one route but should still be rotated if exposed.
 - Do not place passwords or tokens in commands when command auditing is enabled.
 
-See the [implementation and threat-model plan](.claude/plan/airlock-1.md) and [desktop UI security specification](docs/ui-spec.md) for details.
+See the [security policy](SECURITY.md), [implementation and threat-model plan](.claude/plan/airlock-1.md), and [desktop UI security specification](docs/ui-spec.md) for details.
 
 ## Project Layout
 
@@ -170,10 +181,10 @@ website            Bilingual static documentation website
 - Windows and Linux SecretStore and service integration.
 - Release signing, CI secret scanning, and a complete security review.
 
-## Documentation Website
+## Documentation
 
-Visit the [published documentation website](https://louisonh.github.io/airlock-relay/) or open [website/index.html](website/index.html) locally. The site supports English and Simplified Chinese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a web management service.
+Start with the [documentation index](docs/README.md), [release notes](docs/releases/v0.1.0.md), [changelog](CHANGELOG.md), or open the [static website](website/en/index.html) locally. The website supports English and Simplified Chinese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service. GitHub Pages is not enabled while this repository remains private.
 
 ## Developer
 
-Airlock is designed and developed by **LouisonH**, with AI-assisted engineering and verification using **GPT-5.6 Sol**.
+Airlock is designed and developed by [**LouisonH**](https://0o0.site), with AI-assisted engineering and verification using **GPT-5.6 Sol**. Developer profile: [github.com/LouisonH](https://github.com/LouisonH).

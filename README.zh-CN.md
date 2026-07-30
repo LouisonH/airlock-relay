@@ -6,10 +6,11 @@
   <p>
     <a href="README.md">English</a> |
     <a href="README.zh-CN.md">简体中文</a> |
-    <a href="https://louisonh.github.io/airlock-relay/?lang=zh">说明网页</a>
+    <a href="docs/README.md">文档索引</a> |
+    <a href="website/index.html">静态说明网页</a>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/status-P0%20technical%20preview-b26b25" alt="P0 技术验证版" />
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/release-v0.1.0%20technical%20preview-b26b25" alt="v0.1.0 技术预览版" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 桌面端" />
     <img src="https://img.shields.io/badge/core-Go%201.24%2B-267d5f" alt="Go 1.24 或更高版本" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -17,7 +18,7 @@
 </div>
 
 > [!WARNING]
-> Airlock 当前是 P0 技术验证版。路由元数据、凭据与代理配置已使用受保护存储，但在完成发布安全审查前，仍不建议保存高价值生产凭据。
+> Airlock v0.1.0 是技术预览版。路由元数据、凭据与代理配置已使用受保护存储，但本版尚未完成独立的生产安全审计。
 
 ## 为什么需要 Airlock？
 
@@ -48,7 +49,7 @@ Airlock 是固定路由转发器，不是开放代理、VPN 或通用供应商�
 - 分别终止本地和上游 SSH 会话，实现身份与凭据隔离。
 - 本地随机 Capability、自定义密码或公钥认证。
 - 受保护的上游密码或加密私钥认证，并严格固定 Host Key。
-- 默认只允许精确命令；所有非交互 `exec` 需要原生高风险确认。
+- 默认只允许用户自定义的一条精确命令；所有非交互 `exec` 需要原生高风险确认。
 - 仍拒绝 Shell、PTY、SFTP、Agent/X11 Forwarding 与端口转发。
 - 可选的每路由命令审计，保存在当前用户专属的 `0600` 滚动文件中。
 
@@ -67,7 +68,7 @@ Airlock 是固定路由转发器，不是开放代理、VPN 或通用供应商�
 - 原生受保护输入窗口，目标 URL 与凭据不进入 WebView。
 - 系统/浅色/深色主题、三种配色、密度、刷新频率与动效偏好。
 - 默认仅 loopback，开放私有局域网前需要原生确认。
-- 默认使用 macOS Keychain；可显式选择安全性较低的本地 `0600` 文件存储。
+- 默认使用无需启动密码弹窗的本地 `0600` 文件；macOS Keychain 作为更严格的可选保护模式。
 - 兼容 Clash 的 HTTP CONNECT 和 SOCKS5/SOCKS5H 代理出口。
 
 ## 工作方式
@@ -90,7 +91,14 @@ flowchart LR
 
 桌面 GUI 不需要普通 TCP 管理端口。关闭窗口后，本地转发服务仍可继续运行。
 
-## 快速开始
+## 安装技术预览版
+
+v0.1.0 下载包支持运行 macOS 12 或更高版本的 Apple Silicon Mac。请从
+[GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0)
+下载 DMG 和校验文件，再按照[安装指南](docs/installation.zh-CN.md)操作。安装包已进行
+ad-hoc 签名，但没有 Developer ID 签名与 Apple 公证，请先阅读 Gatekeeper 说明。
+
+## 开发环境快速开始
 
 需要 Go 1.24+、Node.js 20+、Rust/Cargo 和 Tauri 2 平台依赖。
 
@@ -146,7 +154,7 @@ Airlock 通过固定目标、最小权限、凭据替换与脱敏错误减少 Se
 - Capability 凭据会把访问限制在单条路由，但泄露后仍应轮换。
 - 开启命令审计后，不要把密码或 Token 放入命令参数。
 
-详细信息见[实施与威胁模型计划](.claude/plan/airlock-1.md)和[桌面 UI 安全规范](docs/ui-spec.md)。
+详细信息见[安全策略](SECURITY.md#简体中文)、[实施与威胁模型计划](.claude/plan/airlock-1.md)和[桌面 UI 安全规范](docs/ui-spec.md)。
 
 ## 项目结构
 
@@ -170,10 +178,10 @@ website            双语静态说明网站
 - Windows 和 Linux SecretStore 与服务集成。
 - 发布签名、CI Secret 扫描与完整安全审查。
 
-## 说明网页
+## 文档
 
-可访问[已发布的说明网页](https://louisonh.github.io/airlock-relay/?lang=zh)，也可在本地直接打开 [website/index.html](website/index.html)。网页支持英文与简体中文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
+可从[文档索引](docs/README.md)、[v0.1.0 发布说明](docs/releases/v0.1.0.zh-CN.md)与[更新日志](CHANGELOG.md)开始，也可在本地直接打开[静态说明网页](website/index.html)。网页支持英文与简体中文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。仓库保持私有期间无法启用 GitHub Pages。
 
 ## 开发者
 
-Airlock 由 **LouisonH** 进行产品设计与核心开发，并使用 **GPT-5.6 Sol** 辅助工程实现与验证。
+Airlock 由 [**LouisonH**](https://0o0.site) 进行产品设计与核心开发，并使用 **GPT-5.6 Sol** 辅助工程实现与验证。GitHub：[github.com/LouisonH](https://github.com/LouisonH)。
