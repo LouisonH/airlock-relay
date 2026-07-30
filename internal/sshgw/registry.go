@@ -21,13 +21,21 @@ type Policy struct {
 	AllowedCommands            map[string]struct{}
 	LocalPublicKeyFingerprints map[string]struct{}
 	AllowStdin                 bool
+	AllowAllCommands           bool
+	RecordCommands             bool
 }
 
 func NewPolicy(commands, fingerprints []string, allowStdin bool) Policy {
+	return NewPolicyWithOptions(commands, fingerprints, allowStdin, false, false)
+}
+
+func NewPolicyWithOptions(commands, fingerprints []string, allowStdin, allowAllCommands, recordCommands bool) Policy {
 	policy := Policy{
 		AllowedCommands:            make(map[string]struct{}, len(commands)),
 		LocalPublicKeyFingerprints: make(map[string]struct{}, len(fingerprints)),
 		AllowStdin:                 allowStdin,
+		AllowAllCommands:           allowAllCommands,
+		RecordCommands:             recordCommands,
 	}
 	for _, command := range commands {
 		policy.AllowedCommands[command] = struct{}{}
@@ -39,8 +47,18 @@ func NewPolicy(commands, fingerprints []string, allowStdin bool) Policy {
 }
 
 func (p Policy) AllowsCommand(command string) bool {
+	if !validCommand(command) {
+		return false
+	}
+	if p.AllowAllCommands {
+		return true
+	}
 	_, ok := p.AllowedCommands[command]
 	return ok
+}
+
+func validCommand(command string) bool {
+	return command != "" && len(command) <= 4096 && !strings.ContainsAny(command, "\x00\r\n")
 }
 
 type Route struct {
@@ -63,11 +81,11 @@ func (r Route) Validate() error {
 	if r.CapabilityDigest == (capability.Digest{}) {
 		return fmt.Errorf("%w: capability is required", ErrInvalidRoute)
 	}
-	if len(r.Policy.AllowedCommands) == 0 {
+	if !r.Policy.AllowAllCommands && len(r.Policy.AllowedCommands) == 0 {
 		return fmt.Errorf("%w: at least one exact command is required", ErrInvalidRoute)
 	}
 	for command := range r.Policy.AllowedCommands {
-		if command == "" || len(command) > 4096 || strings.ContainsAny(command, "\x00\r\n") {
+		if !validCommand(command) {
 			return fmt.Errorf("%w: invalid allowed command", ErrInvalidRoute)
 		}
 	}
@@ -157,6 +175,23 @@ func (r *Registry) SetEnabled(alias string, enabled bool) error {
 	}
 	route.Enabled = enabled
 	r.routes[alias] = route
+	return nil
+}
+
+func (r *Registry) SetCommandPolicy(alias string, policy Policy) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	route, ok := r.routes[alias]
+	if !ok {
+		return ErrRouteNotFound
+	}
+	policy.LocalPublicKeyFingerprints = cloneStringSet(route.Policy.LocalPublicKeyFingerprints)
+	policy.AllowStdin = false
+	route.Policy = policy
+	if err := route.Validate(); err != nil {
+		return err
+	}
+	r.routes[alias] = cloneRoute(route)
 	return nil
 }
 

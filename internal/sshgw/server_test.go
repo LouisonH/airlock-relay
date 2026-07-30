@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -91,6 +92,35 @@ func TestGatewayPasswordIsolationAndRestrictedExec(t *testing.T) {
 	if got := upstream.snapshot().connections; got != 1 {
 		t.Fatalf("failed local authentication reached upstream: %d connections", got)
 	}
+}
+
+func TestGatewayAllowsAllExecAndRecordsCommands(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	route := testSSHRoute(NewPolicyWithOptions(nil, nil, false, true, true), egress.Direct)
+	target := secrets.SSHTarget{
+		Address: upstream.address(), Username: upstreamUser, Password: []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	audit, err := OpenFileCommandAudit(filepath.Join(t.TempDir(), "commands.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := startGateway(t, route, target, egress.NewManager(nil), audit)
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.CombinedOutput("uname -a"); err != nil {
+		t.Fatalf("allow-all exec failed: %v", err)
+	}
+	events := audit.List(10)
+	if len(events) != 1 || events[0].Command != "uname -a" || events[0].Result != "allowed" {
+		t.Fatalf("command events = %+v", events)
+	}
+	assertRestrictedRequests(t, client)
 }
 
 func TestGatewayLocalPublicKeyAndUpstreamPrivateKey(t *testing.T) {
@@ -232,6 +262,21 @@ func TestGatewayUsesProtectedHTTPConnectEgress(t *testing.T) {
 	}
 }
 
+func TestProbeHostKeyStopsBeforeAuthentication(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	key, err := ProbeHostKey(t.Context(), egress.NewManager(nil), egress.Direct, upstream.address())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ssh.FingerprintSHA256(key) != ssh.FingerprintSHA256(upstream.hostSigner.PublicKey()) {
+		t.Fatal("probed SSH host key does not match upstream")
+	}
+	snapshot := upstream.snapshot()
+	if snapshot.passwordAuths != 0 || snapshot.publicKeyAuths != 0 {
+		t.Fatalf("host key probe attempted authentication: %+v", snapshot)
+	}
+}
+
 func TestServerRejectsNonLoopbackListener(t *testing.T) {
 	registry, err := NewRegistry(testSSHRoute(NewPolicy([]string{"build"}, nil, false), egress.Direct))
 	if err != nil {
@@ -244,6 +289,27 @@ func TestServerRejectsNonLoopbackListener(t *testing.T) {
 	listener := staticListener{address: &net.TCPAddr{IP: net.IPv4zero, Port: 2222}}
 	if err := server.Serve(listener); !errors.Is(err, ErrNonLoopbackListen) {
 		t.Fatalf("Serve() error = %v", err)
+	}
+}
+
+func TestServerAllowsPrivateListenerOnlyWhenLANIsEnabled(t *testing.T) {
+	registry, err := NewRegistry(testSSHRoute(NewPolicy([]string{"build"}, nil, false), egress.Direct))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewServer(registry, secrets.NewMemoryStore(), egress.NewManager(nil), generateSigner(t), WithLANAccess())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ip := range []net.IP{net.IPv4zero, net.ParseIP("192.168.1.10")} {
+		err := server.Serve(staticListener{address: &net.TCPAddr{IP: ip, Port: 2222}})
+		if errors.Is(err, ErrNonLoopbackListen) {
+			t.Fatalf("LAN listener %s was rejected: %v", ip, err)
+		}
+	}
+	public := staticListener{address: &net.TCPAddr{IP: net.ParseIP("203.0.113.10"), Port: 2222}}
+	if err := server.Serve(public); !errors.Is(err, ErrNonLoopbackListen) {
+		t.Fatalf("public listener error = %v", err)
 	}
 }
 
@@ -291,7 +357,7 @@ type gatewayHarness struct {
 	localHostKey ssh.PublicKey
 }
 
-func startGateway(t *testing.T, route Route, target secrets.SSHTarget, dialer EgressDialer) gatewayHarness {
+func startGateway(t *testing.T, route Route, target secrets.SSHTarget, dialer EgressDialer, audits ...CommandAudit) gatewayHarness {
 	t.Helper()
 	store := secrets.NewMemoryStore()
 	if err := store.PutSSHTarget(t.Context(), route.TargetSecretRef, target); err != nil {
@@ -302,7 +368,11 @@ func startGateway(t *testing.T, route Route, target secrets.SSHTarget, dialer Eg
 		t.Fatal(err)
 	}
 	hostSigner := generateSigner(t)
-	server, err := NewServer(registry, store, dialer, hostSigner)
+	var options []ServerOption
+	if len(audits) > 0 {
+		options = append(options, WithCommandAudit(audits[0]))
+	}
+	server, err := NewServer(registry, store, dialer, hostSigner, options...)
 	if err != nil {
 		t.Fatal(err)
 	}

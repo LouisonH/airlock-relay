@@ -12,6 +12,7 @@ import (
 const targetFormatVersion = 1
 const proxyFormatVersion = 1
 const sshTargetFormatVersion = 1
+const sshIdentityFormatVersion = 1
 
 var referencePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9/_-]{0,127}$`)
 
@@ -44,6 +45,11 @@ type persistedSSHTarget struct {
 	PrivateKey         []byte `json:"private_key,omitempty"`
 	PrivateKeyPassword []byte `json:"private_key_password,omitempty"`
 	ExpectedHostKey    []byte `json:"expected_host_key"`
+}
+
+type persistedSSHHostIdentity struct {
+	Version    int    `json:"version"`
+	PrivateKey []byte `json:"private_key"`
 }
 
 func newKeychainStore(backend keychainBackend) *KeychainStore {
@@ -204,6 +210,51 @@ func (s *KeychainStore) ResolveSSHTarget(ctx context.Context, reference string) 
 		return SSHTarget{}, errors.New("decode protected SSH target")
 	}
 	return target, nil
+}
+
+func (s *KeychainStore) PutSSHHostIdentity(ctx context.Context, reference string, identity SSHHostIdentity) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := validateReference(reference); err != nil {
+		return err
+	}
+	if err := validateSSHHostIdentity(identity); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(persistedSSHHostIdentity{Version: sshIdentityFormatVersion, PrivateKey: identity.PrivateKey})
+	if err != nil {
+		return errors.New("encode protected SSH host identity")
+	}
+	defer clear(payload)
+	if err := s.backend.Put(reference, payload); err != nil {
+		return errors.New("store protected SSH host identity")
+	}
+	return nil
+}
+
+func (s *KeychainStore) ResolveSSHHostIdentity(ctx context.Context, reference string) (SSHHostIdentity, error) {
+	if err := ctx.Err(); err != nil {
+		return SSHHostIdentity{}, err
+	}
+	if err := validateReference(reference); err != nil {
+		return SSHHostIdentity{}, err
+	}
+	payload, err := s.backend.Get(reference)
+	if err != nil {
+		return SSHHostIdentity{}, err
+	}
+	defer clear(payload)
+	var stored persistedSSHHostIdentity
+	if err := json.Unmarshal(payload, &stored); err != nil || stored.Version != sshIdentityFormatVersion {
+		return SSHHostIdentity{}, errors.New("decode protected SSH host identity")
+	}
+	identity := SSHHostIdentity{PrivateKey: stored.PrivateKey}
+	if err := validateSSHHostIdentity(identity); err != nil {
+		clear(identity.PrivateKey)
+		return SSHHostIdentity{}, errors.New("decode protected SSH host identity")
+	}
+	return identity, nil
 }
 
 func (s *KeychainStore) DeleteTarget(ctx context.Context, reference string) error {

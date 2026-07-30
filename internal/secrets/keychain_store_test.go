@@ -212,6 +212,31 @@ func TestKeychainStorePreservesEncryptedSSHPrivateKey(t *testing.T) {
 	}
 }
 
+func TestKeychainStorePreservesSSHHostIdentity(t *testing.T) {
+	store := newKeychainStore(newMemoryKeychainBackend())
+	privateKey := ed25519.NewKeyFromSeed(bytesOf(9, ed25519.SeedSize))
+	block, err := ssh.MarshalPrivateKey(privateKey, "airlock host")
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := SSHHostIdentity{PrivateKey: pem.EncodeToMemory(block)}
+	if err := store.PutSSHHostIdentity(t.Context(), "ssh/host-identity", identity); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := store.ResolveSSHHostIdentity(t.Context(), "ssh/host-identity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(resolved.PrivateKey, identity.PrivateKey) {
+		t.Fatal("SSH host identity changed during Keychain round trip")
+	}
+	resolved.PrivateKey[0] ^= 0xff
+	again, err := store.ResolveSSHHostIdentity(t.Context(), "ssh/host-identity")
+	if err != nil || !bytes.Equal(again.PrivateKey, identity.PrivateKey) {
+		t.Fatal("stored SSH host identity was mutated")
+	}
+}
+
 func bytesOf(value byte, length int) []byte {
 	result := make([]byte, length)
 	for index := range result {

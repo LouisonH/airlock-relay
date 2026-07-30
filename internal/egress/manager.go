@@ -26,6 +26,17 @@ const (
 
 var ErrProxyUnavailable = errors.New("proxy egress is not configured")
 
+type connectivityRetryKey struct{}
+
+// AllowConnectivityRetry marks a replayable request for direct-to-proxy retry.
+// The retry still occurs only when direct dialing fails before any response.
+func AllowConnectivityRetry(request *http.Request) *http.Request {
+	if request == nil {
+		return nil
+	}
+	return request.WithContext(context.WithValue(request.Context(), connectivityRetryKey{}, true))
+}
+
 type Manager struct {
 	mu       sync.RWMutex
 	template *http.Transport
@@ -155,7 +166,15 @@ func (m *Manager) roundTripAuto(request *http.Request) (*http.Response, error) {
 	if transport == nil {
 		return nil, err
 	}
-	return transport.RoundTrip(request.Clone(request.Context()))
+	retry := request.Clone(request.Context())
+	if request.GetBody != nil {
+		body, bodyErr := request.GetBody()
+		if bodyErr != nil {
+			return nil, err
+		}
+		retry.Body = body
+	}
+	return transport.RoundTrip(retry)
 }
 
 func (m *Manager) proxyTransport() *http.Transport {
@@ -288,10 +307,14 @@ func (c *bufferedConn) Read(payload []byte) (int, error) {
 }
 
 func safeToRetry(request *http.Request) bool {
-	if request == nil || (request.Method != http.MethodGet && request.Method != http.MethodHead) {
+	if request == nil {
 		return false
 	}
-	return request.Body == nil || request.Body == http.NoBody
+	if request.Method == http.MethodGet || request.Method == http.MethodHead {
+		return request.Body == nil || request.Body == http.NoBody
+	}
+	marked, _ := request.Context().Value(connectivityRetryKey{}).(bool)
+	return marked && request.GetBody != nil
 }
 
 func retryableConnectivityError(err error) bool {

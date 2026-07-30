@@ -17,6 +17,25 @@ var ErrNotFound = errors.New("secret not found")
 var ErrInvalidReference = errors.New("invalid secret reference")
 var ErrUnsupported = errors.New("platform secret store is not supported")
 
+const (
+	StoreModeKeychain  = "keychain"
+	StoreModeLocalFile = "local_file"
+)
+
+func OpenStore(mode, localFilePath string) (MutableStore, error) {
+	switch mode {
+	case StoreModeKeychain:
+		return NewPlatformStore()
+	case StoreModeLocalFile:
+		if localFilePath == "" {
+			return nil, errors.New("local secret file path is required")
+		}
+		return NewFileStore(localFilePath)
+	default:
+		return nil, errors.New("invalid secret store mode")
+	}
+}
+
 type HTTPTarget struct {
 	BaseURL *url.URL
 	Headers http.Header
@@ -33,6 +52,10 @@ type SSHTarget struct {
 	PrivateKey         []byte
 	PrivateKeyPassword []byte
 	ExpectedHostKey    []byte
+}
+
+type SSHHostIdentity struct {
+	PrivateKey []byte
 }
 
 func (c ProxyConfig) Clone() ProxyConfig {
@@ -64,10 +87,15 @@ func (t SSHTarget) Clone() SSHTarget {
 	}
 }
 
+func (i SSHHostIdentity) Clone() SSHHostIdentity {
+	return SSHHostIdentity{PrivateKey: append([]byte(nil), i.PrivateKey...)}
+}
+
 type Store interface {
 	ResolveHTTPTarget(ctx context.Context, reference string) (HTTPTarget, error)
 	ResolveProxyConfig(ctx context.Context, reference string) (ProxyConfig, error)
 	ResolveSSHTarget(ctx context.Context, reference string) (SSHTarget, error)
+	ResolveSSHHostIdentity(ctx context.Context, reference string) (SSHHostIdentity, error)
 }
 
 type MutableStore interface {
@@ -75,24 +103,53 @@ type MutableStore interface {
 	PutHTTPTarget(ctx context.Context, reference string, target HTTPTarget) error
 	PutProxyConfig(ctx context.Context, reference string, config ProxyConfig) error
 	PutSSHTarget(ctx context.Context, reference string, target SSHTarget) error
+	PutSSHHostIdentity(ctx context.Context, reference string, identity SSHHostIdentity) error
 	DeleteTarget(ctx context.Context, reference string) error
 }
 
 // MemoryStore is intended for tests and the protocol spike only. Production
 // targets will be supplied by an OS-backed SecretStore implementation.
 type MemoryStore struct {
-	mu      sync.RWMutex
-	targets map[string]HTTPTarget
-	proxies map[string]ProxyConfig
-	ssh     map[string]SSHTarget
+	mu       sync.RWMutex
+	targets  map[string]HTTPTarget
+	proxies  map[string]ProxyConfig
+	ssh      map[string]SSHTarget
+	identity map[string]SSHHostIdentity
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		targets: make(map[string]HTTPTarget),
-		proxies: make(map[string]ProxyConfig),
-		ssh:     make(map[string]SSHTarget),
+		targets:  make(map[string]HTTPTarget),
+		proxies:  make(map[string]ProxyConfig),
+		ssh:      make(map[string]SSHTarget),
+		identity: make(map[string]SSHHostIdentity),
 	}
+}
+
+func (s *MemoryStore) PutSSHHostIdentity(_ context.Context, reference string, identity SSHHostIdentity) error {
+	if err := validateReference(reference); err != nil {
+		return err
+	}
+	if err := validateSSHHostIdentity(identity); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.identity[reference] = identity.Clone()
+	return nil
+}
+
+func (s *MemoryStore) ResolveSSHHostIdentity(_ context.Context, reference string) (SSHHostIdentity, error) {
+	if err := validateReference(reference); err != nil {
+		return SSHHostIdentity{}, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	identity, ok := s.identity[reference]
+	if !ok {
+		return SSHHostIdentity{}, ErrNotFound
+	}
+	return identity.Clone(), nil
 }
 
 func (s *MemoryStore) PutSSHTarget(_ context.Context, reference string, target SSHTarget) error {
@@ -179,7 +236,8 @@ func (s *MemoryStore) DeleteTarget(_ context.Context, reference string) error {
 	_, targetExists := s.targets[reference]
 	_, proxyExists := s.proxies[reference]
 	_, sshExists := s.ssh[reference]
-	if !targetExists && !proxyExists && !sshExists {
+	_, identityExists := s.identity[reference]
+	if !targetExists && !proxyExists && !sshExists && !identityExists {
 		return ErrNotFound
 	}
 	delete(s.targets, reference)
@@ -187,6 +245,20 @@ func (s *MemoryStore) DeleteTarget(_ context.Context, reference string) error {
 	if target, ok := s.ssh[reference]; ok {
 		clearSSHTarget(&target)
 		delete(s.ssh, reference)
+	}
+	if identity, ok := s.identity[reference]; ok {
+		clear(identity.PrivateKey)
+		delete(s.identity, reference)
+	}
+	return nil
+}
+
+func validateSSHHostIdentity(identity SSHHostIdentity) error {
+	if len(identity.PrivateKey) == 0 {
+		return errors.New("invalid SSH host identity")
+	}
+	if _, err := ssh.ParsePrivateKey(identity.PrivateKey); err != nil {
+		return errors.New("invalid SSH host identity")
 	}
 	return nil
 }

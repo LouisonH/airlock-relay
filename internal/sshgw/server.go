@@ -26,11 +26,23 @@ type Server struct {
 	routes           RouteLookup
 	secrets          secrets.Store
 	dialer           EgressDialer
+	commandAudit     CommandAudit
 	config           *ssh.ServerConfig
 	handshakeTimeout time.Duration
+	allowLAN         bool
 }
 
-func NewServer(routes RouteLookup, secretStore secrets.Store, dialer EgressDialer, hostSigner ssh.Signer) (*Server, error) {
+type ServerOption func(*Server)
+
+func WithCommandAudit(audit CommandAudit) ServerOption {
+	return func(server *Server) { server.commandAudit = audit }
+}
+
+func WithLANAccess() ServerOption {
+	return func(server *Server) { server.allowLAN = true }
+}
+
+func NewServer(routes RouteLookup, secretStore secrets.Store, dialer EgressDialer, hostSigner ssh.Signer, options ...ServerOption) (*Server, error) {
 	if routes == nil || secretStore == nil || dialer == nil || hostSigner == nil {
 		return nil, errors.New("invalid SSH server configuration")
 	}
@@ -39,6 +51,11 @@ func NewServer(routes RouteLookup, secretStore secrets.Store, dialer EgressDiale
 		secrets:          secretStore,
 		dialer:           dialer,
 		handshakeTimeout: 15 * time.Second,
+	}
+	for _, option := range options {
+		if option != nil {
+			option(server)
+		}
 	}
 	algorithms := ssh.SupportedAlgorithms()
 	server.config = &ssh.ServerConfig{
@@ -58,7 +75,7 @@ func NewServer(routes RouteLookup, secretStore secrets.Store, dialer EgressDiale
 }
 
 func (s *Server) Serve(listener net.Listener) error {
-	if !isLoopbackTCPListener(listener) {
+	if !isAllowedTCPListener(listener, s.allowLAN) {
 		return ErrNonLoopbackListen
 	}
 	for {
@@ -70,12 +87,18 @@ func (s *Server) Serve(listener net.Listener) error {
 	}
 }
 
-func isLoopbackTCPListener(listener net.Listener) bool {
+func isAllowedTCPListener(listener net.Listener, allowLAN bool) bool {
 	if listener == nil {
 		return false
 	}
 	address, ok := listener.Addr().(*net.TCPAddr)
-	return ok && address.IP != nil && address.IP.IsLoopback()
+	if !ok || address.IP == nil {
+		return false
+	}
+	if address.IP.IsLoopback() {
+		return true
+	}
+	return allowLAN && (address.IP.IsUnspecified() || address.IP.IsPrivate())
 }
 
 func (s *Server) serveConnection(raw net.Conn) {
@@ -170,6 +193,9 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 			var payload struct{ Command string }
 			route, err := s.routes.Lookup(alias)
 			if err != nil || ssh.Unmarshal(request.Payload, &payload) != nil || !route.Policy.AllowsCommand(payload.Command) {
+				if err == nil && validCommand(payload.Command) {
+					s.recordCommand(route, payload.Command, "blocked", 0)
+				}
 				if request.WantReply {
 					_ = request.Reply(false, nil)
 				}
@@ -190,6 +216,9 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 
 func (s *Server) execute(local ssh.Channel, request *ssh.Request, route Route, command string) {
 	defer local.Close()
+	started := time.Now()
+	result := "failed"
+	defer func() { s.recordCommand(route, command, result, time.Since(started)) }()
 	ctx, cancel := context.WithTimeout(context.Background(), s.handshakeTimeout)
 	defer cancel()
 	target, err := s.secrets.ResolveSSHTarget(ctx, route.TargetSecretRef)
@@ -226,7 +255,24 @@ func (s *Server) execute(local ssh.Channel, request *ssh.Request, route Route, c
 			return
 		}
 	}
-	_ = sendExitStatus(local, exitStatus(session.Wait()))
+	waitError := session.Wait()
+	if waitError == nil {
+		result = "allowed"
+	}
+	_ = sendExitStatus(local, exitStatus(waitError))
+}
+
+func (s *Server) recordCommand(route Route, command, result string, duration time.Duration) {
+	if s.commandAudit == nil || !route.Policy.RecordCommands {
+		return
+	}
+	_ = s.commandAudit.Record(CommandEvent{
+		RouteAlias: route.Alias,
+		Command:    command,
+		Result:     result,
+		DurationMS: duration.Milliseconds(),
+		Egress:     route.Egress,
+	})
 }
 
 func exitStatus(err error) uint32 {

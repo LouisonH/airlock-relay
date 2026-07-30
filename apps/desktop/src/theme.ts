@@ -3,9 +3,15 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
 export type AccentTheme = "forest" | "ocean" | "amber";
+export type DensityPreference = "comfortable" | "compact";
+export type MotionPreference = "system" | "standard" | "reduced";
+export type RefreshInterval = 2000 | 5000 | 15000;
 
 const storageKey = "airlock.ui.theme";
 const accentStorageKey = "airlock.ui.accent";
+const densityStorageKey = "airlock.ui.density";
+const motionStorageKey = "airlock.ui.motion";
+const refreshStorageKey = "airlock.ui.refresh";
 const darkModeQuery = "(prefers-color-scheme: dark)";
 
 export function getThemePreference(): ThemePreference {
@@ -44,6 +50,34 @@ export function saveAccentTheme(accent: AccentTheme): void {
   document.documentElement.dataset.accent = accent;
 }
 
+export function getDensityPreference(): DensityPreference {
+  return localStorage.getItem(densityStorageKey) === "compact" ? "compact" : "comfortable";
+}
+
+export function saveDensityPreference(density: DensityPreference): void {
+  localStorage.setItem(densityStorageKey, density);
+  document.documentElement.dataset.density = density;
+}
+
+export function getMotionPreference(): MotionPreference {
+  const stored = localStorage.getItem(motionStorageKey);
+  return stored === "standard" || stored === "reduced" ? stored : "system";
+}
+
+export function saveMotionPreference(motion: MotionPreference): void {
+  localStorage.setItem(motionStorageKey, motion);
+  document.documentElement.dataset.motion = motion;
+}
+
+export function getRefreshInterval(): RefreshInterval {
+  const stored = Number(localStorage.getItem(refreshStorageKey));
+  return stored === 2000 || stored === 15000 ? stored : 5000;
+}
+
+export function saveRefreshInterval(interval: RefreshInterval): void {
+  localStorage.setItem(refreshStorageKey, String(interval));
+}
+
 export function watchSystemTheme(onChange: () => void): () => void {
   const media = window.matchMedia(darkModeQuery);
   media.addEventListener("change", onChange);
@@ -52,3 +86,5 @@ export function watchSystemTheme(onChange: () => void): () => void {
 
 applyTheme(getThemePreference());
 saveAccentTheme(getAccentTheme());
+saveDensityPreference(getDensityPreference());
+saveMotionPreference(getMotionPreference());

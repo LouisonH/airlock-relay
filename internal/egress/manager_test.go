@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -73,6 +74,47 @@ func TestAutoDoesNotRetryUnsafeOrTLSFailures(t *testing.T) {
 	}
 	if proxyHits.Load() != 0 {
 		t.Fatalf("unsafe fallback used proxy %d times", proxyHits.Load())
+	}
+}
+
+func TestAutoRetriesExplicitlyReplayableLLMPostOnDialFailure(t *testing.T) {
+	const payload = `{"model":"gpt-test","input":"hello"}`
+	var proxyHits atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		proxyHits.Add(1)
+		body, err := io.ReadAll(request.Body)
+		if err != nil || string(body) != payload {
+			t.Errorf("proxy body = %q, %v", body, err)
+		}
+		_, _ = io.WriteString(w, "proxied-llm")
+	}))
+	defer proxy.Close()
+
+	template := http.DefaultTransport.(*http.Transport).Clone()
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	template.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == "upstream.invalid:80" {
+			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("direct unavailable")}
+		}
+		return dialer.DialContext(ctx, network, address)
+	}
+	manager := NewManager(template)
+	proxyURL, _ := url.Parse(proxy.URL)
+	if err := manager.Configure(proxyURL); err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodPost, "http://upstream.invalid/v1/responses", strings.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := manager.RoundTrip(Auto, AllowConnectivityRetry(request))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+	if string(body) != "proxied-llm" || proxyHits.Load() != 1 {
+		t.Fatalf("response = %q, proxy hits = %d", body, proxyHits.Load())
 	}
 }
 

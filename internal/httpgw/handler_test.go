@@ -1,6 +1,7 @@
 package httpgw
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,188 @@ import (
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
 )
+
+func TestLLMOpenAIRouteInjectsUpstreamKeyLimitsModelAndStreams(t *testing.T) {
+	const upstreamKey = "upstream-openai-key-sentinel"
+	var hits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		hits.Add(1)
+		if request.URL.Path != "/v1/responses" {
+			t.Errorf("upstream path = %q", request.URL.Path)
+		}
+		if got := request.Header.Get("Authorization"); got != "Bearer "+upstreamKey {
+			t.Errorf("upstream Authorization = %q", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if body["model"] != "gpt-test" || body["max_output_tokens"] != float64(4096) {
+			t.Errorf("validated body = %#v", body)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\"}\n\n")
+	}))
+	defer upstream.Close()
+
+	handler, localKey := newLLMTestHandler(t, upstream.URL, routes.ProviderOpenAI, []string{"gpt-test"}, 4096, http.Header{"Authorization": {"Bearer " + upstreamKey}})
+	request := httptest.NewRequest(http.MethodPost, "/r/coding/v1/responses", strings.NewReader(`{"model":"gpt-test","input":"hello","stream":true}`))
+	request.Header.Set("Authorization", "Bearer "+localKey)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !response.Flushed || !strings.Contains(response.Body.String(), "response.completed") {
+		t.Fatalf("response = %d, flushed=%v, body=%q", response.Code, response.Flushed, response.Body.String())
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("upstream hits = %d", hits.Load())
+	}
+}
+
+func TestLLMAnthropicRouteUsesSecondaryAPIKey(t *testing.T) {
+	const upstreamKey = "upstream-anthropic-key-sentinel"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if got := request.Header.Get("X-Api-Key"); got != upstreamKey {
+			t.Errorf("upstream X-Api-Key = %q", got)
+		}
+		if got := request.Header.Get("Anthropic-Version"); got != "2023-06-01" {
+			t.Errorf("Anthropic-Version = %q", got)
+		}
+		if request.Header.Get("Authorization") != "" {
+			t.Errorf("local Authorization leaked upstream")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"type":"message","content":[]}`)
+	}))
+	defer upstream.Close()
+
+	handler, localKey := newLLMTestHandler(t, upstream.URL, routes.ProviderAnthropic, []string{"claude-test"}, 2048, http.Header{"X-Api-Key": {upstreamKey}, "Anthropic-Version": {"2023-06-01"}})
+	request := httptest.NewRequest(http.MethodPost, "/r/writing/v1/messages", strings.NewReader(`{"model":"claude-test","messages":[]}`))
+	request.Header.Set("X-Api-Key", localKey)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", response.Code, response.Body.String())
+	}
+}
+
+func TestLLMRouteOptionallyRecordsCallsAndTokenUsage(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"response","usage":{"input_tokens":120,"output_tokens":34}}`)
+	}))
+	defer upstream.Close()
+	localKey, digest, err := capability.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := routes.NewLLMPolicy(routes.ProviderOpenAI, []string{"gpt-test"}, 1024)
+	policy.TrackUsage = true
+	registry, err := routes.NewRegistry(routes.HTTPRoute{
+		Name: "LLM", Alias: "coding", Kind: routes.KindLLM, Provider: routes.ProviderOpenAI,
+		TargetSecretRef: "target/llm", CapabilityDigest: digest, Policy: policy, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _ := url.Parse(upstream.URL)
+	store := secrets.NewMemoryStore()
+	if err := store.PutHTTPTarget(t.Context(), "target/llm", secrets.HTTPTarget{BaseURL: parsed, Headers: http.Header{"Authorization": {"Bearer upstream"}}}); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/r/coding/v1/responses", strings.NewReader(`{"model":"gpt-test"}`))
+	request.Header.Set("Authorization", "Bearer "+localKey)
+	response := httptest.NewRecorder()
+	NewHandler(registry, store, nil).ServeHTTP(response, request)
+
+	route, err := registry.Get("coding")
+	if err != nil || route.Usage.Requests != 1 || route.Usage.InputTokens != 120 || route.Usage.OutputTokens != 34 {
+		t.Fatalf("recorded usage = %+v, %v", route.Usage, err)
+	}
+}
+
+func TestLLMUsageCaptureParsesSSEWithoutKeepingContent(t *testing.T) {
+	capture := newLLMUsageCapture()
+	_, _ = capture.Write([]byte("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":90,\"cache_read_input_tokens\":10}}}\n\n"))
+	_, _ = capture.Write([]byte("event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":27}}\n\n"))
+	inputTokens, outputTokens := capture.TokenUsage(true)
+	if inputTokens != 100 || outputTokens != 27 {
+		t.Fatalf("SSE usage = %d input, %d output", inputTokens, outputTokens)
+	}
+	capture.Clear()
+	if capture.payload != nil {
+		t.Fatal("usage capture retained response content")
+	}
+}
+
+func TestLLMRouteRejectsEndpointModelOutputAndOversizedBodyBeforeUpstream(t *testing.T) {
+	var hits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
+	defer upstream.Close()
+	handler, localKey := newLLMTestHandler(t, upstream.URL, routes.ProviderOpenAI, []string{"allowed-model"}, 1024, http.Header{"Authorization": {"Bearer upstream-secret"}})
+
+	tests := []struct {
+		name   string
+		path   string
+		body   string
+		status int
+	}{
+		{name: "endpoint", path: "/r/coding/v1/files", body: `{"model":"allowed-model"}`, status: http.StatusNotFound},
+		{name: "model", path: "/r/coding/v1/responses", body: `{"model":"forbidden-model"}`, status: http.StatusForbidden},
+		{name: "output", path: "/r/coding/v1/responses", body: `{"model":"allowed-model","max_output_tokens":1025}`, status: http.StatusBadRequest},
+		{name: "oversized", path: "/r/coding/v1/responses", body: `{"model":"allowed-model","input":"` + strings.Repeat("x", int(routes.DefaultLLMMaxRequestBytes)) + `"}`, status: http.StatusRequestEntityTooLarge},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
+			request.Header.Set("Authorization", "Bearer "+localKey)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.status || !strings.Contains(response.Header().Get("Content-Type"), "application/json") {
+				t.Fatalf("response = %d, content-type=%q, body=%q", response.Code, response.Header().Get("Content-Type"), response.Body.String())
+			}
+		})
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("rejected requests reached upstream %d times", hits.Load())
+	}
+}
+
+func TestLLMRouteEnforcesConcurrencyAndRateLimits(t *testing.T) {
+	policy := routes.NewLLMPolicy(routes.ProviderOpenAI, []string{"gpt-test"}, 1024)
+	policy.MaxConcurrent = 1
+	policy.RequestsPerMinute = 2
+	route := routes.HTTPRoute{Alias: "limited", Kind: routes.KindLLM, Provider: routes.ProviderOpenAI, Policy: policy}
+	handler := &Handler{limits: make(map[string]*llmLimitState)}
+
+	releaseFirst, limitError := handler.acquireLLMRequest(route)
+	if limitError != nil {
+		t.Fatalf("first request rejected: %+v", limitError)
+	}
+	if release, limitError := handler.acquireLLMRequest(route); release != nil || limitError == nil || limitError.Code != "concurrency_limit" {
+		t.Fatalf("concurrent request = release:%v error:%+v", release != nil, limitError)
+	}
+	releaseFirst()
+
+	releaseSecond, limitError := handler.acquireLLMRequest(route)
+	if limitError != nil {
+		t.Fatalf("second request rejected: %+v", limitError)
+	}
+	releaseSecond()
+	if release, limitError := handler.acquireLLMRequest(route); release != nil || limitError == nil || limitError.Code != "rate_limit" || limitError.RetryAfter == "" {
+		t.Fatalf("rate-limited request = release:%v error:%+v", release != nil, limitError)
+	}
+
+	route.CapabilityDigest = capability.Hash("rotated-local-api-key")
+	releaseRotated, limitError := handler.acquireLLMRequest(route)
+	if limitError != nil {
+		t.Fatalf("rotated capability inherited old quota: %+v", limitError)
+	}
+	releaseRotated()
+	if len(handler.limits) != 1 {
+		t.Fatalf("rotated capability retained %d limiter states", len(handler.limits))
+	}
+}
 
 func TestHandlerForwardsWithoutExposingUpstreamCredentials(t *testing.T) {
 	const upstreamSecret = "upstream-secret-sentinel"
@@ -172,4 +355,30 @@ func newTestHandler(t *testing.T, baseURL string, queryKeys []string) (*Handler,
 		t.Fatalf("PutHTTPTarget() error = %v", err)
 	}
 	return NewHandler(registry, store, nil), token
+}
+
+func newLLMTestHandler(t *testing.T, baseURL, provider string, models []string, maxOutputTokens int, headers http.Header) (*Handler, string) {
+	t.Helper()
+	localKey, digest, err := capability.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := routes.NewRegistry(routes.HTTPRoute{
+		Name: "LLM", Alias: map[string]string{routes.ProviderOpenAI: "coding", routes.ProviderAnthropic: "writing"}[provider],
+		Kind: routes.KindLLM, Provider: provider, TargetSecretRef: "target/llm",
+		CapabilityDigest: digest, Policy: routes.NewLLMPolicy(provider, models, maxOutputTokens),
+		Egress: "Direct", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := secrets.NewMemoryStore()
+	if err := store.PutHTTPTarget(t.Context(), "target/llm", secrets.HTTPTarget{BaseURL: parsed, Headers: headers}); err != nil {
+		t.Fatal(err)
+	}
+	return NewHandler(registry, store, nil), localKey
 }

@@ -55,3 +55,39 @@ func TestFileStoreRejectsUnsafeMetadata(t *testing.T) {
 		t.Fatal("Load() accepted a mismatched secret reference")
 	}
 }
+
+func TestFileStorePersistsLLMPolicyAndMigratesV1(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "routes.json")
+	digest := capability.Hash("local-llm-api-key")
+	route := HTTPRoute{
+		Name: "Coding", Alias: "coding", Kind: KindLLM, Provider: ProviderOpenAI,
+		TargetSecretRef: "routes/coding", CapabilityDigest: digest,
+		Policy: NewLLMPolicy(ProviderOpenAI, []string{"gpt-5.1", "gpt-5.2-codex"}, 8192),
+		Egress: "Auto", Enabled: true,
+	}
+	route.Policy.TrackUsage = true
+	route.Usage = LLMUsage{Requests: 9, InputTokens: 1200, OutputTokens: 340}
+	store := NewFileStore(path)
+	if err := store.Save([]HTTPRoute{route}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.Load()
+	if err != nil || len(loaded) != 1 {
+		t.Fatalf("Load() = %+v, %v", loaded, err)
+	}
+	got := loaded[0]
+	if got.EffectiveKind() != KindLLM || got.Provider != ProviderOpenAI || !got.Policy.AllowsPath("/v1/responses") || !got.Policy.AllowsModel("gpt-5.2-codex") || got.Policy.MaxOutputTokens != 8192 || got.Policy.MaxRequestBytes != DefaultLLMMaxRequestBytes || got.Policy.RequestsPerMinute != DefaultLLMRequestsPerMinute || got.Policy.MaxConcurrent != DefaultLLMMaxConcurrent || !got.Policy.TrackUsage || got.Usage != (LLMUsage{}) {
+		t.Fatalf("loaded LLM route = %+v", got)
+	}
+
+	v1Path := filepath.Join(directory, "routes-v1.json")
+	v1 := `{"version":1,"routes":[{"name":"legacy","alias":"legacy","target_secret_ref":"routes/legacy","capability_digest":"0000000000000000000000000000000000000000000000000000000000000000","allowed_methods":["GET"],"egress":"Direct","enabled":true}]}`
+	if err := os.WriteFile(v1Path, []byte(v1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := NewFileStore(v1Path).Load()
+	if err != nil || len(legacy) != 1 || legacy[0].EffectiveKind() != KindHTTP {
+		t.Fatalf("legacy routes = %+v, %v", legacy, err)
+	}
+}

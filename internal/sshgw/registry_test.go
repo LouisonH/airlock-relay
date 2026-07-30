@@ -78,3 +78,23 @@ func TestRouteRejectsUnsafePolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestAllowAllCommandPolicyStillRejectsMalformedExec(t *testing.T) {
+	policy := NewPolicyWithOptions(nil, nil, false, true, true)
+	if !policy.AllowsCommand("uname -a") {
+		t.Fatal("allow-all policy rejected a valid exec command")
+	}
+	for _, command := range []string{"", "whoami\ncat /etc/passwd", "printf ok\x00whoami"} {
+		if policy.AllowsCommand(command) {
+			t.Fatalf("allow-all policy accepted malformed command %q", command)
+		}
+	}
+	route := Route{
+		Alias: "nas", TargetSecretRef: "ssh/nas",
+		CapabilityDigest: capability.Hash("airlock-local-capability"),
+		Policy:           policy, Enabled: true,
+	}
+	if err := route.Validate(); err != nil {
+		t.Fatalf("allow-all route validation failed: %v", err)
+	}
+}

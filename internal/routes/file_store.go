@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	metadataVersion  = 1
+	metadataVersion  = 2
 	maxMetadataBytes = 1 << 20
 )
 
@@ -32,14 +32,23 @@ type metadataDocument struct {
 }
 
 type persistedRoute struct {
-	Name             string   `json:"name"`
-	Alias            string   `json:"alias"`
-	TargetSecretRef  string   `json:"target_secret_ref"`
-	CapabilityDigest string   `json:"capability_digest"`
-	AllowedMethods   []string `json:"allowed_methods"`
-	AllowedQueryKeys []string `json:"allowed_query_keys,omitempty"`
-	Egress           string   `json:"egress"`
-	Enabled          bool     `json:"enabled"`
+	Name              string   `json:"name"`
+	Alias             string   `json:"alias"`
+	Kind              string   `json:"kind,omitempty"`
+	Provider          string   `json:"provider,omitempty"`
+	TargetSecretRef   string   `json:"target_secret_ref"`
+	CapabilityDigest  string   `json:"capability_digest"`
+	AllowedMethods    []string `json:"allowed_methods"`
+	AllowedQueryKeys  []string `json:"allowed_query_keys,omitempty"`
+	AllowedPaths      []string `json:"allowed_paths,omitempty"`
+	AllowedModels     []string `json:"allowed_models,omitempty"`
+	MaxRequestBytes   int64    `json:"max_request_bytes,omitempty"`
+	MaxOutputTokens   int      `json:"max_output_tokens,omitempty"`
+	RequestsPerMinute int      `json:"requests_per_minute,omitempty"`
+	MaxConcurrent     int      `json:"max_concurrent,omitempty"`
+	TrackUsage        bool     `json:"track_usage,omitempty"`
+	Egress            string   `json:"egress"`
+	Enabled           bool     `json:"enabled"`
 }
 
 func NewFileStore(path string) *FileStore {
@@ -70,7 +79,7 @@ func (s *FileStore) Load() ([]HTTPRoute, error) {
 	decoder := json.NewDecoder(io.LimitReader(file, maxMetadataBytes+1))
 	decoder.DisallowUnknownFields()
 	var document metadataDocument
-	if err := decoder.Decode(&document); err != nil || document.Version != metadataVersion {
+	if err := decoder.Decode(&document); err != nil || (document.Version != 1 && document.Version != metadataVersion) {
 		return nil, errors.New("decode route metadata")
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
@@ -89,9 +98,21 @@ func (s *FileStore) Load() ([]HTTPRoute, error) {
 		var digest capability.Digest
 		copy(digest[:], digestBytes)
 		clear(digestBytes)
+		policy := NewHTTPPolicy(stored.AllowedMethods, stored.AllowedQueryKeys)
+		policy.AllowedPaths = sliceSet(stored.AllowedPaths)
+		policy.AllowedModels = sliceSet(stored.AllowedModels)
+		policy.MaxRequestBytes = stored.MaxRequestBytes
+		policy.MaxOutputTokens = stored.MaxOutputTokens
+		policy.RequestsPerMinute = stored.RequestsPerMinute
+		policy.MaxConcurrent = stored.MaxConcurrent
+		policy.TrackUsage = stored.TrackUsage
+		kind := stored.Kind
+		if document.Version == 1 {
+			kind = KindHTTP
+		}
 		route := HTTPRoute{
-			Name: stored.Name, Alias: stored.Alias, TargetSecretRef: stored.TargetSecretRef,
-			CapabilityDigest: digest, Policy: NewHTTPPolicy(stored.AllowedMethods, stored.AllowedQueryKeys),
+			Name: stored.Name, Alias: stored.Alias, Kind: kind, Provider: stored.Provider,
+			TargetSecretRef: stored.TargetSecretRef, CapabilityDigest: digest, Policy: policy,
 			Egress: stored.Egress, Enabled: stored.Enabled,
 		}
 		if err := route.Validate(); err != nil {
@@ -114,10 +135,17 @@ func (s *FileStore) Save(routes []HTTPRoute) error {
 		}
 		methods := sortedKeys(route.Policy.AllowedMethods)
 		queries := sortedKeys(route.Policy.AllowedQueryKeys)
+		paths := sortedKeys(route.Policy.AllowedPaths)
+		models := sortedKeys(route.Policy.AllowedModels)
 		document.Routes = append(document.Routes, persistedRoute{
-			Name: route.Name, Alias: route.Alias, TargetSecretRef: route.TargetSecretRef,
+			Name: route.Name, Alias: route.Alias, Kind: route.EffectiveKind(), Provider: route.Provider,
+			TargetSecretRef:  route.TargetSecretRef,
 			CapabilityDigest: hex.EncodeToString(route.CapabilityDigest[:]), AllowedMethods: methods,
-			AllowedQueryKeys: queries, Egress: route.Egress, Enabled: route.Enabled,
+			AllowedQueryKeys: queries, AllowedPaths: paths, AllowedModels: models,
+			MaxRequestBytes: route.Policy.MaxRequestBytes, MaxOutputTokens: route.Policy.MaxOutputTokens,
+			RequestsPerMinute: route.Policy.RequestsPerMinute, MaxConcurrent: route.Policy.MaxConcurrent,
+			TrackUsage: route.Policy.TrackUsage,
+			Egress:     route.Egress, Enabled: route.Enabled,
 		})
 	}
 	sort.Slice(document.Routes, func(i, j int) bool { return document.Routes[i].Alias < document.Routes[j].Alias })
@@ -157,6 +185,14 @@ func (s *FileStore) Save(routes []HTTPRoute) error {
 		return errors.New("sync route metadata directory")
 	}
 	return nil
+}
+
+func sliceSet(values []string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		result[value] = struct{}{}
+	}
+	return result
 }
 
 func secureDirectory(path string) error {
