@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title description">
+  <title id="title">Airlock logo</title>
+  <desc id="description">Two protected gateway doors surrounding a secure lock</desc>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#18201d"/>
+  <rect x="4.75" y="4.75" width="118.5" height="118.5" rx="27.25" fill="none" stroke="#35413c" stroke-width="1.5"/>
+  <path d="M24 34c0-7.7 6.3-14 14-14h24v25H47v38h15v25H38c-7.7 0-14-6.3-14-14V34Z" fill="#39a47b"/>
+  <path d="M104 34c0-7.7-6.3-14-14-14H66v25h15v38H66v25h24c7.7 0 14-6.3 14-14V34Z" fill="#4b8da8"/>
+  <path d="M52 54v-7c0-7.2 5.4-13 12-13s12 5.8 12 13v7" fill="none" stroke="#f3f7f5" stroke-width="8" stroke-linecap="round"/>
+  <rect x="46" y="51" width="36" height="38" rx="8" fill="#f3f7f5"/>
+  <circle cx="64" cy="67" r="5" fill="#18201d"/>
+  <path d="M64 72v7" stroke="#18201d" stroke-width="5" stroke-linecap="round"/>
+</svg>
