@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#18201d" />
+    <meta name="description" content="Airlock is a local credential-isolation relay for HTTP, SSH, and LLM traffic." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Airlock - Local credential-isolation relay" />
+    <meta property="og:description" content="Expose controlled local capabilities without exposing upstream URLs, passwords, or API keys." />
+    <meta property="og:url" content="https://louisonh.github.io/airlock-relay/" />
+    <meta property="og:image" content="https://louisonh.github.io/airlock-relay/assets/airlock-logo.svg" />
+    <meta property="og:image:alt" content="Airlock logo" />
+    <meta name="twitter:card" content="summary" />
+    <title>Airlock - 本地凭据隔离转发器</title>
+    <link rel="canonical" href="https://louisonh.github.io/airlock-relay/" />
+    <link rel="icon" href="./assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <script src="./assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main" data-i18n="skipLink">跳到主要内容</a>
+
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="#top" aria-label="Airlock home">
+          <img src="./assets/airlock-logo.svg" alt="" width="34" height="34" />
+          <span><strong>Airlock</strong><small>Local security relay</small></span>
+        </a>
+
+        <nav class="site-nav" id="site-nav" data-i18n-aria="navLabel" aria-label="主导航">
+          <a href="#boundary" data-i18n="navBoundary">安全边界</a>
+          <a href="#routes" data-i18n="navRoutes">路由类型</a>
+          <a href="#quickstart" data-i18n="navQuickstart">快速使用</a>
+          <a href="#architecture" data-i18n="navArchitecture">架构</a>
+          <a href="#faq" data-i18n="navFaq">常见问题</a>
+        </nav>
+
+        <div class="header-actions">
+          <button class="language-button" id="language-toggle" type="button" aria-label="Switch to English">EN</button>
+          <button class="icon-button" id="theme-toggle" type="button" title="切换主题" aria-label="切换深浅主题"><span aria-hidden="true">◐</span></button>
+          <a class="github-link" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">
+            <span data-i18n="sourceCode">源代码</span><span aria-hidden="true">↗</span>
+          </a>
+          <button class="menu-button" id="menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" data-i18n-aria="menuLabel" aria-label="打开导航"><span aria-hidden="true">☰</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="relay-scene" aria-hidden="true">
+          <div class="scene-grid-line line-a"></div>
+          <div class="scene-grid-line line-b"></div>
+          <div class="scene-grid-line line-c"></div>
+          <div class="scene-node source source-a"><span>LLM Agent</span><small>untrusted</small></div>
+          <div class="scene-node source source-b"><span>wget</span><small>local token</small></div>
+          <div class="scene-node source source-c"><span>SSH Client</span><small>local identity</small></div>
+          <div class="scene-gate"><img src="./assets/airlock-logo.svg" alt="" /><strong>AIRLOCK</strong><span>POLICY GATE</span></div>
+          <div class="scene-node target target-a"><span>LLM API</span><small>key protected</small></div>
+          <div class="scene-node target target-b"><span>Private SSH</span><small>password protected</small></div>
+          <div class="scene-node target target-c"><span>Protected URL</span><small>target hidden</small></div>
+          <i class="signal signal-a"></i><i class="signal signal-b"></i><i class="signal signal-c"></i>
+        </div>
+
+        <div class="hero-inner">
+          <div class="hero-copy reveal">
+            <p class="eyebrow" data-i18n="heroEyebrow">LOCAL CREDENTIAL BOUNDARY</p>
+            <h1>Airlock</h1>
+            <p class="hero-lead" data-i18n="heroLead">把能力交给 Agent，把凭据留在本机。</p>
+            <p class="hero-detail" data-i18n="heroDetail">Airlock 使用固定本地路由、可撤销凭据与最小权限策略，为 HTTP、SSH 和 LLM 请求隔离真实上游地址、密码与 API Key。</p>
+            <div class="hero-actions">
+              <a class="primary-action" href="#boundary"><span data-i18n="seeHow">了解工作方式</span><span aria-hidden="true">↓</span></a>
+              <a class="secondary-action" href="#quickstart" data-i18n="quickStartCta">查看快速用法</a>
+            </div>
+            <div class="protocol-list" aria-label="Supported protocols">
+              <span>HTTP / Wget</span><span>SSH</span><span>LLM API</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="principle-strip" aria-label="Core principles">
+        <div><strong data-i18n="principleTarget">固定目标</strong><span data-i18n="principleTargetDetail">不接受任意上游 URL</span></div>
+        <div><strong data-i18n="principleSecret">凭据隔离</strong><span data-i18n="principleSecretDetail">秘密不进入 Agent 上下文</span></div>
+        <div><strong data-i18n="principlePolicy">最小权限</strong><span data-i18n="principlePolicyDetail">每条路由独立授权</span></div>
+        <div><strong data-i18n="principleLocal">本地优先</strong><span data-i18n="principleLocalDetail">控制面仅当前用户可达</span></div>
+      </section>
+
+      <section class="section boundary-section" id="boundary">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="boundaryEyebrow">THE BOUNDARY</p>
+          <h2 data-i18n="boundaryTitle">不可信的调用者只获得一项能力</h2>
+          <p data-i18n="boundaryIntro">Agent 可以执行被允许的任务，但无法读取或还原真实上游凭据。</p>
+        </div>
+
+        <div class="boundary-layout reveal">
+          <div class="boundary-statement">
+            <p data-i18n="boundaryStatement">Airlock 不是通用开放代理。每条路由都是预先配置的、有界的本地能力。</p>
+            <div class="capability-token"><span>capability</span><code>airlock_••••••••••••</code><b data-i18n="revocable">可撤销</b></div>
+          </div>
+          <div class="boundary-facts">
+            <article><span>01</span><div><h3 data-i18n="factOneTitle">真实目标受保护</h3><p data-i18n="factOneDetail">URL、域名、IP 和 SSH 账户均由 SecretStore 保存。</p></div></article>
+            <article><span>02</span><div><h3 data-i18n="factTwoTitle">请求在上游前校验</h3><p data-i18n="factTwoDetail">方法、路径、模型、速率、并发与命令范围都有显式边界。</p></div></article>
+            <article><span>03</span><div><h3 data-i18n="factThreeTitle">错误也不泄密</h3><p data-i18n="factThreeDetail">失败响应与活动记录只包含脱敏的本地上下文。</p></div></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section route-section" id="routes">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="routesEyebrow">ROUTE TYPES</p>
+          <h2 data-i18n="routesTitle">三种入口，同一条保护边界</h2>
+          <p data-i18n="routesIntro">调用者看到的只是稳定的本地入口和属于该路由的本地凭据。</p>
+        </div>
+
+        <div class="route-grid">
+          <article class="route-card http reveal">
+            <div class="route-card-head"><span class="route-index">01</span><code>HTTP / WGET</code></div>
+            <h3 data-i18n="httpTitle">固定 URL 转发</h3>
+            <p data-i18n="httpDetail">隐藏上游基址与 Authorization，限制方法、Query 和重定向，支持 Range 下载。</p>
+            <ul><li data-i18n="httpFeatureOne">GET / HEAD 白名单</li><li data-i18n="httpFeatureTwo">Range / 206 流式下载</li><li data-i18n="httpFeatureThree">Direct / Proxy / Auto 出口</li></ul>
+          </article>
+          <article class="route-card ssh reveal">
+            <div class="route-card-head"><span class="route-index">02</span><code>SSH</code></div>
+            <h3 data-i18n="sshTitle">双会话 SSH 终止</h3>
+            <p data-i18n="sshDetail">Airlock 分别终止本地与上游 SSH 会话，用完全独立的账号和凭据建立连接。</p>
+            <ul><li data-i18n="sshFeatureOne">自定义本地密码 / 公钥</li><li data-i18n="sshFeatureTwo">精确命令或高风险完整 exec</li><li data-i18n="sshFeatureThree">固定 Host Key 与可选审计</li></ul>
+          </article>
+          <article class="route-card llm reveal">
+            <div class="route-card-head"><span class="route-index">03</span><code>LLM API</code></div>
+            <h3 data-i18n="llmTitle">本地二次 API Key</h3>
+            <p data-i18n="llmDetail">兼容 OpenAI 与 Anthropic 协议，只注入受保护的上游 Key，并限制模型与资源用量。</p>
+            <ul><li data-i18n="llmFeatureOne">模型、输出、速率和并发限额</li><li data-i18n="llmFeatureTwo">随机或自定义二次 Key</li><li data-i18n="llmFeatureThree">可选调用与 Token 统计</li></ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section product-section" id="desktop">
+        <div class="product-heading reveal">
+          <div><p class="eyebrow" data-i18n="desktopEyebrow">NATIVE DESKTOP</p><h2 data-i18n="desktopTitle">一个安静的本地运维界面</h2></div>
+          <p data-i18n="desktopDetail">配置、轮换和观测路由，但不在 WebView 中显示真实目标或 Secret。</p>
+        </div>
+
+        <div class="desktop-preview reveal" role="img" data-i18n-aria="desktopPreviewLabel" aria-label="Airlock desktop route list preview">
+          <aside class="preview-sidebar">
+            <div class="preview-brand"><img src="./assets/airlock-logo.svg" alt="" /><strong>Airlock</strong></div>
+            <nav><span class="active">◔ <b data-i18n="previewOverview">概览</b></span><span>⌘ <b data-i18n="previewRoutes">路由</b></span><span>∿ <b data-i18n="previewActivity">活动</b></span><span>⚙ <b data-i18n="previewSettings">设置</b></span></nav>
+            <div class="preview-daemon"><i></i><span><b data-i18n="previewConnected">本地核心已连接</b><small>airlockd · loopback only</small></span></div>
+          </aside>
+          <div class="preview-main">
+            <div class="preview-toolbar"><span>◈ <b data-i18n="previewOpen">3 条路由已开放</b></span><button type="button" tabindex="-1">◎ <b data-i18n="previewStop">停止全部</b></button></div>
+            <div class="preview-content">
+              <div class="preview-title"><div><h3 data-i18n="previewRoutes">路由</h3><p data-i18n="previewRouteCount">3 条 · 所有目标均受保护</p></div><span>+ <b data-i18n="previewNew">新增路由</b></span></div>
+              <div class="preview-filters"><span data-i18n="previewSearch">搜索名称或别名</span><b>ALL</b><b>HTTP</b><b>SSH</b><b>LLM</b></div>
+              <div class="preview-table">
+                <div class="preview-row header"><span data-i18n="previewStatus">状态</span><span data-i18n="previewName">名称</span><span data-i18n="previewType">类型</span><span data-i18n="previewEntry">本地入口</span><span data-i18n="previewPolicy">访问边界</span><span data-i18n="previewEgress">出口</span></div>
+                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Release downloads</strong><small>release</small></span><span><i class="kind http">HTTP</i></span><code>127.0.0.1:4768/r/release</code><span>GET, HEAD · Range</span><span>Direct</span></div>
+                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Build server</strong><small>build</small></span><span><i class="kind ssh">SSH</i></span><code>build@127.0.0.1:4770</code><span data-i18n="previewExactCommand">1 条精确命令 · 已记录</span><span>Auto</span></div>
+                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Model gateway</strong><small>coding</small></span><span><i class="kind llm">LLM</i></span><code>127.0.0.1:4768/r/coding</code><span><em>3 models</em><em>60/min</em><em>4 concurrent</em></span><span>Proxy</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section quickstart-section" id="quickstart">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="quickstartEyebrow">QUICK START</p>
+          <h2 data-i18n="quickstartTitle">调用者只需要本地入口</h2>
+          <p data-i18n="quickstartIntro">先在 Airlock Desktop 中完成原生安全配置，然后把本地能力凭据交给需要执行任务的工具。</p>
+        </div>
+
+        <div class="code-workbench reveal">
+          <div class="code-tabs" role="tablist" data-i18n-aria="protocolExamples" aria-label="协议示例">
+            <button role="tab" aria-selected="true" aria-controls="panel-http" id="tab-http" data-tab="http">HTTP / Wget</button>
+            <button role="tab" aria-selected="false" aria-controls="panel-ssh" id="tab-ssh" data-tab="ssh">SSH</button>
+            <button role="tab" aria-selected="false" aria-controls="panel-llm" id="tab-llm" data-tab="llm">LLM API</button>
+          </div>
+          <div class="code-panel active" role="tabpanel" id="panel-http" aria-labelledby="tab-http" data-panel="http">
+            <div class="code-copy"><span><b data-i18n="httpExampleTitle">下载受保护的固定资源</b><small data-i18n="httpExampleDetail">本地 Token 只能访问 release 路由</small></span><button class="copy-button" type="button" data-copy="http" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
+            <pre><code id="code-http">wget --header="Authorization: Bearer &lt;local-token&gt;" \
+  http://127.0.0.1:4768/r/release/file.zip</code></pre>
+          </div>
+          <div class="code-panel" role="tabpanel" id="panel-ssh" aria-labelledby="tab-ssh" data-panel="ssh" hidden>
+            <div class="code-copy"><span><b data-i18n="sshExampleTitle">使用隔离的本地 SSH 身份</b><small data-i18n="sshExampleDetail">调用者不会得到上游用户名或密码</small></span><button class="copy-button" type="button" data-copy="ssh" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
+            <pre><code id="code-ssh">ssh build@127.0.0.1 -p 4770</code></pre>
+          </div>
+          <div class="code-panel" role="tabpanel" id="panel-llm" aria-labelledby="tab-llm" data-panel="llm" hidden>
+            <div class="code-copy"><span><b data-i18n="llmExampleTitle">把 OpenAI-compatible 客户端指向本地路由</b><small data-i18n="llmExampleDetail">二次 Key 可轮换，与上游 Key 完全隔离</small></span><button class="copy-button" type="button" data-copy="llm" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
+            <pre><code id="code-llm">export OPENAI_BASE_URL=http://127.0.0.1:4768/r/coding
+export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
+          </div>
+        </div>
+        <p class="quickstart-note reveal"><span data-i18n="p0Label">当前状态</span><b data-i18n="p0Notice">P0 技术验证版：在完成发布安全审查前，请勿存放高价值生产凭据。</b></p>
+      </section>
+
+      <section class="section architecture-section" id="architecture">
+        <div class="architecture-layout">
+          <div class="section-heading reveal">
+            <p class="eyebrow" data-i18n="architectureEyebrow">ARCHITECTURE</p>
+            <h2 data-i18n="architectureTitle">桌面控制面与网络核心分离</h2>
+            <p data-i18n="architectureIntro">GUI 关闭后，本地转发服务仍可继续运行。控制命令不经过普通 TCP 端口。</p>
+          </div>
+          <ol class="architecture-flow reveal">
+            <li><span>01</span><div><strong>Airlock Desktop</strong><small>Tauri 2 + React</small><p data-i18n="architectureDesktop">路由、策略、主题与脱敏状态。</p></div></li>
+            <li><span>02</span><div><strong>Unix Socket</strong><small>0600 · current user</small><p data-i18n="architectureSocket">受保护的本地控制通道。</p></div></li>
+            <li><span>03</span><div><strong>airlockd</strong><small>Go network core</small><p data-i18n="architectureCore">验证能力、应用策略、注入 Secret 并选择出口。</p></div></li>
+            <li><span>04</span><div><strong>SecretStore</strong><small>Keychain / 0600 file</small><p data-i18n="architectureSecret">保存完整目标描述与真实凭据。</p></div></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section controls-section">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="controlsEyebrow">CONTROL WITHOUT EXPOSURE</p>
+          <h2 data-i18n="controlsTitle">可调整的便捷性，不可绕过的控制面</h2>
+        </div>
+        <div class="control-matrix reveal">
+          <div><span data-i18n="controlNetwork">网络范围</span><strong data-i18n="controlNetworkValue">仅本机 / 私有局域网</strong><small data-i18n="controlNetworkDetail">局域网模式需要原生风险确认</small></div>
+          <div><span data-i18n="controlSecrets">Secret 保护</span><strong>macOS Keychain / 0600 file</strong><small data-i18n="controlSecretsDetail">切换前进行双向验证与失败回滚</small></div>
+          <div><span data-i18n="controlProxy">代理出口</span><strong>Direct / Proxy / Auto</strong><small data-i18n="controlProxyDetail">兼容 Clash HTTP CONNECT 与 SOCKS5</small></div>
+          <div><span data-i18n="controlAppearance">桌面偏好</span><strong data-i18n="controlAppearanceValue">深浅主题 · 密度 · 动效</strong><small data-i18n="controlAppearanceDetail">只保存在本地 UI，不与路由 Secret 混合</small></div>
+        </div>
+      </section>
+
+      <section class="section faq-section" id="faq">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="faqEyebrow">FAQ</p>
+          <h2 data-i18n="faqTitle">安全边界说明</h2>
+        </div>
+        <div class="faq-list reveal">
+          <details><summary data-i18n="faqOneQuestion">Airlock 是通用代理或 VPN 吗？</summary><p data-i18n="faqOneAnswer">不是。Airlock 不接受调用者提供的任意目标，只转发到用户预先配置并授权的固定路由。</p></details>
+          <details><summary data-i18n="faqTwoQuestion">LLM 能看到上游 API Key 吗？</summary><p data-i18n="faqTwoAnswer">不能。客户端使用的是可撤销的本地二次 Key，Airlock 在向固定上游发起请求时才注入真实 Key。</p></details>
+          <details><summary data-i18n="faqThreeQuestion">Token 统计会保存提示词吗？</summary><p data-i18n="faqThreeAnswer">不会。该功能默认关闭；开启后只提取上游 usage 数字，计数仅保存在 airlockd 内存中。</p></details>
+          <details><summary data-i18n="faqFourQuestion">Airlock 能防御本机管理员吗？</summary><p data-i18n="faqFourAnswer">不能。本机管理员、root、可调试 Airlock 进程或已控制操作系统的攻击者不在保护范围内。</p></details>
+        </div>
+      </section>
+
+      <section class="closing-section">
+        <div class="closing-inner reveal">
+          <img src="./assets/airlock-logo.svg" alt="" width="58" height="58" />
+          <div><p class="eyebrow" data-i18n="closingEyebrow">AIRLOCK P0</p><h2 data-i18n="closingTitle">让自动化拥有能力，不必拥有秘密。</h2></div>
+          <a class="primary-action" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer"><span data-i18n="viewGithub">查看 GitHub 项目</span><span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span data-i18n="footerTagline">本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH</span></div>
+      <p data-i18n="footerSecurity">P0 技术验证版，尚未完成发布安全审查。</p>
+    </footer>
+
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" data-i18n="copied">已复制命令</div>
+  </body>
+</html>
