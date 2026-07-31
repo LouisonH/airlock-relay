@@ -12,8 +12,8 @@
     <meta name="twitter:card" content="summary" />
     <title>Airlock - 本地凭据隔离转发器</title>
     <link rel="icon" href="./assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./assets/styles.css?v=20260731" />
-    <script src="./assets/site.js" defer></script>
+    <link rel="stylesheet" href="./assets/styles.css?v=20260731-audit" />
+    <script src="./assets/site.js?v=20260731-audit" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main" data-i18n="skipLink">跳到主要内容</a>
@@ -29,6 +29,7 @@
           <a href="#boundary" data-i18n="navBoundary">安全边界</a>
           <a href="#routes" data-i18n="navRoutes">路由类型</a>
           <a href="#quickstart" data-i18n="navQuickstart">快速使用</a>
+          <a href="#release" data-i18n="navRelease">发布状态</a>
           <a href="#architecture" data-i18n="navArchitecture">架构</a>
           <a href="#faq" data-i18n="navFaq">常见问题</a>
           <a href="./docs.html" data-i18n="navDocs">文档</a>
@@ -201,7 +202,36 @@
 export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
           </div>
         </div>
-        <p class="quickstart-note reveal"><span data-i18n="p0Label">当前版本</span><b data-i18n="p0Notice">v0.1.4 技术预览版：已完成维护者生产就绪安全审计。</b></p>
+        <p class="quickstart-note reveal"><span data-i18n="p0Label">当前版本</span><b data-i18n="p0Notice">v0.1.4 已于 2026-07-31 发布；维护者生产就绪安全审计已完成。</b></p>
+      </section>
+
+      <section class="section release-section" id="release">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="releaseEyebrow">RELEASE &amp; ASSURANCE</p>
+          <h2 data-i18n="releaseTitle">v0.1.4 已发布，生产就绪审计已完成</h2>
+          <p data-i18n="releaseIntro">2026 年 7 月 31 日发布。审计涵盖核心转发边界、依赖、发布工件、安装器和公开站点。</p>
+        </div>
+        <div class="release-audit-grid reveal">
+          <article>
+            <span data-i18n="releasePackageLabel">公开分发</span>
+            <h3 data-i18n="releasePackageTitle">GitHub Release + npm</h3>
+            <p data-i18n="releasePackageDetail">已发布 Apple Silicon macOS 工件、SHA-256 清单与 airlock-relay@0.1.4。</p>
+          </article>
+          <article>
+            <span data-i18n="releaseAuditLabel">审计结论</span>
+            <h3 data-i18n="releaseAuditTitle">维护者生产就绪审计完成</h3>
+            <p data-i18n="releaseAuditDetail">已复核 SSH / HTTP / LLM 边界、依赖漏洞、竞态测试、安装器和 CI 发布路径。</p>
+          </article>
+          <article>
+            <span data-i18n="releaseBoundaryLabel">仍需注意</span>
+            <h3 data-i18n="releaseBoundaryTitle">不是第三方认证</h3>
+            <p data-i18n="releaseBoundaryDetail">当前为 Apple Silicon 技术预览；未进行 Developer ID 签名、Apple 公证或独立渗透测试。</p>
+          </article>
+        </div>
+        <div class="release-links reveal">
+          <a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/security-audit-2026-07-31.md" target="_blank" rel="noreferrer" data-i18n="releaseReadAudit">查看完整审计记录</a>
+          <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4" target="_blank" rel="noreferrer" data-i18n="releaseReadNotes">查看 v0.1.4 发布说明</a>
+        </div>
       </section>
 
       <section class="section architecture-section" id="architecture">
@@ -257,7 +287,7 @@ export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
 
     <footer class="site-footer">
       <div><span><strong>Airlock</strong> · <span data-i18n="footerTagline">本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> <a href="https://0o0.site" target="_blank" rel="noreferrer">LouisonH</a> · <span data-i18n="footerAffiliation">华南理工大学（SCUT）相关开发者 · 独立项目</span> · <a href="https://github.com/LouisonH" target="_blank" rel="noreferrer">GitHub</a></span></div>
-      <p data-i18n="footerSecurity">v0.1.4 技术预览版 · 内部审计完成 · 未公证</p>
+      <p data-i18n="footerSecurity">v0.1.4 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
     </footer>
 
     <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" data-i18n="copied">已复制命令</div>
