@@ -1,7 +1,7 @@
 {
   "name": "airlock-relay",
   "version": "0.1.2",
-  "description": "Verified macOS installer for the Airlock credential-isolation relay",
+  "description": "Native credential-isolation relay and verified macOS installer for fixed HTTP, SSH, and LLM routes",
   "keywords": [
     "airlock",
     "credential-isolation",
