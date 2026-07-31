@@ -11,7 +11,7 @@
     <a href="website/en/index.html">Static website</a>
   </p>
   <p>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/release-v0.1.0%20technical%20preview-b26b25" alt="v0.1.0 technical preview" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1"><img src="https://img.shields.io/badge/release-v0.1.1%20technical%20preview-b26b25" alt="v0.1.1 technical preview" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 desktop" />
     <img src="https://img.shields.io/badge/core-Go%201.24%2B-267d5f" alt="Go 1.24 or newer" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -19,7 +19,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.0 is a technical preview. Route metadata, credentials, and proxy configuration use protected storage, but this release has not completed an independent production security audit.
+> Airlock v0.1.1 is a technical preview. Route metadata, credentials, and proxy configuration use protected storage, but this release has not completed an independent production security audit.
 
 ## Why Airlock?
 
@@ -107,8 +107,8 @@ The desktop GUI never needs an ordinary TCP management port. Closing the window 
 
 ## Install the Technical Preview
 
-The v0.1.0 download supports Apple Silicon Macs running macOS 12 or newer. Get
-the DMG and checksum from [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0),
+The v0.1.1 download supports Apple Silicon Macs running macOS 12 or newer. Get
+the DMG and checksum from [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1),
 then follow the [installation guide](docs/installation.md). The package is
 ad-hoc signed but is not Developer ID signed or notarized, so read the
 Gatekeeper instructions before opening it.
@@ -198,7 +198,7 @@ deploy/systemd     Server service examples
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md), [release notes](docs/releases/v0.1.0.md), [changelog](CHANGELOG.md), or open the [static website](website/en/index.html) locally. The website supports English and Simplified Chinese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service. GitHub Pages is not enabled while this repository remains private.
+Start with the [documentation index](docs/README.md), [release notes](docs/releases/v0.1.1.md), [changelog](CHANGELOG.md), or visit the [Airlock documentation site](https://louisonh.github.io/airlock-relay/). The site supports English, Simplified Chinese, and Japanese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service.
 
 ## Developer
 

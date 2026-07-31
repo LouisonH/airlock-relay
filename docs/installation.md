@@ -4,28 +4,28 @@
 
 ## Requirements
 
-Airlock v0.1.0 supports Apple Silicon Macs running macOS 12 Monterey or newer.
+Airlock v0.1.1 supports Apple Silicon Macs running macOS 12 Monterey or newer.
 This release does not include an Intel, Windows, or Linux installer.
 
 ## Verify the Download
 
-Download these files from the [v0.1.0 release](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0):
+Download these files from the [v0.1.1 release](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1):
 
-- `Airlock_0.1.0_aarch64.dmg` for normal installation
-- `Airlock_0.1.0_aarch64.app.zip` as a portable archive
-- `SHA256SUMS.txt` for integrity verification
+- `Airlock_0.1.1_aarch64.dmg` for normal installation
+- `Airlock_0.1.1_aarch64.app.zip` as a portable archive
+- `SHA256SUMS-v0.1.1.txt` for integrity verification
 
 From the directory containing the downloads, verify the DMG before opening it:
 
 ```bash
-shasum -a 256 -c SHA256SUMS.txt
+shasum -a 256 -c SHA256SUMS-v0.1.1.txt
 ```
 
 The command also checks the ZIP when all three files are in the same directory.
 
 ## Install
 
-1. Open `Airlock_0.1.0_aarch64.dmg`.
+1. Open `Airlock_0.1.1_aarch64.dmg`.
 2. Drag **Airlock** into **Applications**.
 3. Eject the Airlock disk image.
 4. In Finder, open Applications, Control-click **Airlock**, and choose **Open**.
@@ -33,7 +33,7 @@ The command also checks the ZIP when all three files are in the same directory.
 
 ### Why macOS Shows a Warning
 
-v0.1.0 is ad-hoc signed so its bundle integrity can be checked, but it is not
+v0.1.1 is ad-hoc signed so its bundle integrity can be checked, but it is not
 signed with an Apple Developer ID and has not been notarized by Apple. macOS
 therefore cannot verify the developer identity. This is a release limitation,
 not proof that a warning can be ignored: verify the SHA-256 checksum and ensure

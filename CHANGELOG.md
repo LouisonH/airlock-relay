@@ -4,6 +4,23 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
+## [0.1.1] - 2026-07-31
+
+### Added
+
+- Standalone `airlockd` server mode, protected Unix-socket operations CLI, and
+  loopback-only token-authenticated Web UI for delegated server operations.
+- SSH username-to-host mappings, edit and credential-rotation flows, upstream
+  port selection, manual health checks, and sanitized disabled-route attempts.
+- Multilingual documentation website, server deployment guide, npm installer
+  package, platform release contract, and GitHub Pages deployment workflow.
+
+### Changed
+
+- Default new installations to the prompt-free Standard secret-store profile;
+  retain Keychain storage as an explicit stricter option.
+- Publish the v0.1.1 Apple Silicon macOS preview artifacts with fixed checksums.
+
 ## [0.1.0] - 2026-07-30
 
 ### Added
@@ -38,3 +55,4 @@ technical previews whose interfaces may still change.
   production security audit.
 
 [0.1.0]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0
+[0.1.1]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1

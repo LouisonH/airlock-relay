@@ -16,7 +16,7 @@ const translations = {
     heroLead: "把能力交给 Agent，把凭据留在本机。",
     heroDetail: "Airlock 使用固定本地路由、可撤销凭据与最小权限策略，为 HTTP、SSH 和 LLM 请求隔离真实上游地址、密码与 API Key。",
     seeHow: "了解工作方式",
-    releaseCta: "下载 v0.1.0",
+    releaseCta: "下载 v0.1.1",
     quickStartCta: "查看快速用法",
     installLabel: "一行安装",
     principleTarget: "固定目标",
@@ -91,7 +91,7 @@ const translations = {
     copyCommand: "复制命令",
     copied: "已复制命令",
     p0Label: "当前版本",
-    p0Notice: "v0.1.0 技术预览版：尚未完成独立生产安全审计。",
+    p0Notice: "v0.1.1 技术预览版：尚未完成独立生产安全审计。",
     architectureEyebrow: "ARCHITECTURE",
     architectureTitle: "桌面控制面与网络核心分离",
     architectureIntro: "GUI 关闭后，本地转发服务仍可继续运行。控制命令不经过普通 TCP 端口。",
@@ -121,11 +121,11 @@ const translations = {
     faqThreeAnswer: "不会。该功能默认关闭；开启后只提取上游 usage 数字，计数仅保存在 airlockd 内存中。",
     faqFourQuestion: "Airlock 能防御本机管理员吗？",
     faqFourAnswer: "不能。本机管理员、root、可调试 Airlock 进程或已控制操作系统的攻击者不在保护范围内。",
-    closingEyebrow: "AIRLOCK v0.1.0",
+    closingEyebrow: "AIRLOCK v0.1.1",
     closingTitle: "让自动化拥有能力，不必拥有秘密。",
     viewGithub: "查看 GitHub 项目",
     footerTagline: "本地凭据隔离转发器",
-    footerSecurity: "v0.1.0 技术预览版 · 未公证 · 尚未完成独立生产安全审计"
+    footerSecurity: "v0.1.1 技术预览版 · 未公证 · 尚未完成独立生产安全审计"
   },
   en: {
     pageTitle: "Airlock - Local credential-isolation relay",
@@ -144,7 +144,7 @@ const translations = {
     heroLead: "Give agents capabilities. Keep credentials local.",
     heroDetail: "Airlock uses fixed local routes, revocable credentials, and least-privilege policies to isolate real upstream addresses, passwords, and API keys from HTTP, SSH, and LLM callers.",
     seeHow: "See how it works",
-    releaseCta: "Download v0.1.0",
+    releaseCta: "Download v0.1.1",
     quickStartCta: "View quick start",
     installLabel: "ONE-LINE INSTALL",
     principleTarget: "Fixed targets",
@@ -219,7 +219,7 @@ const translations = {
     copyCommand: "Copy command",
     copied: "Command copied",
     p0Label: "Current release",
-    p0Notice: "v0.1.0 technical preview: no independent production security audit has been completed.",
+    p0Notice: "v0.1.1 technical preview: no independent production security audit has been completed.",
     architectureEyebrow: "ARCHITECTURE",
     architectureTitle: "The desktop control plane is separate from the network core",
     architectureIntro: "The local relay can keep running after the GUI closes. Control commands never use an ordinary TCP port.",
@@ -249,11 +249,11 @@ const translations = {
     faqThreeAnswer: "No. Statistics are disabled by default. When enabled, Airlock extracts upstream usage numbers only, and counters remain in airlockd memory.",
     faqFourQuestion: "Does Airlock protect against a local administrator?",
     faqFourAnswer: "No. Local administrators, root, processes able to debug Airlock, and attackers that control the operating system are outside the threat model.",
-    closingEyebrow: "AIRLOCK v0.1.0",
+    closingEyebrow: "AIRLOCK v0.1.1",
     closingTitle: "Let automation hold capabilities, not secrets.",
     viewGithub: "View on GitHub",
     footerTagline: "Local credential-isolation relay",
-    footerSecurity: "v0.1.0 technical preview · not notarized · no independent production security audit"
+    footerSecurity: "v0.1.1 technical preview · not notarized · no independent production security audit"
   }
 };
 

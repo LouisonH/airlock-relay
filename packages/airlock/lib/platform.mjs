@@ -1,4 +1,4 @@
-export const AIRLOCK_VERSION = "0.1.0";
+export const AIRLOCK_VERSION = "0.1.1";
 
 const targets = [
   {
@@ -9,8 +9,8 @@ const targets = [
     bundles: ["dmg", "app"],
     secureEntry: "airlock-ssh-wizard+native-os-confirmation",
     status: "released",
-    artifactName: "Airlock_0.1.0_aarch64.dmg",
-    sha256: "4c49368349bd82a33dc0917facbb3b2b50a08aa20f029bada7bf48053368e941",
+    artifactName: "Airlock_0.1.1_aarch64.dmg",
+    sha256: "644b7310e51ebbd2668a40ee95699194903f3d73347a6c071f2b4140bffefc9b",
   },
   {
     id: "macos-x64",

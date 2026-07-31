@@ -40,7 +40,7 @@ try {
   await verify(source);
 } catch (error) {
   throw new Error(
-    `The verified v0.1.0 DMG must exist at ${source} before packing. ${error.message}`,
+    `The verified v0.1.1 DMG must exist at ${source} before packing. ${error.message}`,
   );
 }
 
