@@ -119,6 +119,10 @@ Airlock は固定対象、最小権限、認証情報の置き換え、脱敏済
 
 詳細は [セキュリティポリシー](SECURITY.md)、[実装と脅威モデル](.claude/plan/airlock-1.md)、[デスクトップ UI セキュリティ仕様](docs/ui-spec.md) を参照してください。
 
+## ライセンス
+
+Copyright 2026 LouisonH。Airlock は [Apache License 2.0](LICENSE) で公開されています。
+
 ## 開発者
 
 今後の対象と安全境界については、[クロスプラットフォーム対応計画](docs/cross-platform.ja.md) を参照してください。

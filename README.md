@@ -206,6 +206,10 @@ deploy/systemd     Server service examples
 
 Start with the [documentation index](docs/README.md), [v0.1.4 release notes](docs/releases/v0.1.4.md), [security audit](docs/security-audit-2026-07-31.md), [changelog](CHANGELOG.md), or visit the [Airlock documentation site](https://louisonh.github.io/airlock-relay/). The site supports English, Simplified Chinese, and Japanese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service.
 
+## License
+
+Copyright 2026 LouisonH. Airlock is licensed under the [Apache License 2.0](LICENSE).
+
 ## Developer
 
 Airlock is designed and developed by [**LouisonH**](https://0o0.site), a developer

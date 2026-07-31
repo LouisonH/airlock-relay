@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.4",
   "author": "LouisonH",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "sidecar:build": "sh ../../scripts/build-sidecar.sh",

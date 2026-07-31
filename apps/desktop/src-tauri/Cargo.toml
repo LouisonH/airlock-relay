@@ -3,6 +3,7 @@ name = "airlock-desktop"
 version = "0.1.4"
 description = "Native control plane for the Airlock local relay"
 authors = ["LouisonH"]
+license = "Apache-2.0"
 edition = "2021"
 
 [lib]

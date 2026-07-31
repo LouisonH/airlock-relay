@@ -24,7 +24,7 @@
     "name": "LouisonH",
     "url": "https://0o0.site"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "airlock-installer": "bin/airlock.js"
@@ -39,6 +39,7 @@
     "bin/",
     "dist/",
     "lib/",
+    "LICENSE",
     "README.md"
   ],
   "scripts": {

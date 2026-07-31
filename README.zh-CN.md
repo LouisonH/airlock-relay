@@ -202,6 +202,10 @@ deploy/systemd     服务端 systemd 示例
 
 可从[文档索引](docs/README.md)、[v0.1.4 安全审计版本说明](docs/releases/v0.1.4.zh-CN.md)、[审计记录](docs/security-audit-2026-07-31.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
 
+## 许可证
+
+Copyright 2026 LouisonH。Airlock 使用 [Apache License 2.0](LICENSE) 开源协议。
+
 ## 开发者
 
 Airlock 由华南理工大学（SCUT）相关开发者 [**LouisonH**](https://0o0.site) 进行产品设计与核心开发，并使用 **GPT-5.6 Sol** 辅助工程实现与验证。本项目为独立个人项目，不代表华南理工大学的官方项目、立场或背书。GitHub：[github.com/LouisonH](https://github.com/LouisonH)。

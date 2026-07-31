@@ -110,5 +110,6 @@ Bundled asset: `Airlock_0.1.4_aarch64.dmg`
 SHA-256 221997b155a05e3613757402c5189fbc7ca95cb35854c02880c47134d7b174a9
 ```
 
-License: `UNLICENSED`. Installing the npm package does not grant permission to
-redistribute or modify Airlock.
+## License
+
+Apache License 2.0. Copyright 2026 LouisonH. See [LICENSE](LICENSE).
