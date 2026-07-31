@@ -1,40 +1,86 @@
-# クロスプラットフォーム対応計画
+# クロスプラットフォーム Core 移植ベースライン
 
-Airlock v0.1.4 で配布しているのは Apple Silicon Mac 版だけです。その他の項目は
-実装契約であり、インストーラーが公開済みであることを意味しません。
+Airlock v0.1.4 で公開済みなのは Apple Silicon macOS 向け Desktop preview だけです。
+この branch で追加するのは Windows と Linux の **Core/CLI コンパイルベースライン**であり、
+Windows/Linux Desktop、インストーラー、auto-update、署名済み成果物の公開を意味しません。
 
-| 対象 | バンドル | ローカル制御経路 | 保護ストア | 状態 |
-| --- | --- | --- | --- | --- |
-| macOS arm64 | DMG / `.app` | ユーザー専用 Unix Socket | 0600 ファイル / Keychain | プレビュー公開済み |
-| macOS x64 | DMG / `.app` | ユーザー専用 Unix Socket | 0600 ファイル / Keychain | 契約のみ |
-| Windows x64 | NSIS / MSI | ユーザー ACL 付き Named Pipe | 保護ファイル / Credential Manager | 契約のみ |
-| Linux x64 | AppImage / deb | 0600 Unix Socket | 保護ファイル / Secret Service | 契約のみ |
-| Linux arm64 | AppImage / deb | 0600 Unix Socket | 保護ファイル / Secret Service | 契約のみ |
+| 対象 | Core / CLI build | local control transport | platform secret backend | Desktop bundle | 状態 |
+| --- | --- | --- | --- | --- | --- |
+| macOS arm64 | native | user-only Unix Socket | Keychain / protected file | DMG / `.app` | preview 公開済み |
+| macOS x64 | target build | user-only Unix Socket | Keychain / protected file | DMG / `.app` | installer は予定 |
+| Windows x64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop は予定 |
+| Windows arm64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop は予定 |
+| Linux x64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop は予定 |
+| Linux arm64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop は予定 |
+| Linux ARMv7 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Raspberry Pi baseline |
 
-`packages/airlock/lib/platform.mjs` はパッケージング用の共通リゾルバーです。公開済みの
-成果物名と固定 SHA-256 の両方がない対象は必ず拒否し、計画中の対象を配布済みとして扱いません。
+`cross-compiled` は CI と target-aware build script が `CGO_ENABLED=0` で
+`airlockd` と `airlock` をコンパイルできることだけを示します。実機 runtime acceptance
+ではありません。下記の確認が完了するまで対象は unreleased のままです。
 
-## 対応境界
+## この段階で実装した Core 境界
 
-1. デスクトップ制御経路を抽象化し、macOS/Linux では Unix Socket、Windows では
-   現在のユーザーだけがアクセスできる Named Pipe を使用します。
-2. Go 製 `airlockd` コアを共有し、対象ごとの sidecar をビルドします。ネイティブ CI で
-   race test とアーキテクチャ検証を実行します。
-3. SSH の機密入力はクロスプラットフォーム Airlock ウィザードで行い、一度限りのローカル IPC
-   コマンドで送信します。他の Secret と OS セキュリティ変更には各 OS のネイティブ画面を使用します。
-   Secret をコマンドライン、環境変数、プロセス一覧、ログ、永続制御状態へ渡しません。
-4. Windows Credential Manager と Linux Secret Service を追加し、既存の
-   コピー、検証、切り替え、消去という移行手順を維持します。
-5. 各成果物を個別に署名・検証し、インストール、削除、更新、fail-closed テストが完了してから
-   `released` に変更します。
+- Go Core と operations CLI は local control の platform abstraction を共有します。
+  macOS/Linux は `0600` Unix domain socket、Windows は user directory から決定される
+  Named Pipe を protected owner ACL で作成します。どちらも control TCP port を開きません。
+- Desktop mode は macOS Keychain、Linux Secret Service、Windows Credential Manager を
+  利用できます。Windows backend は大型の protected record を chunk に分割し、atomically
+  switched index で管理して generic credential の payload limit を超えないようにします。
+- Server Core の conservative default は引き続き `local_file`、explicit protected data
+  directory、separate control token file です。`keychain` mode は対応 platform store が
+  利用可能で正しく設定された場合だけ使用してください。
+- Target build は明示的に分離され、`airlockd` と `airlock` の両方を生成します。Tauri bundle
+  を作らず、npm installer が公開済みとする対象範囲も変更しません。
 
-## バージョンと更新の契約
+## Core と CLI のビルド
 
-デスクトップのバージョン確認はユーザーが明示的に実行した場合だけ行う読み取り専用操作です。
-WebView は公式 GitHub Releases の公開メタデータだけを読み取り、ローカルルート状態、
-保護対象、認証情報、アクティビティデータを送信しません。自動ダウンロード、インストール、
-再起動、リリースページ表示も行いません。各プラットフォームでユーザーが選んだインストーラーを
-独立して検証できるまで、更新フローを公開済みとして説明してはいけません。
+Go 1.25 以上が必要です。repository root で次を実行すると、toolchain を追加せずに
+cross-compile し、`bin/<target>` に配置します。
 
-SSH ユーザー名マッピングは全 OS で共通です。同じリスナー上のローカルユーザー名が一つの
-ルートを選択し、各ルートは独立した Capability ダイジェストと保護された上流対象を保持します。
+```bash
+./scripts/build-sidecar.sh windows-amd64
+./scripts/build-sidecar.sh windows-arm64
+./scripts/build-sidecar.sh linux-amd64
+./scripts/build-sidecar.sh linux-arm64
+./scripts/build-sidecar.sh linux-armv7
+```
+
+argument を省略した command は、Desktop development 用に current host の
+`bin/airlockd` と `bin/airlock` を維持します。table にない target name は binary を作成する
+前に fail します。
+
+32-bit Raspberry Pi OS または Debian `armhf` の Raspberry Pi 3/4 では、
+`bin/linux-armv7/airlockd` と `bin/linux-armv7/airlock` をコピーし、non-login service
+account で [Server Core guide](server-deployment.ja.md) に従って実行します。64-bit
+Raspberry Pi OS は `linux-arm64` を使用します。この段階では Pi 向け Desktop package は
+ありません。
+
+## Release 前に必要な Runtime Acceptance
+
+Windows/Linux を release target にする前に、対応 architecture と distribution ごとに次を
+完了する必要があります。
+
+1. 実際の Windows Credential Manager または freedesktop.org Secret Service session で、
+   create/read/rotation/delete、locked/unavailable store の fail-closed を確認する。
+2. 別 local account から Windows Named Pipe と protected state/token path にアクセス
+   できないこと、Linux の `0600` Unix Socket と state protection を確認する。
+3. Rust/Tauri control client を移植し、Unix-only import、Unix stream、filesystem permission、
+   macOS-only confirmation を置き換え、高リスク操作に同等の native confirmation を用意する。
+4. target hardware で service install、clean removal、upgrade、stale process recovery、
+   `Direct`/`Proxy`/`Auto` egress、SSH Host Key pinning、failure closure を試験する。
+5. architecture 別 installer を作成、sign、fixed checksum を公開し、install/update/uninstall
+   を個別に試験する。
+
+それまでは `airlock-installer` は Windows/Linux を `planned` と表示し、存在しない artifact
+の install を拒否します。コンパイル可能な Core を supported Desktop product と誤認させない
+ためです。
+
+## 変わらない Security Semantics
+
+SSH username mapping、fixed upstream route、local capability、LLM secondary API key、audit
+redaction、proxy egress policy はすべて shared Go Core にあります。呼び出し元が受け取るのは
+local endpoint と local credential だけで、upstream URL、password、private key、Host Key、
+API Key は選択された protected store に残ります。
+
+service command は [Server Core guide](server-deployment.ja.md)、development environment
+以外で Core build を運用する前には [security policy](../SECURITY.md) を確認してください。

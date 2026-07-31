@@ -1,5 +1,5 @@
 // airlock is the local operator CLI for an airlockd server core. It connects
-// only to the user-only Unix control socket; route targets and credentials are
+// only to the owner-only local control endpoint; route targets and credentials are
 // supplied through protected specification files instead of process arguments.
 package main
 
@@ -52,7 +52,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("airlock", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	options := rootOptions{}
-	flags.StringVar(&options.socket, "socket", "", "absolute airlockd Unix control socket")
+	flags.StringVar(&options.socket, "socket", "", "airlockd local control endpoint (Unix socket or Windows named pipe)")
 	flags.StringVar(&options.dataDir, "data-dir", "", "absolute airlockd server data directory")
 	flags.StringVar(&options.tokenFile, "token-file", "", "absolute protected 0600 control token file")
 	flags.DurationVar(&options.timeout, "timeout", 20*time.Second, "control operation timeout")
@@ -109,10 +109,11 @@ func newClient(options rootOptions) (*control.Client, error) {
 		if options.dataDir == "" || !filepath.IsAbs(options.dataDir) {
 			return nil, errors.New("--data-dir must be an absolute server data directory when --socket is not used")
 		}
-		socket = filepath.Join(options.dataDir, "control.sock")
-	}
-	if !filepath.IsAbs(socket) {
-		return nil, errors.New("--socket must be an absolute Unix socket path")
+		paths, err := control.PathsForDirectory(options.dataDir)
+		if err != nil {
+			return nil, err
+		}
+		socket = paths.Socket
 	}
 	token, err := securefile.ReadToken(options.tokenFile)
 	if err != nil {

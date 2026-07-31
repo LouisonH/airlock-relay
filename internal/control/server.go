@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -43,16 +42,13 @@ type Paths struct {
 	Socket    string
 }
 
-func DefaultPaths() (Paths, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return Paths{}, errors.New("locate user configuration directory")
+// ValidatePaths rejects control endpoint descriptions that do not belong to
+// the current platform's owner-only transport.
+func ValidatePaths(paths Paths) error {
+	if !validControlPaths(paths) {
+		return errors.New("invalid control paths")
 	}
-	directory := filepath.Join(configDir, "io.airlock.relay")
-	return Paths{
-		Directory: directory,
-		Socket:    filepath.Join(directory, "control.sock"),
-	}, nil
+	return nil
 }
 
 type Server struct {
@@ -250,19 +246,12 @@ func listen(paths Paths, token string, registry *routes.Registry, store secrets.
 	if egressManager == nil {
 		return nil, nil, errors.New("egress manager is required")
 	}
-	if err := prepareDirectory(paths.Directory); err != nil {
+	if err := ValidatePaths(paths); err != nil {
 		return nil, nil, err
 	}
-	if err := removeStaleSocket(paths.Socket); err != nil {
-		return nil, nil, err
-	}
-	listener, err := net.Listen("unix", paths.Socket)
+	listener, err := listenControlEndpoint(paths)
 	if err != nil {
-		return nil, nil, fmt.Errorf("listen on control socket: %w", err)
-	}
-	if err := os.Chmod(paths.Socket, 0o600); err != nil {
-		_ = listener.Close()
-		return nil, nil, errors.New("protect control socket")
+		return nil, nil, fmt.Errorf("listen on control endpoint: %w", err)
 	}
 	httpAddress := "127.0.0.1:4768"
 	if sshConfiguration != nil && sshConfiguration.HTTPAddress != "" {

@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/LouisonH/airlock-relay/internal/activity"
@@ -72,7 +71,7 @@ func main() {
 			os.Exit(2)
 		}
 		config.ControlToken, err = securefile.ReadToken(*controlTokenFile)
-		config.ControlPaths = control.Paths{Directory: *dataDir, Socket: filepath.Join(*dataDir, "control.sock")}
+		config.ControlPaths, err = control.PathsForDirectory(*dataDir)
 		if *webTokenFile != "" && err == nil {
 			config.WebToken, err = securefile.ReadToken(*webTokenFile)
 		}
@@ -138,8 +137,8 @@ func runWithConfig(config runtimeConfig) error {
 	if err := requireAllowedListen(sshAddress, allowLAN); err != nil {
 		return fmt.Errorf("invalid SSH listener: %w", err)
 	}
-	if controlPaths.Directory == "" || controlPaths.Socket == "" || !filepath.IsAbs(controlPaths.Directory) || !filepath.IsAbs(controlPaths.Socket) || filepath.Dir(controlPaths.Socket) != controlPaths.Directory {
-		return errors.New("invalid control paths")
+	if err := control.ValidatePaths(controlPaths); err != nil {
+		return err
 	}
 	if len(controlToken) < 32 || len(controlToken) > 128 {
 		return errors.New("invalid control token")
@@ -232,7 +231,7 @@ func runWithConfig(config runtimeConfig) error {
 	}
 	defer func() {
 		_ = controlListener.Close()
-		_ = os.Remove(controlPaths.Socket)
+		control.Cleanup(controlPaths)
 	}()
 
 	mux := http.NewServeMux()
@@ -301,7 +300,7 @@ func runWithConfig(config runtimeConfig) error {
 		sshErrors <- sshGateway.Serve(sshListener)
 	}()
 
-	shutdownContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	shutdownContext, stop := signal.NotifyContext(context.Background(), shutdownSignals()...)
 	defer stop()
 	select {
 	case <-shutdownContext.Done():

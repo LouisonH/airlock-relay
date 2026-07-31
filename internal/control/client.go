@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"time"
 )
 
-// Client connects to the owner-only Unix control socket. It sets the control
+// Client connects to the owner-only local control endpoint. It sets the control
 // protocol version and authentication token itself, so callers never need to
 // include those values in an operation request.
 type Client struct {
@@ -18,7 +17,7 @@ type Client struct {
 }
 
 func NewClient(socketPath, token string) (*Client, error) {
-	if socketPath == "" || len(token) < 32 || len(token) > 128 {
+	if !validControlEndpoint(socketPath) || len(token) < 32 || len(token) > 128 {
 		return nil, errors.New("invalid control client configuration")
 	}
 	return &Client{socketPath: socketPath, token: token}, nil
@@ -34,10 +33,9 @@ func (c *Client) Do(ctx context.Context, request Request) (Response, error) {
 	if request.Action == "test_route_health" {
 		exchangeTimeout = controlHealthCheckTimeout
 	}
-	dialer := net.Dialer{Timeout: controlExchangeTimeout}
-	connection, err := dialer.DialContext(ctx, "unix", c.socketPath)
+	connection, err := dialControlEndpoint(ctx, c.socketPath)
 	if err != nil {
-		return Response{}, errors.New("connect to airlockd control socket")
+		return Response{}, errors.New("connect to airlockd control endpoint")
 	}
 	defer connection.Close()
 	deadline := time.Now().Add(exchangeTimeout)

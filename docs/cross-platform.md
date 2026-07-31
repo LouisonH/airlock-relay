@@ -1,44 +1,99 @@
-# Cross-Platform Adaptation Plan
+# Cross-Platform Core Bootstrap
 
-Airlock v0.1.4 currently ships only for Apple Silicon Macs. The entries below
-are implementation contracts, not claims that installers already exist.
+Airlock v0.1.4 releases an Apple Silicon macOS desktop preview only. This
+branch adds a **Core/CLI compilation baseline** for Windows and Linux. It does
+not publish a Windows or Linux desktop application, installer, auto-updater,
+or signed artifact.
 
-| Target | Bundle | Local control transport | Protected store | Status |
-| --- | --- | --- | --- | --- |
-| macOS arm64 | DMG / `.app` | user-only Unix socket | 0600 file / Keychain | Released preview |
-| macOS x64 | DMG / `.app` | user-only Unix socket | 0600 file / Keychain | Contract only |
-| Windows x64 | NSIS / MSI | user-ACL named pipe | protected file / Credential Manager | Contract only |
-| Linux x64 | AppImage / deb | 0600 Unix socket | protected file / Secret Service | Contract only |
-| Linux arm64 | AppImage / deb | 0600 Unix socket | protected file / Secret Service | Contract only |
+| Target | Core / CLI build | Local control transport | Platform secret backend | Desktop bundle | Status |
+| --- | --- | --- | --- | --- | --- |
+| macOS arm64 | Native | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Released preview |
+| macOS x64 | Target build | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Installer planned |
+| Windows x64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop planned |
+| Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop planned |
+| Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop planned |
+| Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop planned |
+| Linux ARMv7 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Raspberry Pi baseline |
 
-The reusable resolver in `packages/airlock/lib/platform.mjs` exposes this
-matrix to packaging tools. It fails closed unless the selected target has both
-a published artifact name and a fixed SHA-256 digest.
+“Cross-compiled” means CI and the target-aware build script compile both
+`airlockd` and `airlock` with `CGO_ENABLED=0`. It is not a claim of runtime
+acceptance on physical hardware. A target remains unreleased until the runtime
+and installer checklist below is completed.
 
-## Adaptation Boundaries
+## Core Boundary Implemented Here
 
-1. Extract the desktop control transport behind a platform interface. Keep Unix
-   sockets on macOS/Linux and use a current-user ACL named pipe on Windows.
-2. Keep `airlockd` as the shared Go core and build a sidecar per target. CI must
-   run race tests natively and verify architecture before bundling.
-3. Keep SSH entry in the cross-platform Airlock wizard and send it through a
-   one-shot local IPC command. Platform-native prompts remain available for
-   other secrets and security-sensitive OS changes. No secret may enter the
-   command line, environment, process list, logs, or persistent control state.
-4. Add Windows Credential Manager and Linux Secret Service backends with the
-   existing copy-verify-switch-cleanup migration contract.
-5. Sign and verify each platform artifact independently. A target remains
-   `planned` until installation, removal, update, and fail-closed tests pass.
+- The Go Core and operations CLI share one platform abstraction for local
+  control. macOS/Linux use a `0600` Unix domain socket; Windows derives a
+  deterministic per-user named pipe and creates it with a protected owner ACL.
+  Neither transport opens a control TCP port.
+- Desktop-side defaults can use macOS Keychain, Linux Secret Service, or
+  Windows Credential Manager. The Windows Credential Manager backend chunks
+  encrypted records behind an atomically switched index so oversized protected
+  entries do not exceed a generic credential's payload limit.
+- The server Core retains its conservative default: `local_file`, an explicit
+  protected data directory, and a separate control token file. The `keychain`
+  mode is available only where its platform store is configured and working.
+- Build targets are explicit and isolated. A target build creates both
+  `airlockd` and `airlock`; it does not create a Tauri bundle or alter the
+  released npm installer contract.
 
-## Version and Update Contract
+## Build the Core and CLI
 
-The desktop version check is explicit and read-only. After a user requests it,
-the desktop WebView reads only the official public GitHub Releases metadata.
-It never sends local route state, protected targets, credentials, or activity
-data; it never downloads, installs, restarts, or opens a release automatically.
-Each platform must independently verify a user-selected installer before an
-update flow can be described as released.
+Go 1.25 or newer is required. From the repository root, the following
+cross-compile without a target toolchain and place output under `bin/<target>`:
 
-SSH username mappings remain platform-independent: the local username chooses
-one route on a shared listener, while each route retains its own capability
-digest and protected upstream target.
+```bash
+./scripts/build-sidecar.sh windows-amd64
+./scripts/build-sidecar.sh windows-arm64
+./scripts/build-sidecar.sh linux-amd64
+./scripts/build-sidecar.sh linux-arm64
+./scripts/build-sidecar.sh linux-armv7
+```
+
+The default command, without an argument, preserves the desktop developer
+sidecar location at `bin/airlockd` and `bin/airlock` for the current host.
+The target names are deliberately limited to the contract table above; an
+unknown target fails before a binary is written.
+
+For a Raspberry Pi 3/4 running a 32-bit Raspberry Pi OS or Debian `armhf`
+system, copy `bin/linux-armv7/airlockd` and `bin/linux-armv7/airlock` to the
+device. Run them as a non-login service account using the [Server Core
+deployment guide](server-deployment.md). A 64-bit Raspberry Pi OS uses the
+`linux-arm64` target instead. Desktop packaging for either Pi target is not
+available in this stage.
+
+## Runtime Acceptance Still Required
+
+Before Windows or Linux becomes a release target, maintainers must complete
+these checks on each supported architecture and distribution:
+
+1. Exercise create, read, rotation, and deletion through Windows Credential
+   Manager or a real freedesktop.org Secret Service session, including a
+   locked or unavailable store.
+2. Verify owner-only access to the Windows named pipe and protected state/token
+   paths from a different local account; verify `0600` Unix socket and state
+   protections on Linux.
+3. Build the Rust/Tauri control client without Unix-only imports, replace its
+   Unix-stream and filesystem-permission assumptions, and provide equivalent
+   native confirmation flows for security-sensitive changes.
+4. Test service installation, clean removal, upgrades, recovery after a stale
+   process, `Direct`/`Proxy`/`Auto` egress, SSH host-key pinning, and failure
+   closure on target hardware.
+5. Produce architecture-specific installers, sign them, publish fixed
+   checksums, and test install/update/uninstall independently.
+
+Until those checks pass, `airlock-installer` intentionally reports Windows and
+Linux as `planned` and refuses to install a nonexistent artifact. This avoids
+mistaking a compilable core for a supported desktop product.
+
+## Security Invariants
+
+SSH username mapping, fixed upstream routing, local capability tokens,
+secondary LLM API keys, audit redaction, and proxy egress policy are all in the
+shared Go Core. Their behavior does not change by platform. The caller still
+receives only a local endpoint and local credential; upstream URLs, passwords,
+private keys, host keys, and API keys remain in the selected protected store.
+
+Read the [server deployment guide](server-deployment.md) for service-mode
+commands and the [security policy](../SECURITY.md) before deploying a Core
+build outside a development environment.

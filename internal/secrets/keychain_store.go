@@ -22,6 +22,8 @@ type keychainBackend interface {
 	Delete(reference string) error
 }
 
+const platformStoreService = "io.airlock.relay.targets"
+
 type KeychainStore struct {
 	backend keychainBackend
 }
