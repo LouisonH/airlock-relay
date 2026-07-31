@@ -123,4 +123,4 @@ Airlock は固定対象、最小権限、認証情報の置き換え、脱敏済
 
 今後の対象と安全境界については、[クロスプラットフォーム対応計画](docs/cross-platform.ja.md) を参照してください。
 
-Airlock は [**LouisonH**](https://0o0.site) が製品設計とコア開発を行い、**GPT-5.6 Sol** を用いた AI 支援の実装と検証を行っています。GitHub: [github.com/LouisonH](https://github.com/LouisonH)。
+Airlock は華南理工大学（SCUT）に関わる開発者 [**LouisonH**](https://0o0.site) が製品設計とコア開発を行い、**GPT-5.6 Sol** を用いた AI 支援の実装と検証を行っています。独立した個人プロジェクトであり、華南理工大学の公式プロジェクト、立場、承認を表すものではありません。GitHub: [github.com/LouisonH](https://github.com/LouisonH)。

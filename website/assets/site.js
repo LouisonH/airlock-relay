@@ -125,6 +125,7 @@ const translations = {
     closingTitle: "让自动化拥有能力，不必拥有秘密。",
     viewGithub: "查看 GitHub 项目",
     footerTagline: "本地凭据隔离转发器",
+    footerAffiliation: "华南理工大学（SCUT）相关开发者 · 独立项目",
     footerSecurity: "v0.1.1 技术预览版 · 未公证 · 尚未完成独立生产安全审计"
   },
   en: {
@@ -253,6 +254,7 @@ const translations = {
     closingTitle: "Let automation hold capabilities, not secrets.",
     viewGithub: "View on GitHub",
     footerTagline: "Local credential-isolation relay",
+    footerAffiliation: "SCUT-affiliated developer · independent project",
     footerSecurity: "v0.1.1 technical preview · not notarized · no independent production security audit"
   }
 };

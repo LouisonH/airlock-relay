@@ -88,7 +88,9 @@ API routes. It gives callers revocable local capabilities while keeping the real
 upstream URL, SSH password, and API key on the local machine.
 
 Project: [github.com/LouisonH/airlock-relay](https://github.com/LouisonH/airlock-relay)
-Developer: [LouisonH](https://0o0.site)
+Developer: [LouisonH](https://0o0.site), affiliated with South China University
+of Technology (SCUT). Airlock is an independent personal project and is not an
+official SCUT project or endorsement.
 
 The package also exports `airlock-relay/platform`, a fail-closed platform
 contract for build tooling. Only macOS arm64 is marked as released in v0.1.1;

@@ -198,4 +198,4 @@ deploy/systemd     服务端 systemd 示例
 
 ## 开发者
 
-Airlock 由 [**LouisonH**](https://0o0.site) 进行产品设计与核心开发，并使用 **GPT-5.6 Sol** 辅助工程实现与验证。GitHub：[github.com/LouisonH](https://github.com/LouisonH)。
+Airlock 由华南理工大学（SCUT）相关开发者 [**LouisonH**](https://0o0.site) 进行产品设计与核心开发，并使用 **GPT-5.6 Sol** 辅助工程实现与验证。本项目为独立个人项目，不代表华南理工大学的官方项目、立场或背书。GitHub：[github.com/LouisonH](https://github.com/LouisonH)。

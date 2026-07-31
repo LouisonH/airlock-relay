@@ -952,8 +952,8 @@ function DeveloperCard() {
   };
   return <section className="settings-section about-section"><div><h2>关于</h2><p>为不受信任的调用方隔离真实凭据</p></div><div className="developer-card">
     <button type="button" className={`developer-avatar ${avatarFailed ? "fallback" : ""}`} onClick={() => void openExternal("https://0o0.site")} title="访问 LouisonH 的网站" aria-label="访问 LouisonH 的网站">{avatarFailed ? <span>LH</span> : <img src="/louisonh.png" alt="" onError={() => setAvatarFailed(true)} />}</button>
-    <div className="developer-copy"><span className="developer-label">Developer</span><strong>LouisonH</strong><p>产品设计与核心开发</p><p className="developer-purpose">Airlock 面向不受信任的 LLM、自动化工具与第三方 API 中转环境，让调用方只接触本地二次凭据，隔离真实 URL、账号、密码与 API Key。</p></div>
-    <div className="developer-meta"><button type="button" className="developer-link" onClick={() => void openExternal("https://github.com/LouisonH")}><Github size={14} />github.com/LouisonH</button><button type="button" className="developer-link" onClick={() => void openExternal("https://0o0.site")}><Globe2 size={14} />0o0.site</button><span><Sparkles size={14} />AI 协作 · GPT-5.6 Sol</span><span>v0.1.0 · Technical Preview</span></div>
+    <div className="developer-copy"><span className="developer-label">{translate("Developer")}</span><strong>LouisonH</strong><p>{translate("产品设计与核心开发")}</p><p>{translate("华南理工大学（SCUT）相关开发者 · 独立个人项目")}</p><p className="developer-purpose">{translate("Airlock 面向不受信任的 LLM、自动化工具与第三方 API 中转环境，让调用方只接触本地二次凭据，隔离真实 URL、账号、密码与 API Key。")}</p><p className="developer-purpose">{translate("Airlock 由 LouisonH 独立开发，不代表华南理工大学的官方项目、立场或背书。")}</p></div>
+    <div className="developer-meta"><button type="button" className="developer-link" onClick={() => void openExternal("https://github.com/LouisonH")}><Github size={14} />github.com/LouisonH</button><button type="button" className="developer-link" onClick={() => void openExternal("https://0o0.site")}><Globe2 size={14} />0o0.site</button><span><Sparkles size={14} />{translate("AI 协作 · GPT-5.6 Sol")}</span><span>v{APP_VERSION} · {translate("Technical Preview")}</span></div>
   </div></section>;
 }
 

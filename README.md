@@ -202,4 +202,8 @@ Start with the [documentation index](docs/README.md), [release notes](docs/relea
 
 ## Developer
 
-Airlock is designed and developed by [**LouisonH**](https://0o0.site), with AI-assisted engineering and verification using **GPT-5.6 Sol**. Developer profile: [github.com/LouisonH](https://github.com/LouisonH).
+Airlock is designed and developed by [**LouisonH**](https://0o0.site), a developer
+affiliated with **South China University of Technology (SCUT)**, with AI-assisted
+engineering and verification using **GPT-5.6 Sol**. Airlock is an independent
+personal project and does not represent an official SCUT project, position, or
+endorsement. Developer profile: [github.com/LouisonH](https://github.com/LouisonH).
