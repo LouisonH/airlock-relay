@@ -2,7 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
-export type AccentTheme = "forest" | "ocean" | "amber";
+export type AccentTheme = "forest" | "ocean" | "amber" | "coral";
 export type DensityPreference = "comfortable" | "compact";
 export type MotionPreference = "system" | "standard" | "reduced";
 export type RefreshInterval = 2000 | 5000 | 15000;
@@ -42,7 +42,7 @@ export function saveThemePreference(preference: ThemePreference): void {
 
 export function getAccentTheme(): AccentTheme {
   const stored = localStorage.getItem(accentStorageKey);
-  return stored === "forest" || stored === "ocean" || stored === "amber" ? stored : "forest";
+  return stored === "forest" || stored === "ocean" || stored === "amber" || stored === "coral" ? stored : "forest";
 }
 
 export function saveAccentTheme(accent: AccentTheme): void {

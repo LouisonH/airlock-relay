@@ -12,10 +12,30 @@ import (
 )
 
 var (
-	ErrRouteNotFound = errors.New("SSH route not found")
-	ErrInvalidRoute  = errors.New("invalid SSH route")
-	sshAliasPattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+	ErrRouteNotFound      = errors.New("SSH route not found")
+	ErrInvalidRoute       = errors.New("invalid SSH route")
+	ErrLocalUsernameInUse = errors.New("SSH local username is already mapped")
+	sshAliasPattern       = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+	localUsernamePattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 )
+
+const (
+	DefaultAuthenticationTimeoutSeconds = 20
+	MinAuthenticationTimeoutSeconds     = 3
+	MaxAuthenticationTimeoutSeconds     = 120
+)
+
+// NormalizeAuthenticationTimeoutSeconds supplies the secure default for
+// metadata written by older Airlock versions and bounds new user input.
+func NormalizeAuthenticationTimeoutSeconds(seconds int) (int, error) {
+	if seconds == 0 {
+		return DefaultAuthenticationTimeoutSeconds, nil
+	}
+	if seconds < MinAuthenticationTimeoutSeconds || seconds > MaxAuthenticationTimeoutSeconds {
+		return 0, fmt.Errorf("%w: authentication timeout must be %d to %d seconds", ErrInvalidRoute, MinAuthenticationTimeoutSeconds, MaxAuthenticationTimeoutSeconds)
+	}
+	return seconds, nil
+}
 
 type Policy struct {
 	AllowedCommands            map[string]struct{}
@@ -62,24 +82,46 @@ func validCommand(command string) bool {
 }
 
 type Route struct {
-	Name             string
-	Alias            string
-	TargetSecretRef  string
-	CapabilityDigest capability.Digest
-	Policy           Policy
-	Egress           string
-	Enabled          bool
+	Name                         string
+	Alias                        string
+	LocalUsername                string
+	TargetSecretRef              string
+	CapabilityDigest             capability.Digest
+	Policy                       Policy
+	Egress                       string
+	AuthenticationTimeoutSeconds int
+	Enabled                      bool
+}
+
+func (r Route) EffectiveAuthenticationTimeoutSeconds() int {
+	if seconds, err := NormalizeAuthenticationTimeoutSeconds(r.AuthenticationTimeoutSeconds); err == nil {
+		return seconds
+	}
+	return DefaultAuthenticationTimeoutSeconds
+}
+
+func (r Route) EffectiveLocalUsername() string {
+	if r.LocalUsername == "" {
+		return r.Alias
+	}
+	return r.LocalUsername
 }
 
 func (r Route) Validate() error {
 	if !sshAliasPattern.MatchString(r.Alias) {
 		return fmt.Errorf("%w: invalid alias", ErrInvalidRoute)
 	}
+	if !localUsernamePattern.MatchString(r.EffectiveLocalUsername()) {
+		return fmt.Errorf("%w: invalid local username", ErrInvalidRoute)
+	}
 	if r.TargetSecretRef != "ssh/"+r.Alias {
 		return fmt.Errorf("%w: invalid secret reference", ErrInvalidRoute)
 	}
 	if r.CapabilityDigest == (capability.Digest{}) {
 		return fmt.Errorf("%w: capability is required", ErrInvalidRoute)
+	}
+	if _, err := NormalizeAuthenticationTimeoutSeconds(r.AuthenticationTimeoutSeconds); err != nil {
+		return err
 	}
 	if !r.Policy.AllowAllCommands && len(r.Policy.AllowedCommands) == 0 {
 		return fmt.Errorf("%w: at least one exact command is required", ErrInvalidRoute)
@@ -132,6 +174,11 @@ func (r *Registry) Upsert(route Route) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for alias, existing := range r.routes {
+		if alias != route.Alias && existing.EffectiveLocalUsername() == route.EffectiveLocalUsername() {
+			return ErrLocalUsernameInUse
+		}
+	}
 	r.routes[route.Alias] = cloneRoute(route)
 	return nil
 }
@@ -144,6 +191,28 @@ func (r *Registry) Lookup(alias string) (Route, error) {
 		return Route{}, ErrRouteNotFound
 	}
 	return cloneRoute(route), nil
+}
+
+func (r *Registry) LookupByUsername(username string) (Route, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, route := range r.routes {
+		if route.Enabled && route.EffectiveLocalUsername() == username {
+			return cloneRoute(route), nil
+		}
+	}
+	return Route{}, ErrRouteNotFound
+}
+
+func (r *Registry) GetByUsername(username string) (Route, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, route := range r.routes {
+		if route.EffectiveLocalUsername() == username {
+			return cloneRoute(route), nil
+		}
+	}
+	return Route{}, ErrRouteNotFound
 }
 
 func (r *Registry) Get(alias string) (Route, error) {
@@ -179,14 +248,27 @@ func (r *Registry) SetEnabled(alias string, enabled bool) error {
 }
 
 func (r *Registry) SetCommandPolicy(alias string, policy Policy) error {
+	return r.SetLocalUsernameAndCommandPolicy(alias, "", policy)
+}
+
+func (r *Registry) SetLocalUsernameAndCommandPolicy(alias, localUsername string, policy Policy) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	route, ok := r.routes[alias]
 	if !ok {
 		return ErrRouteNotFound
 	}
+	if localUsername == "" {
+		localUsername = route.EffectiveLocalUsername()
+	}
+	for otherAlias, existing := range r.routes {
+		if otherAlias != alias && existing.EffectiveLocalUsername() == localUsername {
+			return ErrLocalUsernameInUse
+		}
+	}
 	policy.LocalPublicKeyFingerprints = cloneStringSet(route.Policy.LocalPublicKeyFingerprints)
 	policy.AllowStdin = false
+	route.LocalUsername = localUsername
 	route.Policy = policy
 	if err := route.Validate(); err != nil {
 		return err

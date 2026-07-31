@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/LouisonH/airlock-relay/internal/activity"
 	"github.com/LouisonH/airlock-relay/internal/capability"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
@@ -76,6 +77,30 @@ func TestLLMAnthropicRouteUsesSecondaryAPIKey(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %q", response.Code, response.Body.String())
+	}
+}
+
+func TestDisabledRouteAttemptIsRecorded(t *testing.T) {
+	route := routes.HTTPRoute{
+		Name: "Downloads", Alias: "downloads", TargetSecretRef: "routes/downloads",
+		CapabilityDigest: capability.Hash("local-capability"), Policy: routes.NewHTTPPolicy([]string{http.MethodGet}, nil),
+		Enabled: false,
+	}
+	registry, err := routes.NewRegistry(route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := activity.NewMemoryRecorder()
+	handler := NewHandler(registry, secrets.NewMemoryStore(), nil, WithActivityRecorder(recorder))
+	request := httptest.NewRequest(http.MethodGet, "/r/downloads/file.zip", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("disabled route status = %d", response.Code)
+	}
+	events := recorder.List(10)
+	if len(events) != 1 || events[0].RouteAlias != route.Alias || events[0].Category != routes.KindHTTP || events[0].EventType != "request" || events[0].Result != "blocked" {
+		t.Fatalf("disabled route activity = %+v", events)
 	}
 }
 
@@ -324,6 +349,62 @@ func TestHandlerRewritesSameOriginRedirect(t *testing.T) {
 	}
 	if got := response.Header().Get("Location"); got != "/r/manual/next" {
 		t.Fatalf("Location = %q", got)
+	}
+}
+
+func TestHandlerRecordsRejectedRedirectAsFailed(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://untrusted.example/private")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer upstream.Close()
+
+	handler, token := newTestHandler(t, upstream.URL+"/downloads/", nil)
+	recorder := activity.NewMemoryRecorder()
+	handler.activity = recorder
+	request := httptest.NewRequest(http.MethodGet, "/r/manual/start", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, body = %q", response.Code, response.Body.String())
+	}
+	events := recorder.List(1)
+	if len(events) != 1 || events[0].Result != "failed" {
+		t.Fatalf("activity events = %+v", events)
+	}
+}
+
+func TestHandlerRecordsOnlySanitizedCategorizedActivity(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+	handler, token := newTestHandler(t, upstream.URL+"/private-target/", nil)
+	recorder := activity.NewMemoryRecorder()
+	handler.activity = recorder
+
+	allowed := httptest.NewRequest(http.MethodGet, "/r/manual/file?secret-query=hidden", nil)
+	allowed.URL.RawQuery = ""
+	allowed.RemoteAddr = "127.0.0.1:48123"
+	allowed.Header.Set("Authorization", "Bearer "+token)
+	handler.ServeHTTP(httptest.NewRecorder(), allowed)
+
+	blocked := httptest.NewRequest(http.MethodGet, "/r/manual/private-name", nil)
+	blocked.RemoteAddr = "192.168.1.25:48124"
+	blocked.Header.Set("Authorization", "Bearer wrong-local-token")
+	handler.ServeHTTP(httptest.NewRecorder(), blocked)
+
+	events := recorder.List(10)
+	if len(events) != 2 || events[0].Category != "HTTP" || events[0].Result != "blocked" || events[0].Caller != "private-lan" || events[1].Result != "allowed" || events[1].Caller != "loopback" {
+		t.Fatalf("activity events = %+v", events)
+	}
+	for _, event := range events {
+		if strings.Contains(event.Action, "private") || strings.Contains(event.Action, "secret") || event.Action != "GET request" {
+			t.Fatalf("activity leaked request details: %+v", event)
+		}
 	}
 }
 

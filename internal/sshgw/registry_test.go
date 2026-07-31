@@ -47,6 +47,47 @@ func TestRegistryValidatesAndDefensivelyClonesRoutes(t *testing.T) {
 	}
 }
 
+func TestRegistryMapsUniqueLocalUsernamesAndPreservesLegacyAliases(t *testing.T) {
+	legacy := Route{
+		Name: "Legacy", Alias: "legacy", TargetSecretRef: "ssh/legacy",
+		CapabilityDigest: capability.Hash("shared-local-password"),
+		Policy:           NewPolicy([]string{"uptime"}, nil, false),
+		Enabled:          true,
+	}
+	mapped := Route{
+		Name: "Builder", Alias: "build", LocalUsername: "builder",
+		TargetSecretRef: "ssh/build", CapabilityDigest: capability.Hash("shared-local-password"),
+		Policy: NewPolicy([]string{"uptime"}, nil, false), Enabled: true,
+	}
+	registry, err := NewRegistry(legacy, mapped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.EffectiveLocalUsername() != "legacy" {
+		t.Fatalf("legacy effective username = %q", legacy.EffectiveLocalUsername())
+	}
+	for username, wantAlias := range map[string]string{"legacy": "legacy", "builder": "build"} {
+		resolved, err := registry.LookupByUsername(username)
+		if err != nil || resolved.Alias != wantAlias {
+			t.Fatalf("LookupByUsername(%q) = %+v, %v", username, resolved, err)
+		}
+	}
+
+	duplicate := mapped
+	duplicate.Name = "Deploy"
+	duplicate.Alias = "deploy"
+	duplicate.TargetSecretRef = "ssh/deploy"
+	if err := registry.Upsert(duplicate); !errors.Is(err, ErrLocalUsernameInUse) {
+		t.Fatalf("duplicate local username error = %v", err)
+	}
+	if err := registry.SetLocalUsernameAndCommandPolicy("legacy", "builder", legacy.Policy); !errors.Is(err, ErrLocalUsernameInUse) {
+		t.Fatalf("duplicate username update error = %v", err)
+	}
+	if route, err := registry.Get("legacy"); err != nil || route.EffectiveLocalUsername() != "legacy" {
+		t.Fatalf("failed update changed legacy mapping: %+v, %v", route, err)
+	}
+}
+
 func TestRouteRejectsUnsafePolicy(t *testing.T) {
 	base := Route{
 		Alias:            "build",
@@ -57,6 +98,7 @@ func TestRouteRejectsUnsafePolicy(t *testing.T) {
 	}
 	invalid := []Route{
 		func() Route { route := base; route.Alias = "../build"; return route }(),
+		func() Route { route := base; route.LocalUsername = "Invalid User"; return route }(),
 		func() Route { route := base; route.TargetSecretRef = "routes/build"; return route }(),
 		func() Route { route := base; route.CapabilityDigest = capability.Digest{}; return route }(),
 		func() Route { route := base; route.Policy = NewPolicy([]string{""}, nil, false); return route }(),

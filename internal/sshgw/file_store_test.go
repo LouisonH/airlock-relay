@@ -2,6 +2,8 @@ package sshgw
 
 import (
 	"bytes"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,10 +17,10 @@ func TestSSHFileStoreRoundTripAndPermissions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ssh-routes.json")
 	store := NewFileStore(path)
 	route := Route{
-		Name: "Build", Alias: "build", TargetSecretRef: "ssh/build",
+		Name: "Build", Alias: "build", LocalUsername: "builder", TargetSecretRef: "ssh/build",
 		CapabilityDigest: capability.Hash("airlock-local-capability"),
 		Policy:           NewPolicy([]string{"printf airlock-ok"}, []string{"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, false),
-		Egress:           "Auto", Enabled: true,
+		Egress:           "Auto", AuthenticationTimeoutSeconds: 37, Enabled: true,
 	}
 	if err := store.Save([]Route{route}); err != nil {
 		t.Fatal(err)
@@ -34,7 +36,7 @@ func TestSSHFileStoreRoundTripAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded) != 1 || loaded[0].Alias != route.Alias || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || !loaded[0].Enabled {
+	if len(loaded) != 1 || loaded[0].Alias != route.Alias || loaded[0].LocalUsername != "builder" || loaded[0].AuthenticationTimeoutSeconds != 37 || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || !loaded[0].Enabled {
 		t.Fatalf("loaded SSH routes = %+v", loaded)
 	}
 	raw, err := os.ReadFile(path)
@@ -45,6 +47,44 @@ func TestSSHFileStoreRoundTripAndPermissions(t *testing.T) {
 		if bytes.Contains(raw, []byte(protected)) {
 			t.Fatalf("SSH metadata contains protected value %q", protected)
 		}
+	}
+}
+
+func TestSSHFileStoreLoadsLegacyAliasAsLocalUsername(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ssh-routes.json")
+	digest := capability.Hash("legacy-local-capability")
+	document := metadataDocument{
+		Version: sshMetadataVersion,
+		Routes: []persistedRoute{{
+			Name: "Legacy", Alias: "legacy", TargetSecretRef: "ssh/legacy",
+			CapabilityDigest: hex.EncodeToString(digest[:]),
+			AllowedCommands:  []string{"uptime"}, Egress: "Direct", Enabled: true,
+		}},
+	}
+	payload, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewFileStore(path)
+	loaded, err := store.Load()
+	if err != nil || len(loaded) != 1 {
+		t.Fatalf("legacy routes = %+v, %v", loaded, err)
+	}
+	if loaded[0].LocalUsername != "" || loaded[0].EffectiveLocalUsername() != "legacy" {
+		t.Fatalf("legacy username mapping = %+v", loaded[0])
+	}
+	if loaded[0].AuthenticationTimeoutSeconds != DefaultAuthenticationTimeoutSeconds {
+		t.Fatalf("legacy authentication timeout = %d", loaded[0].AuthenticationTimeoutSeconds)
+	}
+	if err := store.Save(loaded); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || !bytes.Contains(raw, []byte(`"local_username": "legacy"`)) {
+		t.Fatalf("upgraded metadata does not contain explicit local username: %s, %v", raw, err)
 	}
 }
 

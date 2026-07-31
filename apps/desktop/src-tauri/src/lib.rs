@@ -1,12 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     fs::OpenOptions,
     io::{BufRead, BufReader, Read, Write},
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     os::unix::net::UnixStream,
     path::PathBuf,
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc, Mutex,
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{
@@ -17,7 +21,120 @@ use tauri::{
 
 const CONTROL_PROTOCOL_VERSION: u8 = 1;
 const MAX_CONTROL_RESPONSE: u64 = 64 << 10;
+const CONTROL_EXCHANGE_TIMEOUT: Duration = Duration::from_secs(20);
 const SECURITY_SETTINGS_VERSION: u8 = 1;
+const DEVELOPER_WEBSITE_URL: &str = "https://0o0.site";
+const DEVELOPER_GITHUB_URL: &str = "https://github.com/LouisonH";
+static UI_LOCALE: AtomicU8 = AtomicU8::new(0);
+
+fn ui_locale() -> &'static str {
+    match UI_LOCALE.load(Ordering::Relaxed) {
+        1 => "en",
+        2 => "ja",
+        _ => "zh-CN",
+    }
+}
+
+#[tauri::command]
+fn set_ui_locale(locale: String) -> Result<(), String> {
+    let value = match locale.as_str() {
+        "zh-CN" => 0,
+        "en" => 1,
+        "ja" => 2,
+        _ => return Err("unsupported interface locale".to_string()),
+    };
+    UI_LOCALE.store(value, Ordering::Relaxed);
+    Ok(())
+}
+
+fn native_text(source: &str) -> Cow<'_, str> {
+    let translated = match (ui_locale(), source) {
+        ("en", "Airlock 安全录入") => "Airlock secure entry",
+        ("ja", "Airlock 安全录入") => "Airlock セキュア入力",
+        ("en", "取消") => "Cancel",
+        ("ja", "取消") => "キャンセル",
+        ("en", "继续") => "Continue",
+        ("ja", "继续") => "続行",
+        ("en", "保存") => "Save",
+        ("ja", "保存") => "保存",
+        ("en", "不设置") => "Skip",
+        ("ja", "不设置") => "設定しない",
+        ("en", "完成") => "Done",
+        ("ja", "完成") => "完了",
+        ("en", "应用并重启") => "Apply and restart",
+        ("ja", "应用并重启") => "適用して再起動",
+        ("en", "Airlock 安全设置") => "Airlock security settings",
+        ("ja", "Airlock 安全设置") => "Airlock セキュリティ設定",
+        ("en", "局域网设备将能连接 Airlock 的 HTTP/SSH 入口，仍需要每条路由的凭据。") => "Devices on the private LAN will be able to connect to Airlock's HTTP/SSH endpoints. Each route credential is still required.",
+        ("ja", "局域网设备将能连接 Airlock 的 HTTP/SSH 入口，仍需要每条路由的凭据。") => "プライベート LAN 上のデバイスから Airlock の HTTP/SSH 入口に接続できるようになります。各ルートの認証情報は引き続き必要です。",
+        ("en", "上游地址和凭据将保存在仅当前用户可读的 0600 文件中，不再由 macOS Keychain 加密保护。") => "Upstream addresses and credentials will be stored in a 0600 file readable only by the current user, without macOS Keychain encryption.",
+        ("ja", "上游地址和凭据将保存在仅当前用户可读的 0600 文件中，不再由 macOS Keychain 加密保护。") => "上流アドレスと認証情報は、現在のユーザーだけが読み取れる 0600 ファイルに保存され、macOS Keychain では暗号化されません。",
+        ("en", "应用设置会短暂重启本地转发核心。") => "Applying these settings briefly restarts the local relay core.",
+        ("ja", "应用设置会短暂重启本地转发核心。") => "設定を適用すると、ローカル転送コアが短時間再起動します。",
+        ("en", "高风险 SSH 权限") => "High-risk SSH permissions",
+        ("ja", "高风险 SSH 权限") => "高リスク SSH 権限",
+        ("en", "允许所有 exec") => "Allow all exec",
+        ("ja", "允许所有 exec") => "すべての exec を許可",
+        ("en", "确认 SSH Host Key") => "Confirm SSH Host Key",
+        ("ja", "确认 SSH Host Key") => "SSH Host Key を確認",
+        ("en", "指纹一致") => "Fingerprint matches",
+        ("ja", "指纹一致") => "フィンガープリントが一致",
+        ("en", "输入完整目标 URL。该内容仅发送到本机 airlockd，并保存进当前选择的受保护凭据存储。") => "Enter the complete target URL. It is sent only to the local airlockd and saved in the selected protected credential store.",
+        ("ja", "输入完整目标 URL。该内容仅发送到本机 airlockd，并保存进当前选择的受保护凭据存储。") => "完全な対象 URL を入力します。ローカルの airlockd だけに送信され、選択中の保護された認証情報ストアに保存されます。",
+        ("en", "输入上游 Authorization 值，例如 Bearer token。无需认证可选择“不设置”。") => "Enter the upstream Authorization value, such as a Bearer token. Choose Skip when authentication is not required.",
+        ("ja", "输入上游 Authorization 值，例如 Bearer token。无需认证可选择“不设置”。") => "Bearer token などの上流 Authorization 値を入力します。認証が不要な場合は「設定しない」を選択します。",
+        ("en", "LLM 设置 1/3 · 上游 Base URL") => "LLM setup 1/3 · Upstream Base URL",
+        ("ja", "LLM 设置 1/3 · 上游 Base URL") => "LLM 設定 1/3 · 上流 Base URL",
+        ("en", "输入兼容供应商的 Base URL。真实地址只会发送到本机 airlockd。") => "Enter the compatible provider Base URL. The real address is sent only to the local airlockd.",
+        ("ja", "输入兼容供应商的 Base URL。真实地址只会发送到本机 airlockd。") => "互換プロバイダーの Base URL を入力します。実アドレスはローカルの airlockd だけに送信されます。",
+        ("en", "LLM 设置 2/3 · 上游 API Key") => "LLM setup 2/3 · Upstream API key",
+        ("ja", "LLM 设置 2/3 · 上游 API Key") => "LLM 設定 2/3 · 上流 API Key",
+        ("en", "输入真实上游 API Key。调用者不会看到该 Key。") => "Enter the real upstream API key. Callers never see this key.",
+        ("ja", "输入真实上游 API Key。调用者不会看到该 Key。") => "実際の上流 API Key を入力します。呼び出し元にこの Key は表示されません。",
+        ("en", "SSH 设置 · 上游地址") => "SSH setup · Upstream address",
+        ("ja", "SSH 设置 · 上游地址") => "SSH 設定 · 上流アドレス",
+        ("en", "输入上游 SSH 地址，可使用 host、host:port 或 IP。地址只会发送到本机 airlockd。") => "Enter the upstream SSH address as host, host:port, or IP. It is sent only to the local airlockd.",
+        ("ja", "输入上游 SSH 地址，可使用 host、host:port 或 IP。地址只会发送到本机 airlockd。") => "host、host:port、または IP 形式で上流 SSH アドレスを入力します。アドレスはローカルの airlockd だけに送信されます。",
+        ("en", "SSH 设置 · 上游账号") => "SSH setup · Upstream account",
+        ("ja", "SSH 设置 · 上游账号") => "SSH 設定 · 上流アカウント",
+        ("en", "输入上游 SSH 用户名。调用者只会看到本地 SSH 用户名，不会看到上游账号。") => "Enter the upstream SSH username. Callers see only the local SSH username, never the upstream account.",
+        ("ja", "输入上游 SSH 用户名。调用者只会看到本地 SSH 用户名，不会看到上游账号。") => "上流 SSH ユーザー名を入力します。呼び出し元にはローカル SSH ユーザー名だけが表示され、上流アカウントは表示されません。",
+        ("en", "SSH 设置 · 上游密码") => "SSH setup · Upstream password",
+        ("ja", "SSH 设置 · 上游密码") => "SSH 設定 · 上流パスワード",
+        ("en", "输入上游 SSH 密码。密码只会交给本机核心，并按设置中的凭据保护方式保存。") => "Enter the upstream SSH password. It is passed only to the local core and stored using the configured credential protection.",
+        ("ja", "输入上游 SSH 密码。密码只会交给本机核心，并按设置中的凭据保护方式保存。") => "上流 SSH パスワードを入力します。ローカルコアだけに渡され、設定中の認証情報保護方式で保存されます。",
+        ("en", "SSH 设置 · 本地登录密码") => "SSH setup · Local login password",
+        ("ja", "SSH 设置 · 本地登录密码") => "SSH 設定 · ローカルログインパスワード",
+        ("en", "可选：输入至少 12 个字节的本地 SSH 密码。它与上游密码完全隔离，Airlock 只保存摘要。选择“不设置”将自动生成高强度 Capability。") => "Optional: enter a local SSH password of at least 12 bytes. It is isolated from the upstream password and Airlock stores only its digest. Choose Skip to generate a strong capability.",
+        ("ja", "可选：输入至少 12 个字节的本地 SSH 密码。它与上游密码完全隔离，Airlock 只保存摘要。选择“不设置”将自动生成高强度 Capability。") => "任意：12 バイト以上のローカル SSH パスワードを入力します。上流パスワードとは完全に分離され、Airlock はダイジェストのみ保存します。「設定しない」で強力な Capability を自動生成します。",
+        ("en", "SSH 设置 · 确认本地密码") => "SSH setup · Confirm local password",
+        ("ja", "SSH 设置 · 确认本地密码") => "SSH 設定 · ローカルパスワードを確認",
+        ("en", "再次输入本地 SSH 密码。") => "Enter the local SSH password again.",
+        ("ja", "再次输入本地 SSH 密码。") => "ローカル SSH パスワードをもう一度入力します。",
+        ("en", "输入 Clash 或其他本地代理 URL，例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:7890。认证信息可写在 URL 中，内容仅进入当前选择的受保护凭据存储。") => "Enter a Clash or other local proxy URL, such as http://127.0.0.1:7890 or socks5://127.0.0.1:7890. Authentication may be included in the URL and is stored only in the selected protected credential store.",
+        ("ja", "输入 Clash 或其他本地代理 URL，例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:7890。认证信息可写在 URL 中，内容仅进入当前选择的受保护凭据存储。") => "http://127.0.0.1:7890 または socks5://127.0.0.1:7890 などの Clash またはローカルプロキシ URL を入力します。認証情報は URL に含められ、選択中の保護ストアにのみ保存されます。",
+        ("en", "LLM 设置 3/3 · 二次 API Key") => "LLM setup 3/3 · Secondary API key",
+        ("ja", "LLM 设置 3/3 · 二次 API Key") => "LLM 設定 3/3 · 二次 API Key",
+        ("en", "为调用者创建一把独立的二次 API Key。它只用于访问 Airlock，真实上游 Key 不会暴露。\n\n随机生成提供 256-bit 强度并仅显示一次；自定义 Key 会要求隐藏输入两次。") => "Create an independent secondary API key for callers. It accesses only Airlock and never exposes the real upstream key.\n\nRandom generation provides 256-bit strength and is shown once. A custom key requires two hidden entries.",
+        ("ja", "为调用者创建一把独立的二次 API Key。它只用于访问 Airlock，真实上游 Key 不会暴露。\n\n随机生成提供 256-bit 强度并仅显示一次；自定义 Key 会要求隐藏输入两次。") => "呼び出し元用の独立した二次 API Key を作成します。Airlock へのアクセスだけに使用され、実際の上流 Key は公開されません。\n\nランダム生成は 256-bit 強度で一度だけ表示されます。カスタム Key は非表示で 2 回入力します。",
+        ("en", "自定义 Key") => "Custom key",
+        ("ja", "自定义 Key") => "カスタム Key",
+        ("en", "随机生成（推荐）") => "Generate randomly (recommended)",
+        ("ja", "随机生成（推荐）") => "ランダム生成（推奨）",
+        ("en", "请通过可信渠道核对上游 SSH Host Key 指纹。指纹不一致时请取消。") => "Verify the upstream SSH Host Key fingerprint through a trusted channel. Cancel if it does not match.",
+        ("ja", "请通过可信渠道核对上游 SSH Host Key 指纹。指纹不一致时请取消。") => "信頼できる経路で上流 SSH Host Key のフィンガープリントを確認してください。一致しない場合はキャンセルします。",
+        ("en", "路由已安全保存。Capability 仅显示这一次，请交给需要访问该路由的客户端。") => "The route was saved securely. This capability is shown once; give it only to the client that needs this route.",
+        ("ja", "路由已安全保存。Capability 仅显示这一次，请交给需要访问该路由的客户端。") => "ルートは安全に保存されました。Capability は一度だけ表示されます。このルートが必要なクライアントだけに渡してください。",
+        ("en", "Airlock 路由已创建") => "Airlock route created",
+        ("ja", "Airlock 路由已创建") => "Airlock ルート作成済み",
+        ("en", "Airlock LLM 路由已创建") => "Airlock LLM route created",
+        ("ja", "Airlock LLM 路由已创建") => "Airlock LLM ルート作成済み",
+        ("en", "Airlock SSH 路由已创建") => "Airlock SSH route created",
+        ("ja", "Airlock SSH 路由已创建") => "Airlock SSH ルート作成済み",
+        _ => return Cow::Borrowed(source),
+    };
+    Cow::Borrowed(translated)
+}
 
 #[derive(Clone)]
 struct ControlClient {
@@ -79,6 +196,39 @@ impl Default for SecuritySettings {
     }
 }
 
+fn allowed_external_url(url: &str) -> Option<&'static str> {
+    match url {
+        DEVELOPER_WEBSITE_URL | "https://0o0.site/" => Some(DEVELOPER_WEBSITE_URL),
+        DEVELOPER_GITHUB_URL | "https://github.com/LouisonH/" => Some(DEVELOPER_GITHUB_URL),
+        _ => None,
+    }
+}
+
+fn external_open_command(target: &str) -> Command {
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", ""]);
+        command
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = Command::new("xdg-open");
+    command.arg(target);
+    command
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let target =
+        allowed_external_url(&url).ok_or_else(|| "拒绝打开未授权的外部链接".to_string())?;
+    external_open_command(target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| "无法打开默认浏览器".to_string())
+}
+
 #[derive(Clone)]
 struct SecurityConfiguration {
     path: PathBuf,
@@ -91,6 +241,8 @@ struct RouteSummary {
     id: String,
     name: String,
     alias: String,
+    #[serde(default)]
+    local_username: String,
     kind: String,
     status: String,
     local_endpoint: String,
@@ -121,6 +273,8 @@ struct RouteSummary {
     input_tokens: u64,
     #[serde(default)]
     output_tokens: u64,
+    #[serde(default)]
+    authentication_timeout_seconds: u32,
 }
 
 #[derive(Serialize)]
@@ -185,6 +339,7 @@ fn slice_is_empty<T>(value: &[T]) -> bool {
 struct CreateSSHRoute<'a> {
     name: &'a str,
     alias: &'a str,
+    local_username: &'a str,
     address: &'a str,
     username: &'a str,
     password: &'a str,
@@ -194,14 +349,19 @@ struct CreateSSHRoute<'a> {
     allowed_command: &'a str,
     allow_all_commands: bool,
     record_commands: bool,
+    authentication_timeout_seconds: u32,
     egress: &'a str,
 }
 
 #[derive(Serialize)]
 struct SSHPolicyUpdate<'a> {
+    name: &'a str,
+    local_username: &'a str,
     allowed_command: &'a str,
     allow_all_commands: bool,
     record_commands: bool,
+    authentication_timeout_seconds: u32,
+    egress: &'a str,
 }
 
 #[derive(Serialize)]
@@ -227,6 +387,7 @@ struct ControlResponse {
     #[serde(default)]
     ssh_ready: bool,
     ssh_host_key_probe: Option<SSHHostKeyProbe>,
+    health_check: Option<HealthCheckSummary>,
     #[serde(default)]
     activity: Vec<ActivityEvent>,
 }
@@ -242,12 +403,41 @@ struct ActivityEvent {
     result: String,
     latency: String,
     egress: String,
+    #[serde(default)]
+    category: String,
+    #[serde(default)]
+    event_type: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HealthCheckSummary {
+    alias: String,
+    status: String,
+    message: String,
+    latency: String,
+    checked_at: String,
 }
 
 #[derive(Deserialize)]
 struct SSHHostKeyProbe {
     host_key: String,
     fingerprint: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SSHHostKeyProbeResult {
+    host_key: String,
+    fingerprint: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SSHRouteCreationResult {
+    route: RouteSummary,
+    local_credential: String,
+    generated_credential: bool,
 }
 
 #[derive(Deserialize)]
@@ -285,6 +475,14 @@ struct SecurityUpdate {
 
 impl ControlClient {
     fn request(&self, request: &ControlRequest<'_>) -> Result<ControlResponse, String> {
+        self.request_with_timeout(request, CONTROL_EXCHANGE_TIMEOUT)
+    }
+
+    fn request_with_timeout(
+        &self,
+        request: &ControlRequest<'_>,
+        timeout: Duration,
+    ) -> Result<ControlResponse, String> {
         let authenticated = ControlRequest {
             version: request.version,
             token: &self.token.0,
@@ -306,6 +504,7 @@ impl ControlClient {
             create_ssh: request.create_ssh.as_ref().map(|create| CreateSSHRoute {
                 name: create.name,
                 alias: create.alias,
+                local_username: create.local_username,
                 address: create.address,
                 username: create.username,
                 password: create.password,
@@ -314,6 +513,7 @@ impl ControlClient {
                 allowed_command: create.allowed_command,
                 allow_all_commands: create.allow_all_commands,
                 record_commands: create.record_commands,
+                authentication_timeout_seconds: create.authentication_timeout_seconds,
                 egress: create.egress,
             }),
             probe_ssh: request.probe_ssh.as_ref().map(|probe| ProbeSSHHostKey {
@@ -321,9 +521,13 @@ impl ControlClient {
                 egress: probe.egress,
             }),
             ssh_policy: request.ssh_policy.as_ref().map(|policy| SSHPolicyUpdate {
+                name: policy.name,
+                local_username: policy.local_username,
                 allowed_command: policy.allowed_command,
                 allow_all_commands: policy.allow_all_commands,
                 record_commands: policy.record_commands,
+                authentication_timeout_seconds: policy.authentication_timeout_seconds,
+                egress: policy.egress,
             }),
             alias: request.alias,
             enabled: request.enabled,
@@ -335,19 +539,19 @@ impl ControlClient {
         let mut payload =
             serde_json::to_vec(&authenticated).map_err(|_| "无法编码控制请求".to_string())?;
         payload.push(b'\n');
-        let result = self.exchange(&payload);
+        let result = self.exchange(&payload, timeout);
         payload.fill(0);
         result
     }
 
-    fn exchange(&self, payload: &[u8]) -> Result<ControlResponse, String> {
+    fn exchange(&self, payload: &[u8], timeout: Duration) -> Result<ControlResponse, String> {
         let mut stream = UnixStream::connect(&self.socket_path)
             .map_err(|_| "无法连接 airlockd 控制通道".to_string())?;
         stream
-            .set_read_timeout(Some(Duration::from_secs(10)))
+            .set_read_timeout(Some(timeout))
             .map_err(|_| "无法保护控制通道".to_string())?;
         stream
-            .set_write_timeout(Some(Duration::from_secs(10)))
+            .set_write_timeout(Some(timeout))
             .map_err(|_| "无法保护控制通道".to_string())?;
         stream
             .write_all(payload)
@@ -471,27 +675,13 @@ fn delete_route(
     client: tauri::State<'_, ControlClient>,
     alias: String,
 ) -> Result<ControlUpdate, String> {
-    let request = ControlRequest {
-        version: CONTROL_PROTOCOL_VERSION,
-        token: "",
-        action: "delete_route",
-        create: None,
-        create_ssh: None,
-        probe_ssh: None,
-        ssh_policy: None,
-        alias: Some(&alias),
-        enabled: None,
-        proxy_url: None,
-        capability: None,
-        command: None,
-        secret_store_mode: None,
-    };
+    let request = delete_route_request(&alias);
     client.request(&request).map(|response| ControlUpdate {
         routes: response.routes,
         message: if response.warning.is_empty() {
             None
         } else {
-            Some("路由已删除，但 Keychain 清理需要检查".to_string())
+            Some("路由已删除，但旧凭据副本清理需要检查".to_string())
         },
     })
 }
@@ -533,7 +723,7 @@ fn create_http_route_blocking(
     }
 
     let mut base_url = prompt_protected_value(
-        "输入完整目标 URL。该内容仅发送到本机 airlockd 并保存进 Keychain。",
+        "输入完整目标 URL。该内容仅发送到本机 airlockd，并保存进当前选择的受保护凭据存储。",
         false,
     )?;
     let mut authorization = prompt_protected_value(
@@ -789,159 +979,151 @@ fn create_llm_route_blocking(
         .ok_or_else(|| "新 LLM 路由未出现在控制状态中".to_string())
 }
 
-#[tauri::command]
-async fn create_ssh_route(
-    client: tauri::State<'_, ControlClient>,
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CreateSSHRouteInput {
     name: String,
     alias: String,
+    local_username: String,
+    address: String,
+    username: String,
+    password: String,
+    local_password: String,
+    expected_host_key: String,
     egress: String,
     allowed_command: String,
     allow_all_commands: bool,
+    allow_all_confirmed: bool,
     record_commands: bool,
-) -> Result<RouteSummary, String> {
+    authentication_timeout_seconds: u32,
+}
+
+#[tauri::command]
+async fn probe_ssh_host_key(
+    client: tauri::State<'_, ControlClient>,
+    address: String,
+    egress: String,
+) -> Result<SSHHostKeyProbeResult, String> {
     let client = client.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        create_ssh_route_blocking(
-            client,
-            name,
-            alias,
-            egress,
-            allowed_command,
-            allow_all_commands,
-            record_commands,
-        )
+        validate_ssh_upstream(&address, "probe-user", "probe-password")?;
+        validate_egress(&egress)?;
+        let request = ControlRequest {
+            version: CONTROL_PROTOCOL_VERSION,
+            token: "",
+            action: "probe_ssh_host_key",
+            create: None,
+            create_ssh: None,
+            probe_ssh: Some(ProbeSSHHostKey {
+                address: address.trim(),
+                egress: &egress,
+            }),
+            ssh_policy: None,
+            alias: None,
+            enabled: None,
+            proxy_url: None,
+            capability: None,
+            command: None,
+            secret_store_mode: None,
+        };
+        let probe = client
+            .request(&request)?
+            .ssh_host_key_probe
+            .ok_or_else(|| "airlockd 未返回 SSH Host Key".to_string())?;
+        Ok(SSHHostKeyProbeResult {
+            host_key: probe.host_key,
+            fingerprint: probe.fingerprint,
+        })
     })
     .await
-    .map_err(|_| "SSH 原生安全录入意外终止".to_string())?
+    .map_err(|_| "SSH Host Key 检测意外终止".to_string())?
+}
+
+#[tauri::command]
+async fn create_ssh_route(
+    client: tauri::State<'_, ControlClient>,
+    input: CreateSSHRouteInput,
+) -> Result<SSHRouteCreationResult, String> {
+    let client = client.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || create_ssh_route_blocking(client, input))
+        .await
+        .map_err(|_| "SSH 路由创建意外终止".to_string())?
 }
 
 fn create_ssh_route_blocking(
     client: ControlClient,
-    name: String,
-    alias: String,
-    egress: String,
-    allowed_command: String,
-    allow_all_commands: bool,
-    record_commands: bool,
-) -> Result<RouteSummary, String> {
-    validate_route_identity(&name, &alias, &egress)?;
-    validate_ssh_command(&allowed_command, allow_all_commands)?;
-    if allow_all_commands {
-        confirm_allow_all_commands(&alias)?;
+    input: CreateSSHRouteInput,
+) -> Result<SSHRouteCreationResult, String> {
+    let CreateSSHRouteInput {
+        name,
+        alias,
+        local_username,
+        mut address,
+        mut username,
+        mut password,
+        mut local_password,
+        mut expected_host_key,
+        egress,
+        allowed_command,
+        allow_all_commands,
+        allow_all_confirmed,
+        record_commands,
+        authentication_timeout_seconds,
+    } = input;
+    let validation = validate_route_identity(&name, &alias, &egress)
+        .and_then(|_| validate_ssh_local_username(&local_username))
+        .and_then(|_| validate_ssh_command(&allowed_command, allow_all_commands))
+        .and_then(|_| validate_ssh_upstream(&address, &username, &password))
+        .and_then(|_| validate_ssh_authentication_timeout(authentication_timeout_seconds));
+    if let Err(error) = validation {
+        clear_ssh_credentials(
+            &mut address,
+            &mut username,
+            &mut password,
+            &mut local_password,
+        );
+        clear_string(&mut expected_host_key);
+        return Err(error);
     }
-    let mut address = prompt_native_value_with_title(
-        "SSH 设置 · 上游地址",
-        "输入上游 SSH 地址，可使用 host、host:port 或 IP。地址只会发送到本机 airlockd。",
-        false,
-        false,
-        "",
-    )?;
-    let mut username = prompt_native_value_with_title(
-        "SSH 设置 · 上游账号",
-        "输入上游 SSH 用户名。调用者只会看到本地路由别名。",
-        false,
-        false,
-        "",
-    )?;
-    let mut password = prompt_native_value_with_title(
-        "SSH 设置 · 上游密码",
-        "输入上游 SSH 密码。密码只会交给本机核心，并按设置中的凭据保护方式保存。",
-        false,
-        true,
-        "",
-    )?;
-    let mut local_password = prompt_native_value_with_title(
-	    "SSH 设置 · 本地登录密码",
-	    "可选：输入至少 12 个字节的本地 SSH 密码。它与上游密码完全隔离，Airlock 只保存摘要。选择“不设置”将自动生成高强度 Capability。",
-	    true,
-	    true,
-	    "",
-	)?;
-    if !local_password.is_empty() {
-        if local_password.len() < 12
+    if expected_host_key.is_empty() || expected_host_key.len() > 16 << 10 {
+        clear_ssh_credentials(
+            &mut address,
+            &mut username,
+            &mut password,
+            &mut local_password,
+        );
+        clear_string(&mut expected_host_key);
+        return Err("请先检测并确认上游 SSH Host Key".to_string());
+    }
+    if !local_password.is_empty()
+        && (local_password.len() < 12
             || local_password.len() > 1024
-            || local_password.contains(['\0', '\r', '\n'])
-        {
-            clear_ssh_credentials(
-                &mut address,
-                &mut username,
-                &mut password,
-                &mut local_password,
-            );
-            return Err("本地 SSH 密码需要 12 到 1024 个字节，且不能包含换行".to_string());
-        }
-        let mut confirmation = prompt_native_value_with_title(
-            "SSH 设置 · 确认本地密码",
-            "再次输入本地 SSH 密码。",
-            false,
-            true,
-            "",
-        )?;
-        let matches = local_password == confirmation;
-        clear_string(&mut confirmation);
-        if !matches {
-            clear_ssh_credentials(
-                &mut address,
-                &mut username,
-                &mut password,
-                &mut local_password,
-            );
-            return Err("两次输入的本地 SSH 密码不一致".to_string());
-        }
+            || local_password.contains(['\0', '\r', '\n']))
+    {
+        clear_ssh_credentials(
+            &mut address,
+            &mut username,
+            &mut password,
+            &mut local_password,
+        );
+        clear_string(&mut expected_host_key);
+        return Err("本地 SSH 密码需要 12 到 1024 个字节，且不能包含换行".to_string());
+    }
+    if allow_all_commands && !allow_all_confirmed {
+        clear_ssh_credentials(
+            &mut address,
+            &mut username,
+            &mut password,
+            &mut local_password,
+        );
+        clear_string(&mut expected_host_key);
+        return Err("请确认所有 SSH exec 命令的高风险权限".to_string());
     }
     let mut command = if allow_all_commands {
         "printf airlock-ok".to_string()
     } else {
         allowed_command
     };
-
-    let probe_request = ControlRequest {
-        version: CONTROL_PROTOCOL_VERSION,
-        token: "",
-        action: "probe_ssh_host_key",
-        create: None,
-        create_ssh: None,
-        probe_ssh: Some(ProbeSSHHostKey {
-            address: &address,
-            egress: &egress,
-        }),
-        ssh_policy: None,
-        alias: None,
-        enabled: None,
-        proxy_url: None,
-        capability: None,
-        command: None,
-        secret_store_mode: None,
-    };
-    let probe_result = client.request(&probe_request);
-    let mut probe = match probe_result {
-        Ok(response) => response
-            .ssh_host_key_probe
-            .ok_or_else(|| "airlockd 未返回 SSH Host Key".to_string())?,
-        Err(error) => {
-            clear_ssh_inputs(
-                &mut address,
-                &mut username,
-                &mut password,
-                &mut local_password,
-                &mut command,
-            );
-            return Err(error);
-        }
-    };
-    let confirmation = confirm_ssh_host_key(&probe.fingerprint);
-    clear_string(&mut probe.fingerprint);
-    if let Err(error) = confirmation {
-        clear_string(&mut probe.host_key);
-        clear_ssh_inputs(
-            &mut address,
-            &mut username,
-            &mut password,
-            &mut local_password,
-            &mut command,
-        );
-        return Err(error);
-    }
 
     let create_request = ControlRequest {
         version: CONTROL_PROTOCOL_VERSION,
@@ -951,14 +1133,16 @@ fn create_ssh_route_blocking(
         create_ssh: Some(CreateSSHRoute {
             name: name.trim(),
             alias: &alias,
+            local_username: &local_username,
             address: &address,
             username: &username,
             password: &password,
             local_password: &local_password,
-            expected_host_key: &probe.host_key,
+            expected_host_key: &expected_host_key,
             allowed_command: &command,
             allow_all_commands,
             record_commands,
+            authentication_timeout_seconds,
             egress: &egress,
         }),
         probe_ssh: None,
@@ -971,15 +1155,20 @@ fn create_ssh_route_blocking(
         secret_store_mode: None,
     };
     let create_result = client.request(&create_request);
-    clear_string(&mut probe.host_key);
+    clear_string(&mut expected_host_key);
     clear_string(&mut address);
     clear_string(&mut username);
     clear_string(&mut password);
     let custom_local_password = !local_password.is_empty();
     let mut created = match create_result {
-        Ok(response) => response
-            .created
-            .ok_or_else(|| "airlockd 未返回新 SSH 路由".to_string())?,
+        Ok(response) => match response.created {
+            Some(created) => created,
+            None => {
+                clear_string(&mut local_password);
+                clear_string(&mut command);
+                return Err("airlockd 未返回新 SSH 路由".to_string());
+            }
+        },
         Err(error) => {
             clear_string(&mut local_password);
             clear_string(&mut command);
@@ -992,60 +1181,18 @@ fn create_ssh_route_blocking(
         clear_string(&mut command);
         return Err("airlockd 返回了不一致的本地 SSH 凭据".to_string());
     }
-    let mut local_authentication = if custom_local_password {
-        std::mem::take(&mut local_password)
+    clear_string(&mut command);
+    let local_credential = if custom_local_password {
+        clear_string(&mut local_password);
+        String::new()
     } else {
         std::mem::take(&mut created.capability)
     };
-
-    let enable = route_enabled_request(&alias, true);
-    let enabled_response = match client.request(&enable) {
-        Ok(response) => response,
-        Err(error) => {
-            clear_string(&mut local_authentication);
-            clear_string(&mut command);
-            return Err(error);
-        }
-    };
-    let test = ControlRequest {
-        version: CONTROL_PROTOCOL_VERSION,
-        token: "",
-        action: "test_ssh_route",
-        create: None,
-        create_ssh: None,
-        probe_ssh: None,
-        ssh_policy: None,
-        alias: Some(&alias),
-        enabled: None,
-        proxy_url: None,
-        capability: Some(&local_authentication),
-        command: Some(&command),
-        secret_store_mode: None,
-    };
-    if let Err(error) = client.request(&test) {
-        let _ = client.request(&route_enabled_request(&alias, false));
-        clear_string(&mut local_authentication);
-        clear_string(&mut command);
-        return Err(format!("SSH 路由已保存但保持停用：{error}"));
-    }
-    clear_string(&mut command);
-
-    let presentation = if custom_local_password {
-        present_custom_ssh_access(&created.route.local_endpoint)
-    } else {
-        present_capability(&created.route.local_endpoint, &local_authentication)
-    };
-    if let Err(error) = presentation {
-        let _ = client.request(&route_enabled_request(&alias, false));
-        clear_string(&mut local_authentication);
-        return Err(error);
-    }
-    clear_string(&mut local_authentication);
-    enabled_response
-        .routes
-        .into_iter()
-        .find(|route| route.alias == alias)
-        .ok_or_else(|| "新 SSH 路由未出现在控制状态中".to_string())
+    Ok(SSHRouteCreationResult {
+        route: created.route,
+        local_credential,
+        generated_credential: !custom_local_password,
+    })
 }
 
 fn validate_route_identity(name: &str, alias: &str, egress: &str) -> Result<(), String> {
@@ -1060,8 +1207,37 @@ fn validate_route_identity(name: &str, alias: &str, egress: &str) -> Result<(), 
     {
         return Err("别名只能包含小写字母、数字和连字符".to_string());
     }
-    if egress != "Direct" && egress != "Proxy" && egress != "Auto" {
-        return Err("出口策略无效".to_string());
+    validate_egress(egress)
+}
+
+fn validate_ssh_authentication_timeout(seconds: u32) -> Result<(), String> {
+    if !(3..=120).contains(&seconds) {
+        return Err("SSH 认证预算需要在 3 到 120 秒之间".to_string());
+    }
+    Ok(())
+}
+
+fn validate_egress(egress: &str) -> Result<(), String> {
+    if matches!(egress, "Direct" | "Proxy" | "Auto") {
+        Ok(())
+    } else {
+        Err("出口策略无效".to_string())
+    }
+}
+
+fn validate_ssh_upstream(address: &str, username: &str, password: &str) -> Result<(), String> {
+    if address.trim().is_empty()
+        || address.len() > 512
+        || address.chars().any(char::is_whitespace)
+        || address.contains('\0')
+    {
+        return Err("请输入有效的上游 SSH 地址".to_string());
+    }
+    if username.is_empty() || username.len() > 255 || username.contains(['\0', '\r', '\n']) {
+        return Err("请输入有效的上游 SSH 用户名".to_string());
+    }
+    if password.is_empty() || password.len() > 8 << 10 || password.contains('\0') {
+        return Err("请输入有效的上游 SSH 密码".to_string());
     }
     Ok(())
 }
@@ -1076,33 +1252,36 @@ fn validate_ssh_command(command: &str, allow_all_commands: bool) -> Result<(), S
     Ok(())
 }
 
-fn route_enabled_request(alias: &str, enabled: bool) -> ControlRequest<'_> {
+fn validate_ssh_local_username(username: &str) -> Result<(), String> {
+    if username.is_empty()
+        || username.len() > 64
+        || !username.bytes().enumerate().all(|(index, byte)| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || (index > 0 && matches!(byte, b'.' | b'_' | b'-'))
+        })
+    {
+        return Err("本地 SSH 用户名只能包含小写字母、数字、点、下划线和连字符".to_string());
+    }
+    Ok(())
+}
+
+fn delete_route_request(alias: &str) -> ControlRequest<'_> {
     ControlRequest {
         version: CONTROL_PROTOCOL_VERSION,
         token: "",
-        action: "set_route_enabled",
+        action: "delete_route",
         create: None,
         create_ssh: None,
         probe_ssh: None,
         ssh_policy: None,
         alias: Some(alias),
-        enabled: Some(enabled),
+        enabled: None,
         proxy_url: None,
         capability: None,
         command: None,
         secret_store_mode: None,
     }
-}
-
-fn clear_ssh_inputs(
-    address: &mut String,
-    username: &mut String,
-    password: &mut String,
-    local_password: &mut String,
-    command: &mut String,
-) {
-    clear_ssh_credentials(address, username, password, local_password);
-    clear_string(command);
 }
 
 fn clear_ssh_credentials(
@@ -1118,35 +1297,55 @@ fn clear_ssh_credentials(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn set_ssh_policy(
     client: tauri::State<'_, ControlClient>,
     alias: String,
+    name: String,
+    local_username: String,
     allowed_command: String,
     allow_all_commands: bool,
     record_commands: bool,
+    authentication_timeout_seconds: u32,
+    egress: String,
 ) -> Result<Vec<RouteSummary>, String> {
     let client = client.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         set_ssh_policy_blocking(
             client,
             alias,
+            name,
+            local_username,
             allowed_command,
             allow_all_commands,
             record_commands,
+            authentication_timeout_seconds,
+            egress,
         )
     })
     .await
     .map_err(|_| "SSH 权限设置意外终止".to_string())?
 }
 
+#[allow(clippy::too_many_arguments)]
 fn set_ssh_policy_blocking(
     client: ControlClient,
     alias: String,
+    name: String,
+    local_username: String,
     allowed_command: String,
     allow_all_commands: bool,
     record_commands: bool,
+    authentication_timeout_seconds: u32,
+    egress: String,
 ) -> Result<Vec<RouteSummary>, String> {
+    if name.trim().is_empty() || name.len() > 80 {
+        return Err("请输入有效的 SSH 映射名称".to_string());
+    }
+    validate_ssh_local_username(&local_username)?;
     validate_ssh_command(&allowed_command, allow_all_commands)?;
+    validate_ssh_authentication_timeout(authentication_timeout_seconds)?;
+    validate_egress(&egress)?;
     let mut command = if allow_all_commands {
         confirm_allow_all_commands(&alias)?;
         String::new()
@@ -1161,9 +1360,13 @@ fn set_ssh_policy_blocking(
         create_ssh: None,
         probe_ssh: None,
         ssh_policy: Some(SSHPolicyUpdate {
+            name: name.trim(),
+            local_username: &local_username,
             allowed_command: &command,
             allow_all_commands,
             record_commands,
+            authentication_timeout_seconds,
+            egress: &egress,
         }),
         alias: Some(&alias),
         enabled: None,
@@ -1175,6 +1378,188 @@ fn set_ssh_policy_blocking(
     let result = client.request(&request).map(|response| response.routes);
     clear_string(&mut command);
     result
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UpdateSSHHostInput {
+    alias: String,
+    address: String,
+    username: String,
+    password: String,
+    expected_host_key: String,
+    egress: String,
+}
+
+#[tauri::command]
+async fn update_ssh_target(
+    client: tauri::State<'_, ControlClient>,
+    input: UpdateSSHHostInput,
+) -> Result<Vec<RouteSummary>, String> {
+    let client = client.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || update_ssh_target_blocking(client, input))
+        .await
+        .map_err(|_| "SSH 宿主机更新意外终止".to_string())?
+}
+
+fn update_ssh_target_blocking(
+    client: ControlClient,
+    input: UpdateSSHHostInput,
+) -> Result<Vec<RouteSummary>, String> {
+    let UpdateSSHHostInput {
+        alias,
+        mut address,
+        mut username,
+        mut password,
+        mut expected_host_key,
+        egress,
+    } = input;
+    if let Err(error) =
+        validate_ssh_upstream(&address, &username, &password).and_then(|_| validate_egress(&egress))
+    {
+        clear_string(&mut address);
+        clear_string(&mut username);
+        clear_string(&mut password);
+        clear_string(&mut expected_host_key);
+        return Err(error);
+    }
+    if expected_host_key.is_empty() || expected_host_key.len() > 16 << 10 {
+        clear_string(&mut address);
+        clear_string(&mut username);
+        clear_string(&mut password);
+        clear_string(&mut expected_host_key);
+        return Err("请先检测并确认新的 SSH Host Key".to_string());
+    }
+    let request = ControlRequest {
+        version: CONTROL_PROTOCOL_VERSION,
+        token: "",
+        action: "update_ssh_target",
+        create: None,
+        create_ssh: Some(CreateSSHRoute {
+            name: "",
+            alias: "",
+            local_username: "",
+            address: &address,
+            username: &username,
+            password: &password,
+            local_password: "",
+            expected_host_key: &expected_host_key,
+            allowed_command: "",
+            allow_all_commands: false,
+            record_commands: false,
+            authentication_timeout_seconds: 0,
+            egress: &egress,
+        }),
+        probe_ssh: None,
+        ssh_policy: None,
+        alias: Some(&alias),
+        enabled: None,
+        proxy_url: None,
+        capability: None,
+        command: None,
+        secret_store_mode: None,
+    };
+    let result = client.request(&request).map(|response| response.routes);
+    clear_string(&mut address);
+    clear_string(&mut username);
+    clear_string(&mut password);
+    clear_string(&mut expected_host_key);
+    result
+}
+
+#[tauri::command]
+async fn rotate_ssh_credential(
+    client: tauri::State<'_, ControlClient>,
+    alias: String,
+    mut local_password: String,
+) -> Result<SSHRouteCreationResult, String> {
+    let client = client.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if !local_password.is_empty()
+            && (local_password.len() < 12
+                || local_password.len() > 1024
+                || local_password.contains(['\0', '\r', '\n']))
+        {
+            clear_string(&mut local_password);
+            return Err("本地 SSH 密码需要 12 到 1024 个字节，且不能包含换行".to_string());
+        }
+        let custom = !local_password.is_empty();
+        let request = ControlRequest {
+            version: CONTROL_PROTOCOL_VERSION,
+            token: "",
+            action: "rotate_ssh_credential",
+            create: None,
+            create_ssh: Some(CreateSSHRoute {
+                name: "",
+                alias: "",
+                local_username: "",
+                address: "",
+                username: "",
+                password: "",
+                local_password: &local_password,
+                expected_host_key: "",
+                allowed_command: "",
+                allow_all_commands: false,
+                record_commands: false,
+                authentication_timeout_seconds: 0,
+                egress: "",
+            }),
+            probe_ssh: None,
+            ssh_policy: None,
+            alias: Some(&alias),
+            enabled: None,
+            proxy_url: None,
+            capability: None,
+            command: None,
+            secret_store_mode: None,
+        };
+        let result = client.request(&request);
+        clear_string(&mut local_password);
+        let mut created = result?
+            .created
+            .ok_or_else(|| "airlockd 未返回轮换后的 SSH 凭据".to_string())?;
+        if custom == !created.capability.is_empty() {
+            clear_string(&mut created.capability);
+            return Err("airlockd 返回了不一致的 SSH 凭据".to_string());
+        }
+        Ok(SSHRouteCreationResult {
+            route: created.route,
+            local_credential: std::mem::take(&mut created.capability),
+            generated_credential: !custom,
+        })
+    })
+    .await
+    .map_err(|_| "SSH 本地凭据轮换意外终止".to_string())?
+}
+
+#[tauri::command]
+fn test_proxy_health(client: tauri::State<'_, ControlClient>) -> Result<ControlUpdate, String> {
+    let request = ControlRequest {
+        version: CONTROL_PROTOCOL_VERSION,
+        token: "",
+        action: "test_proxy_health",
+        create: None,
+        create_ssh: None,
+        probe_ssh: None,
+        ssh_policy: None,
+        alias: None,
+        enabled: None,
+        proxy_url: None,
+        capability: None,
+        command: None,
+        secret_store_mode: None,
+    };
+    let response = client.request(&request)?;
+    let check = response
+        .health_check
+        .ok_or_else(|| "airlockd 未返回代理健康检查结果".to_string())?;
+    Ok(ControlUpdate {
+        routes: response.routes,
+        message: Some(format!(
+            "{} · {} · {}",
+            check.message, check.latency, check.checked_at
+        )),
+    })
 }
 
 #[tauri::command]
@@ -1346,6 +1731,63 @@ fn reset_llm_usage(
 }
 
 #[tauri::command]
+async fn test_route_health(
+    client: tauri::State<'_, ControlClient>,
+    alias: String,
+    authentication_timeout_seconds: Option<u32>,
+) -> Result<ControlUpdate, String> {
+    let client = client.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        test_route_health_blocking(client, alias, authentication_timeout_seconds)
+    })
+    .await
+    .map_err(|_| "上游健康检查意外终止".to_string())?
+}
+
+fn test_route_health_blocking(
+    client: ControlClient,
+    alias: String,
+    authentication_timeout_seconds: Option<u32>,
+) -> Result<ControlUpdate, String> {
+    let request = ControlRequest {
+        version: CONTROL_PROTOCOL_VERSION,
+        token: "",
+        action: "test_route_health",
+        create: None,
+        create_ssh: None,
+        probe_ssh: None,
+        ssh_policy: None,
+        alias: Some(&alias),
+        enabled: None,
+        proxy_url: None,
+        capability: None,
+        command: None,
+        secret_store_mode: None,
+    };
+    let seconds = authentication_timeout_seconds.unwrap_or(20).clamp(3, 120);
+    let response =
+        client.request_with_timeout(&request, Duration::from_secs(u64::from(seconds) + 5))?;
+    let check = response
+        .health_check
+        .ok_or_else(|| "airlockd 未返回健康检查结果".to_string())?;
+    if check.alias != alias || (check.status != "healthy" && check.status != "degraded") {
+        return Err("airlockd 返回了无效健康检查结果".to_string());
+    }
+    let state = if check.status == "healthy" {
+        "健康"
+    } else {
+        "需要检查"
+    };
+    Ok(ControlUpdate {
+        routes: response.routes,
+        message: Some(format!(
+            "{state} · {} · {} · {}",
+            check.message, check.latency, check.checked_at
+        )),
+    })
+}
+
+#[tauri::command]
 async fn configure_proxy(client: tauri::State<'_, ControlClient>) -> Result<bool, String> {
     let client = client.inner().clone();
     tauri::async_runtime::spawn_blocking(move || configure_proxy_blocking(client))
@@ -1355,7 +1797,7 @@ async fn configure_proxy(client: tauri::State<'_, ControlClient>) -> Result<bool
 
 fn configure_proxy_blocking(client: ControlClient) -> Result<bool, String> {
     let mut proxy_url = prompt_protected_value(
-        "输入 Clash 或其他本地代理 URL，例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:7890。认证信息可写在 URL 中，内容仅进入 Keychain。",
+        "输入 Clash 或其他本地代理 URL，例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:7890。认证信息可写在 URL 中，内容仅进入当前选择的受保护凭据存储。",
         false,
     )?;
     let request = ControlRequest {
@@ -1434,19 +1876,23 @@ const options = {
   withTitle: payload.title,
   defaultAnswer: payload.defaultValue,
   hiddenAnswer: payload.hidden,
-  buttons: payload.optional ? ['不设置', '保存'] : ['取消', '继续'],
-  defaultButton: payload.optional ? '保存' : '继续'
+  buttons: payload.optional ? [payload.skip, payload.save] : [payload.cancel, payload.continue],
+  defaultButton: payload.optional ? payload.save : payload.continue
 };
-if (!payload.optional) options.cancelButton = '取消';
+if (!payload.optional) options.cancelButton = payload.cancel;
 const result = app.displayDialog(payload.message, options);
-payload.optional && result.buttonReturned !== '保存' ? '' : result.textReturned;
+payload.optional && result.buttonReturned !== payload.save ? '' : result.textReturned;
 "#;
     let mut payload = serde_json::to_vec(&serde_json::json!({
-        "title": title,
-        "message": message,
+        "title": native_text(title),
+        "message": native_text(message),
         "optional": optional,
         "hidden": hidden,
         "defaultValue": default_value,
+        "cancel": native_text("取消"),
+        "continue": native_text("继续"),
+        "skip": native_text("不设置"),
+        "save": native_text("保存"),
     }))
     .map_err(|_| "无法打开 macOS 安全录入窗口".to_string())?;
     let mut child = Command::new("/usr/bin/osascript")
@@ -1481,20 +1927,42 @@ payload.optional && result.buttonReturned !== '保存' ? '' : result.textReturne
 #[cfg(target_os = "macos")]
 fn choose_llm_local_api_key_mode() -> Result<bool, String> {
     const SCRIPT: &str = r#"
+ObjC.import('Foundation');
+const input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+const raw = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding).js;
+const payload = JSON.parse(raw);
 const app = Application.currentApplication();
 app.includeStandardAdditions = true;
-const result = app.displayDialog('为调用者创建一把独立的二次 API Key。它只用于访问 Airlock，真实上游 Key 不会暴露。\n\n随机生成提供 256-bit 强度并仅显示一次；自定义 Key 会要求隐藏输入两次。', {
-  withTitle: 'LLM 设置 3/3 · 二次 API Key',
-  buttons: ['取消', '自定义 Key', '随机生成（推荐）'],
-  defaultButton: '随机生成（推荐）',
-  cancelButton: '取消'
+const result = app.displayDialog(payload.message, {
+  withTitle: payload.title,
+  buttons: [payload.cancel, payload.custom, payload.random],
+  defaultButton: payload.random,
+  cancelButton: payload.cancel
 });
-result.buttonReturned === '自定义 Key' ? 'custom' : 'random';
+result.buttonReturned === payload.custom ? 'custom' : 'random';
 "#;
-    let output = Command::new("/usr/bin/osascript")
+    let mut payload = serde_json::to_vec(&serde_json::json!({
+        "title": native_text("LLM 设置 3/3 · 二次 API Key"),
+        "message": native_text("为调用者创建一把独立的二次 API Key。它只用于访问 Airlock，真实上游 Key 不会暴露。\n\n随机生成提供 256-bit 强度并仅显示一次；自定义 Key 会要求隐藏输入两次。"),
+        "cancel": native_text("取消"),
+        "custom": native_text("自定义 Key"),
+        "random": native_text("随机生成（推荐）"),
+    })).map_err(|_| "无法编码二次 API Key 选择窗口".to_string())?;
+    let mut child = Command::new("/usr/bin/osascript")
         .args(["-l", "JavaScript", "-e", SCRIPT])
-        .output()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
         .map_err(|_| "无法打开二次 API Key 选择窗口".to_string())?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(&payload)
+            .map_err(|_| "无法展示二次 API Key 选择".to_string())?;
+    }
+    payload.fill(0);
+    let output = child
+        .wait_with_output()
+        .map_err(|_| "二次 API Key 选择窗口意外终止".to_string())?;
     if !output.status.success() {
         return Err("已取消二次 API Key 设置".to_string());
     }
@@ -1587,17 +2055,23 @@ fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
     const SCRIPT: &str = r#"
 ObjC.import('Foundation');
 const input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
-const alias = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding).js;
+const raw = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding).js;
+const payload = JSON.parse(raw);
 const app = Application.currentApplication();
 app.includeStandardAdditions = true;
-app.displayDialog('路由 “' + alias + '” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY、SFTP 与端口转发仍会被拒绝，但上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。', {
-  withTitle: '高风险 SSH 权限',
-  buttons: ['取消', '允许所有 exec'], defaultButton: '取消', cancelButton: '取消',
+app.displayDialog(payload.message.replace('{alias}', payload.alias), {
+  withTitle: payload.title,
+  buttons: [payload.cancel, payload.allow], defaultButton: payload.cancel, cancelButton: payload.cancel,
   withIcon: 'caution'
 });
 true;
 "#;
-    let mut payload = alias.as_bytes().to_vec();
+    let (message, title, allow) = match ui_locale() {
+        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, SFTP, and port forwarding remain denied, but commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
+        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、SFTP、ポート転送は引き続き拒否されますが、コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
+        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY、SFTP 与端口转发仍会被拒绝，但上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
+    };
+    let mut payload = serde_json::to_vec(&serde_json::json!({ "alias": alias, "message": message, "title": title, "cancel": native_text("取消"), "allow": allow })).map_err(|_| "无法编码 SSH 风险确认".to_string())?;
     let mut child = Command::new("/usr/bin/osascript")
         .args(["-l", "JavaScript", "-e", SCRIPT])
         .stdin(Stdio::piped())
@@ -1626,49 +2100,6 @@ fn confirm_allow_all_commands(_alias: &str) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn confirm_ssh_host_key(fingerprint: &str) -> Result<(), String> {
-    const SCRIPT: &str = r#"
-ObjC.import('Foundation');
-const input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
-const fingerprint = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding).js;
-const app = Application.currentApplication();
-app.includeStandardAdditions = true;
-app.displayDialog('请通过可信渠道核对上游 SSH Host Key 指纹。指纹不一致时请取消。\n\n' + fingerprint, {
-  withTitle: '确认 SSH Host Key',
-  buttons: ['取消', '指纹一致'], defaultButton: '指纹一致', cancelButton: '取消',
-  withIcon: 'caution'
-});
-true;
-"#;
-    let mut payload = fingerprint.as_bytes().to_vec();
-    let mut child = Command::new("/usr/bin/osascript")
-        .args(["-l", "JavaScript", "-e", SCRIPT])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .spawn()
-        .map_err(|_| "无法打开 Host Key 确认窗口".to_string())?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&payload)
-            .map_err(|_| "无法展示 Host Key 指纹".to_string())?;
-    }
-    payload.fill(0);
-    if !child
-        .wait()
-        .map_err(|_| "Host Key 确认窗口意外终止".to_string())?
-        .success()
-    {
-        return Err("已取消 SSH Host Key 信任".to_string());
-    }
-    Ok(())
-}
-
-#[cfg(not(target_os = "macos"))]
-fn confirm_ssh_host_key(_fingerprint: &str) -> Result<(), String> {
-    Err("当前版本仅支持 macOS 原生 Host Key 确认".to_string())
-}
-
-#[cfg(target_os = "macos")]
 fn present_capability(endpoint: &str, capability: &str) -> Result<(), String> {
     const SCRIPT: &str = r#"
 ObjC.import('Foundation');
@@ -1677,16 +2108,19 @@ const raw = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding)
 const payload = JSON.parse(raw);
 const app = Application.currentApplication();
 app.includeStandardAdditions = true;
-app.displayDialog('路由已安全保存。Capability 仅显示这一次，请交给需要访问该路由的客户端。', {
-  withTitle: 'Airlock 路由已创建',
+app.displayDialog(payload.message, {
+  withTitle: payload.title,
   defaultAnswer: payload.endpoint + '\n' + payload.capability,
-  buttons: ['完成'], defaultButton: '完成'
+  buttons: [payload.done], defaultButton: payload.done
 });
 true;
 "#;
     let mut payload = serde_json::to_vec(&serde_json::json!({
         "endpoint": endpoint,
         "capability": capability,
+        "message": native_text("路由已安全保存。Capability 仅显示这一次，请交给需要访问该路由的客户端。"),
+        "title": native_text("Airlock 路由已创建"),
+        "done": native_text("完成"),
     }))
     .map_err(|_| "无法展示一次性 Capability".to_string())?;
     let mut child = Command::new("/usr/bin/osascript")
@@ -1727,23 +2161,31 @@ app.includeStandardAdditions = true;
 const openai = payload.provider === 'openai';
 const prefix = openai ? 'OPENAI' : 'ANTHROPIC';
 const baseURL = openai ? payload.endpoint.replace(/\/$/, '') + '/v1' : payload.endpoint;
-const apiKey = payload.customLocalKey ? '<使用刚才设置的本地 API Key>' : payload.capability;
+const apiKey = payload.customLocalKey ? payload.customPlaceholder : payload.capability;
 const details = prefix + '_BASE_URL=' + baseURL + '\n' + prefix + '_API_KEY=' + apiKey;
-const message = payload.customLocalKey
-  ? 'LLM 路由已启用。Airlock 不会回显自定义的本地 API Key。'
-  : 'LLM 路由已启用。随机生成的本地 API Key 仅显示这一次。';
+const message = payload.customLocalKey ? payload.customMessage : payload.randomMessage;
 app.displayDialog(message, {
-  withTitle: 'Airlock LLM 路由已创建',
+  withTitle: payload.title,
   defaultAnswer: details,
-  buttons: ['完成'], defaultButton: '完成'
+  buttons: [payload.done], defaultButton: payload.done
 });
 true;
 "#;
+    let (custom_message, random_message, custom_placeholder) = match ui_locale() {
+        "en" => ("The LLM route is enabled. Airlock will not reveal the custom local API key.", "The LLM route is enabled. The random local API key is shown only once.", "<use the local API key set earlier>"),
+        "ja" => ("LLM ルートが有効になりました。Airlock はカスタムのローカル API Key を再表示しません。", "LLM ルートが有効になりました。ランダム生成されたローカル API Key は一度だけ表示されます。", "<先ほど設定したローカル API Key を使用>"),
+        _ => ("LLM 路由已启用。Airlock 不会回显自定义的本地 API Key。", "LLM 路由已启用。随机生成的本地 API Key 仅显示这一次。", "<使用刚才设置的本地 API Key>"),
+    };
     let mut payload = serde_json::to_vec(&serde_json::json!({
         "provider": provider,
         "endpoint": endpoint,
         "capability": capability,
         "customLocalKey": custom_local_key,
+        "customMessage": custom_message,
+        "randomMessage": random_message,
+        "customPlaceholder": custom_placeholder,
+        "title": native_text("Airlock LLM 路由已创建"),
+        "done": native_text("完成"),
     }))
     .map_err(|_| "无法展示 LLM 连接信息".to_string())?;
     let mut child = Command::new("/usr/bin/osascript")
@@ -1768,44 +2210,6 @@ true;
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-fn present_custom_ssh_access(endpoint: &str) -> Result<(), String> {
-    const SCRIPT: &str = r#"
-ObjC.import('Foundation');
-const input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
-const endpoint = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding).js;
-const app = Application.currentApplication();
-app.includeStandardAdditions = true;
-app.displayDialog('路由已安全保存。请使用刚才设置的本地密码登录；Airlock 不会回显该密码。', {
-  withTitle: 'Airlock SSH 路由已创建',
-  defaultAnswer: endpoint,
-  buttons: ['完成'], defaultButton: '完成'
-});
-true;
-"#;
-    let mut payload = endpoint.as_bytes().to_vec();
-    let mut child = Command::new("/usr/bin/osascript")
-        .args(["-l", "JavaScript", "-e", SCRIPT])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .spawn()
-        .map_err(|_| "无法打开 SSH 访问信息窗口".to_string())?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&payload)
-            .map_err(|_| "无法展示 SSH 访问信息".to_string())?;
-    }
-    payload.fill(0);
-    if !child
-        .wait()
-        .map_err(|_| "SSH 访问信息窗口意外终止".to_string())?
-        .success()
-    {
-        return Err("SSH 访问信息未确认，路由已保存但保持停用".to_string());
-    }
-    Ok(())
-}
-
 #[cfg(not(target_os = "macos"))]
 fn present_capability(_endpoint: &str, _capability: &str) -> Result<(), String> {
     Err("当前版本仅支持 macOS 原生 Capability 窗口".to_string())
@@ -1819,11 +2223,6 @@ fn present_llm_access(
     _custom_local_key: bool,
 ) -> Result<(), String> {
     Err("当前版本仅支持 macOS 原生 LLM 连接信息窗口".to_string())
-}
-
-#[cfg(not(target_os = "macos"))]
-fn present_custom_ssh_access(_endpoint: &str) -> Result<(), String> {
-    Err("当前版本仅支持 macOS 原生 SSH 访问信息窗口".to_string())
 }
 
 fn clear_string(value: &mut String) {
@@ -1966,14 +2365,16 @@ fn confirm_security_change(
     current: &SecuritySettings,
     next: &SecuritySettings,
 ) -> Result<(), String> {
-    let mut risks = Vec::new();
+    let mut risks: Vec<Cow<'_, str>> = Vec::new();
     if current.network_scope != "lan" && next.network_scope == "lan" {
-        risks.push("局域网设备将能连接 Airlock 的 HTTP/SSH 入口，仍需要每条路由的凭据。");
+        risks.push(native_text(
+            "局域网设备将能连接 Airlock 的 HTTP/SSH 入口，仍需要每条路由的凭据。",
+        ));
     }
     if current.secret_store != "local_file" && next.secret_store == "local_file" {
-        risks.push(
+        risks.push(native_text(
             "上游地址和凭据将保存在仅当前用户可读的 0600 文件中，不再由 macOS Keychain 加密保护。",
-        );
+        ));
     }
     if risks.is_empty() {
         return Ok(());
@@ -1981,17 +2382,25 @@ fn confirm_security_change(
     const SCRIPT: &str = r#"
 ObjC.import('Foundation');
 const input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
-const message = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding).js;
+const raw = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding).js;
+const payload = JSON.parse(raw);
 const app = Application.currentApplication();
 app.includeStandardAdditions = true;
-app.displayDialog(message + '\n\n应用设置会短暂重启本地转发核心。', {
-  withTitle: 'Airlock 安全设置',
-  buttons: ['取消', '应用并重启'], defaultButton: '取消', cancelButton: '取消',
+app.displayDialog(payload.message + '\n\n' + payload.restart, {
+  withTitle: payload.title,
+  buttons: [payload.cancel, payload.apply], defaultButton: payload.apply, cancelButton: payload.cancel,
   withIcon: 'caution'
 });
 true;
 "#;
-    let mut payload = risks.join("\n\n").into_bytes();
+    let mut payload = serde_json::to_vec(&serde_json::json!({
+        "message": risks.iter().map(Cow::as_ref).collect::<Vec<_>>().join("\n\n"),
+        "restart": native_text("应用设置会短暂重启本地转发核心。"),
+        "title": native_text("Airlock 安全设置"),
+        "cancel": native_text("取消"),
+        "apply": native_text("应用并重启"),
+    }))
+    .map_err(|_| "无法编码安全设置确认".to_string())?;
     let mut child = Command::new("/usr/bin/osascript")
         .args(["-l", "JavaScript", "-e", SCRIPT])
         .stdin(Stdio::piped())
@@ -2277,14 +2686,21 @@ pub fn run() {
             delete_route,
             create_http_route,
             create_llm_route,
+            probe_ssh_host_key,
             create_ssh_route,
+            update_ssh_target,
+            rotate_ssh_credential,
             set_llm_policy,
             rotate_llm_api_key,
             reset_llm_usage,
+            test_route_health,
+            test_proxy_health,
             set_ssh_policy,
             configure_proxy,
             clear_proxy,
-            apply_security_settings
+            apply_security_settings,
+            open_external_url,
+            set_ui_locale
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -2361,12 +2777,143 @@ mod tests {
     }
 
     #[test]
+    fn external_links_are_limited_to_developer_destinations() {
+        assert_eq!(
+            allowed_external_url("https://0o0.site/"),
+            Some(DEVELOPER_WEBSITE_URL)
+        );
+        assert_eq!(
+            allowed_external_url("https://github.com/LouisonH"),
+            Some(DEVELOPER_GITHUB_URL)
+        );
+        assert_eq!(allowed_external_url("https://example.com"), None);
+        assert_eq!(
+            allowed_external_url("https://0o0.site.attacker.example"),
+            None
+        );
+    }
+
+    #[test]
     fn ssh_exact_command_validation_enforces_single_line_policy() {
         assert!(validate_ssh_command("uptime", false).is_ok());
         assert!(validate_ssh_command("", false).is_err());
         assert!(validate_ssh_command("printf ok\nuname -a", false).is_err());
         assert!(validate_ssh_command(&"x".repeat(4097), false).is_err());
         assert!(validate_ssh_command("", true).is_ok());
+    }
+
+    #[test]
+    fn ssh_local_username_validation_matches_gateway_contract() {
+        for valid in ["build", "release.bot", "runner_2", "host-a"] {
+            assert!(validate_ssh_local_username(valid).is_ok(), "{valid}");
+        }
+        for invalid in ["", "Build", "-build", "build user", "build@host"] {
+            assert!(validate_ssh_local_username(invalid).is_err(), "{invalid}");
+        }
+        assert!(validate_ssh_local_username(&"a".repeat(64)).is_ok());
+        assert!(validate_ssh_local_username(&"a".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn embedded_ssh_entry_validates_upstream_fields() {
+        assert!(validate_ssh_upstream("host.internal:22", "deploy", "secret").is_ok());
+        assert!(validate_ssh_upstream("", "deploy", "secret").is_err());
+        assert!(validate_ssh_upstream("host internal", "deploy", "secret").is_err());
+        assert!(validate_ssh_upstream("host.internal", "", "secret").is_err());
+        assert!(validate_ssh_upstream("host.internal", "deploy", "").is_err());
+        assert!(validate_ssh_upstream("host.internal", "deploy", "bad\0secret").is_err());
+    }
+
+    #[test]
+    fn ssh_host_key_probe_uses_frontend_camel_case_contract() {
+        let payload = serde_json::to_value(SSHHostKeyProbeResult {
+            host_key: "public-key".to_string(),
+            fingerprint: "SHA256:fingerprint".to_string(),
+        })
+        .expect("SSH probe result should serialize");
+        assert_eq!(payload["hostKey"], "public-key");
+        assert_eq!(payload["fingerprint"], "SHA256:fingerprint");
+        assert!(payload.get("host_key").is_none());
+    }
+
+    #[test]
+    fn authenticated_control_request_preserves_ssh_local_usernames() {
+        use std::os::unix::net::UnixListener;
+        use std::thread;
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be valid")
+            .as_nanos();
+        let socket_path = PathBuf::from("/tmp").join(format!(
+            "airlock-control-test-{}-{nonce}.sock",
+            std::process::id()
+        ));
+        let listener = UnixListener::bind(&socket_path).expect("test control socket should bind");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener
+                .accept()
+                .expect("test control client should connect");
+            let mut raw = String::new();
+            BufReader::new(stream.try_clone().expect("test stream should clone"))
+                .read_line(&mut raw)
+                .expect("test control request should be readable");
+            stream
+                .write_all(b"{\"ok\":true}\n")
+                .expect("test control response should write");
+            raw
+        });
+        let client = ControlClient {
+            socket_path,
+            token: Arc::new(SecretToken("authenticated-test-token".to_string())),
+        };
+        let request = ControlRequest {
+            version: CONTROL_PROTOCOL_VERSION,
+            token: "",
+            action: "create_ssh_route",
+            create: None,
+            create_ssh: Some(CreateSSHRoute {
+                name: "Build",
+                alias: "build",
+                local_username: "builder",
+                address: "upstream.invalid:22",
+                username: "upstream-user",
+                password: "upstream-password",
+                local_password: "shared-local-password",
+                expected_host_key: "host-key",
+                allowed_command: "uptime",
+                allow_all_commands: false,
+                record_commands: true,
+                authentication_timeout_seconds: 20,
+                egress: "Auto",
+            }),
+            probe_ssh: None,
+            ssh_policy: Some(SSHPolicyUpdate {
+                name: "Release host",
+                local_username: "release",
+                allowed_command: "uptime",
+                allow_all_commands: false,
+                record_commands: true,
+                authentication_timeout_seconds: 20,
+                egress: "Auto",
+            }),
+            alias: None,
+            enabled: None,
+            proxy_url: None,
+            capability: None,
+            command: None,
+            secret_store_mode: None,
+        };
+        client
+            .request(&request)
+            .expect("authenticated request should succeed");
+        let raw = server.join().expect("test control server should finish");
+        let payload: serde_json::Value =
+            serde_json::from_str(&raw).expect("control request should be JSON");
+        assert_eq!(payload["token"], "authenticated-test-token");
+        assert_eq!(payload["create_ssh"]["local_username"], "builder");
+        assert_eq!(payload["ssh_policy"]["local_username"], "release");
+        let _ = std::fs::remove_file(client.socket_path);
     }
 
     #[test]

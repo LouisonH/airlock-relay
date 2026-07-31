@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LouisonH/airlock-relay/internal/activity"
 	"github.com/LouisonH/airlock-relay/internal/capability"
 	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/routes"
@@ -49,6 +51,7 @@ var safeResponseHeaders = map[string]struct{}{
 
 type RouteLookup interface {
 	Lookup(alias string) (routes.HTTPRoute, error)
+	Get(alias string) (routes.HTTPRoute, error)
 }
 
 type LLMUsageRecorder interface {
@@ -63,6 +66,7 @@ type Handler struct {
 	routes    RouteLookup
 	secrets   secrets.Store
 	transport RouteTransport
+	activity  activity.Recorder
 	limitsMu  sync.Mutex
 	limits    map[string]*llmLimitState
 }
@@ -76,11 +80,23 @@ type llmLimitState struct {
 	current           int
 }
 
-func NewHandler(registry RouteLookup, secretStore secrets.Store, transport RouteTransport) *Handler {
+type HandlerOption func(*Handler)
+
+func WithActivityRecorder(recorder activity.Recorder) HandlerOption {
+	return func(handler *Handler) {
+		handler.activity = recorder
+	}
+}
+
+func NewHandler(registry RouteLookup, secretStore secrets.Store, transport RouteTransport, options ...HandlerOption) *Handler {
 	if transport == nil {
 		transport = egress.NewManager(nil)
 	}
-	return &Handler{routes: registry, secrets: secretStore, transport: transport, limits: make(map[string]*llmLimitState)}
+	handler := &Handler{routes: registry, secrets: secretStore, transport: transport, limits: make(map[string]*llmLimitState)}
+	for _, option := range options {
+		option(handler)
+	}
+	return handler
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
@@ -92,36 +108,49 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 
 	route, err := h.routes.Lookup(alias)
 	if err != nil {
+		if disabled, getErr := h.routes.Get(alias); getErr == nil && !disabled.Enabled {
+			h.recordActivity(disabled, request, "blocked", 0)
+		}
 		writeError(w, http.StatusNotFound, "route not found")
 		return
 	}
+	started := time.Now()
+	activityResult := "failed"
+	defer func() {
+		h.recordActivity(route, request, activityResult, time.Since(started))
+	}()
 	localCredential := bearerToken(request.Header.Get("Authorization"))
 	if route.EffectiveKind() == routes.KindLLM && route.Provider == routes.ProviderAnthropic && strings.TrimSpace(request.Header.Get("X-Api-Key")) != "" {
 		localCredential = strings.TrimSpace(request.Header.Get("X-Api-Key"))
 	}
 	if err := capability.Verify(localCredential, route.CapabilityDigest); err != nil {
+		activityResult = "blocked"
 		w.Header().Set("WWW-Authenticate", `Bearer realm="airlock"`)
 		writeRouteError(w, route, http.StatusUnauthorized, "invalid_api_key", "invalid local API key")
 		return
 	}
 	if !route.Policy.AllowsMethod(request.Method) {
+		activityResult = "blocked"
 		w.Header().Set("Allow", allowedMethods(route.Policy))
 		writeRouteError(w, route, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	for key := range request.URL.Query() {
 		if !route.Policy.AllowsQueryKey(key) {
+			activityResult = "blocked"
 			writeRouteError(w, route, http.StatusBadRequest, "query_not_allowed", "query parameter not allowed")
 			return
 		}
 	}
 	endpointPath := "/" + strings.TrimPrefix(suffix, "/")
 	if route.EffectiveKind() == routes.KindLLM && !route.Policy.AllowsPath(endpointPath) {
+		activityResult = "blocked"
 		writeRouteError(w, route, http.StatusNotFound, "endpoint_not_allowed", "endpoint not allowed")
 		return
 	}
 	release, limitError := h.acquireLLMRequest(route)
 	if limitError != nil {
+		activityResult = "blocked"
 		w.Header().Set("Retry-After", limitError.RetryAfter)
 		writeRouteError(w, route, http.StatusTooManyRequests, limitError.Code, limitError.Message)
 		return
@@ -136,6 +165,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 
 	upstreamURL, err := buildUpstreamURL(target.BaseURL, suffix, request.URL.Query())
 	if err != nil {
+		activityResult = "blocked"
 		writeRouteError(w, route, http.StatusBadRequest, "invalid_path", "invalid route path")
 		return
 	}
@@ -144,6 +174,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	if route.EffectiveKind() == routes.KindLLM {
 		payload, requestError := prepareLLMRequest(request, route, endpointPath)
 		if requestError != nil {
+			activityResult = "blocked"
 			writeRouteError(w, route, requestError.Status, requestError.Code, requestError.Message)
 			return
 		}
@@ -183,6 +214,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 			return
 		}
 	}
+	activityResult = "allowed"
 
 	copySafeResponseHeaders(w.Header(), response.Header)
 	w.WriteHeader(response.StatusCode)
@@ -207,6 +239,49 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 			capture.Clear()
 		}
 	}
+}
+
+func (h *Handler) recordActivity(route routes.HTTPRoute, request *http.Request, result string, duration time.Duration) {
+	if h.activity == nil || request == nil {
+		return
+	}
+	category := route.EffectiveKind()
+	action := request.Method + " request"
+	if category == routes.KindLLM {
+		action = "LLM request"
+	}
+	egressPolicy := route.Egress
+	if egressPolicy == "" {
+		egressPolicy = egress.Direct
+	}
+	_ = h.activity.Record(activity.Event{
+		RouteAlias: route.Alias,
+		Category:   category,
+		EventType:  "request",
+		Caller:     callerLabel(request.RemoteAddr),
+		Action:     action,
+		Result:     result,
+		DurationMS: duration.Milliseconds(),
+		Egress:     egressPolicy,
+	})
+}
+
+func callerLabel(remoteAddress string) string {
+	host, _, err := net.SplitHostPort(remoteAddress)
+	if err != nil {
+		return "network"
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return "network"
+	}
+	if ip.IsLoopback() {
+		return "loopback"
+	}
+	if ip.IsPrivate() {
+		return "private-lan"
+	}
+	return "network"
 }
 
 type llmLimitError struct {

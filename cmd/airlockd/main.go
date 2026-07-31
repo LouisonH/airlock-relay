@@ -17,53 +17,117 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LouisonH/airlock-relay/internal/activity"
 	"github.com/LouisonH/airlock-relay/internal/control"
 	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/httpgw"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
+	"github.com/LouisonH/airlock-relay/internal/securefile"
 	"github.com/LouisonH/airlock-relay/internal/sshgw"
+	"github.com/LouisonH/airlock-relay/internal/webui"
 )
 
 var version = "dev"
 
 func main() {
 	showVersion := flag.Bool("version", false, "print the airlockd version")
+	mode := flag.String("mode", "desktop", "runtime mode: desktop or server")
 	listenAddress := flag.String("listen", "127.0.0.1:4768", "HTTP relay listen address")
 	sshListenAddress := flag.String("ssh-listen", "127.0.0.1:4770", "SSH relay listen address")
 	networkScope := flag.String("network-scope", "loopback", "ingress network scope: loopback or lan")
-	secretStoreMode := flag.String("secret-store", secrets.StoreModeKeychain, "secret store: keychain or local_file")
+	secretStoreMode := flag.String("secret-store", "", "secret store: keychain or local_file (mode default applies)")
 	controlTokenStdin := flag.Bool("control-token-stdin", false, "read the ephemeral desktop control token from stdin")
+	dataDir := flag.String("data-dir", "", "absolute protected state directory (required in server mode)")
+	controlTokenFile := flag.String("control-token-file", "", "protected 0600 control token file (required in server mode)")
+	webListen := flag.String("web-listen", "", "optional loopback Web UI listen address")
+	webTokenFile := flag.String("web-token-file", "", "protected 0600 Web UI bearer token file")
 	flag.Parse()
 	if *showVersion {
 		fmt.Printf("airlockd %s\n", version)
 		return
 	}
 
-	if !*controlTokenStdin {
-		slog.Error("airlockd requires an ephemeral desktop control token")
+	config := runtimeConfig{
+		HTTPAddress: *listenAddress, SSHAddress: *sshListenAddress, NetworkScope: *networkScope,
+		SecretStoreMode: *secretStoreMode, WebListen: *webListen,
+	}
+	var err error
+	switch *mode {
+	case "desktop":
+		if !*controlTokenStdin || *controlTokenFile != "" || *dataDir != "" || *webListen != "" || *webTokenFile != "" {
+			slog.Error("desktop mode requires --control-token-stdin and does not accept server-mode options")
+			os.Exit(2)
+		}
+		config.ControlToken, err = readControlToken(os.Stdin)
+		if err == nil {
+			config.ControlPaths, err = control.DefaultPaths()
+		}
+		if config.SecretStoreMode == "" {
+			config.SecretStoreMode = secrets.StoreModeKeychain
+		}
+	case "server":
+		if *controlTokenStdin || *dataDir == "" || *controlTokenFile == "" || !filepath.IsAbs(*dataDir) || (*webListen == "") != (*webTokenFile == "") {
+			slog.Error("server mode requires absolute --data-dir and --control-token-file; --web-listen and --web-token-file must be supplied together")
+			os.Exit(2)
+		}
+		config.ControlToken, err = securefile.ReadToken(*controlTokenFile)
+		config.ControlPaths = control.Paths{Directory: *dataDir, Socket: filepath.Join(*dataDir, "control.sock")}
+		if *webTokenFile != "" && err == nil {
+			config.WebToken, err = securefile.ReadToken(*webTokenFile)
+		}
+		if config.SecretStoreMode == "" {
+			config.SecretStoreMode = secrets.StoreModeLocalFile
+		}
+	default:
+		slog.Error("invalid runtime mode")
 		os.Exit(2)
 	}
-	controlToken, err := readControlToken(os.Stdin)
 	if err != nil {
-		slog.Error("airlockd could not read the desktop control token", "error", err)
+		slog.Error("airlockd could not load protected control configuration", "error", err)
 		os.Exit(2)
 	}
 	if *networkScope == "lan" {
-		if *listenAddress == "127.0.0.1:4768" {
-			*listenAddress = "0.0.0.0:4768"
+		if config.HTTPAddress == "127.0.0.1:4768" {
+			config.HTTPAddress = "0.0.0.0:4768"
 		}
-		if *sshListenAddress == "127.0.0.1:4770" {
-			*sshListenAddress = "0.0.0.0:4770"
+		if config.SSHAddress == "127.0.0.1:4770" {
+			config.SSHAddress = "0.0.0.0:4770"
 		}
 	}
-	if err := run(*listenAddress, *sshListenAddress, *networkScope, *secretStoreMode, controlToken); err != nil {
+	if err := runWithConfig(config); err != nil {
 		slog.Error("airlockd stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
+type runtimeConfig struct {
+	HTTPAddress     string
+	SSHAddress      string
+	NetworkScope    string
+	SecretStoreMode string
+	ControlToken    string
+	ControlPaths    control.Paths
+	WebListen       string
+	WebToken        string
+}
+
+// run remains the desktop-compatible entry point used by existing callers and
+// tests. Server deployments use runWithConfig with an explicit data directory.
 func run(address, sshAddress, networkScope, secretStoreMode, controlToken string) error {
+	controlPaths, err := control.DefaultPaths()
+	if err != nil {
+		return err
+	}
+	return runWithConfig(runtimeConfig{
+		HTTPAddress: address, SSHAddress: sshAddress, NetworkScope: networkScope,
+		SecretStoreMode: secretStoreMode, ControlToken: controlToken, ControlPaths: controlPaths,
+	})
+}
+
+func runWithConfig(config runtimeConfig) error {
+	address, sshAddress, networkScope := config.HTTPAddress, config.SSHAddress, config.NetworkScope
+	secretStoreMode, controlToken, controlPaths := config.SecretStoreMode, config.ControlToken, config.ControlPaths
 	allowLAN := networkScope == "lan"
 	if networkScope != "loopback" && !allowLAN {
 		return errors.New("invalid network scope")
@@ -74,9 +138,19 @@ func run(address, sshAddress, networkScope, secretStoreMode, controlToken string
 	if err := requireAllowedListen(sshAddress, allowLAN); err != nil {
 		return fmt.Errorf("invalid SSH listener: %w", err)
 	}
-	controlPaths, err := control.DefaultPaths()
-	if err != nil {
-		return err
+	if controlPaths.Directory == "" || controlPaths.Socket == "" || !filepath.IsAbs(controlPaths.Directory) || !filepath.IsAbs(controlPaths.Socket) || filepath.Dir(controlPaths.Socket) != controlPaths.Directory {
+		return errors.New("invalid control paths")
+	}
+	if len(controlToken) < 32 || len(controlToken) > 128 {
+		return errors.New("invalid control token")
+	}
+	if config.WebListen != "" {
+		if err := requireLoopback(config.WebListen); err != nil {
+			return fmt.Errorf("invalid Web UI listener: %w", err)
+		}
+		if len(config.WebToken) < 32 || len(config.WebToken) > 128 {
+			return errors.New("invalid Web UI token")
+		}
 	}
 	metadata := routes.NewFileStore(filepath.Join(controlPaths.Directory, "routes.json"))
 	persistedRoutes, err := metadata.Load()
@@ -123,8 +197,9 @@ func run(address, sshAddress, networkScope, secretStoreMode, controlToken string
 	} else if !errors.Is(err, secrets.ErrNotFound) {
 		return fmt.Errorf("load protected proxy: %w", err)
 	}
-	gateway := httpgw.NewHandler(registry, secretStore, egressManager)
-	sshOptions := []sshgw.ServerOption{sshgw.WithCommandAudit(commandAudit)}
+	activityRecorder := activity.NewMemoryRecorder()
+	gateway := httpgw.NewHandler(registry, secretStore, egressManager, httpgw.WithActivityRecorder(activityRecorder))
+	sshOptions := []sshgw.ServerOption{sshgw.WithCommandAudit(commandAudit), sshgw.WithActivityRecorder(activityRecorder)}
 	if allowLAN {
 		sshOptions = append(sshOptions, sshgw.WithLANAccess())
 	}
@@ -143,7 +218,7 @@ func run(address, sshAddress, networkScope, secretStoreMode, controlToken string
 			Registry: sshRegistry, Persistence: sshMetadata,
 			ListenAddress: advertisedAddress(sshListener.Addr()), DialAddress: loopbackAddress(sshListener.Addr()),
 			HTTPAddress: advertisedAddressString(address), NetworkScope: networkScope, HostKey: hostSigner.PublicKey(),
-			CommandAudit: commandAudit,
+			CommandAudit: commandAudit, Activity: activityRecorder,
 		},
 	)
 	if err != nil {
@@ -179,7 +254,39 @@ func run(address, sshAddress, networkScope, secretStoreMode, controlToken string
 	if err != nil {
 		return err
 	}
-	slog.Info("airlockd listening", "http", listener.Addr().String(), "ssh", sshListener.Addr().String())
+	defer listener.Close()
+
+	var webServer *http.Server
+	var webErrors chan error
+	var webAddress string
+	if config.WebListen != "" {
+		controlClient, err := control.NewClient(controlPaths.Socket, controlToken)
+		if err != nil {
+			return fmt.Errorf("initialize Web UI control client: %w", err)
+		}
+		webHandler, err := webui.New(config.WebToken, controlClient)
+		if err != nil {
+			return fmt.Errorf("initialize Web UI: %w", err)
+		}
+		webListener, err := net.Listen("tcp", config.WebListen)
+		if err != nil {
+			return fmt.Errorf("listen for Web UI: %w", err)
+		}
+		defer webListener.Close()
+		webServer = &http.Server{
+			Addr:              config.WebListen,
+			Handler:           webHandler,
+			ReadHeaderTimeout: 5 * time.Second,
+			IdleTimeout:       60 * time.Second,
+			MaxHeaderBytes:    16 << 10,
+		}
+		webErrors = make(chan error, 1)
+		go func() {
+			webErrors <- webServer.Serve(webListener)
+		}()
+		webAddress = webListener.Addr().String()
+	}
+	slog.Info("airlockd listening", "http", listener.Addr().String(), "ssh", sshListener.Addr().String(), "web", webAddress)
 
 	serverErrors := make(chan error, 1)
 	go func() {
@@ -201,6 +308,9 @@ func run(address, sshAddress, networkScope, secretStoreMode, controlToken string
 		_ = sshListener.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		if webServer != nil {
+			_ = webServer.Shutdown(ctx)
+		}
 		return server.Shutdown(ctx)
 	case err := <-serverErrors:
 		if errors.Is(err, http.ErrServerClosed) {
@@ -217,6 +327,11 @@ func run(address, sshAddress, networkScope, secretStoreMode, controlToken string
 			return nil
 		}
 		return fmt.Errorf("SSH gateway stopped: %w", err)
+	case err := <-webErrors:
+		if errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
+			return nil
+		}
+		return fmt.Errorf("Web UI stopped: %w", err)
 	}
 }
 

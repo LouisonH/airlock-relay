@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/LouisonH/airlock-relay/internal/activity"
 	"github.com/LouisonH/airlock-relay/internal/capability"
 	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/routes"
@@ -29,8 +31,11 @@ import (
 )
 
 const (
-	protocolVersion = 1
-	maxMessageBytes = 64 << 10
+	protocolVersion           = 1
+	maxMessageBytes           = 64 << 10
+	controlExchangeTimeout    = 20 * time.Second
+	controlHealthCheckTimeout = 125 * time.Second
+	controlRequestReadWindow  = 10 * time.Second
 )
 
 type Paths struct {
@@ -61,6 +66,14 @@ type Server struct {
 	secretMode   string
 	storeFactory SecretStoreFactory
 	mutationMu   sync.Mutex
+	activity     activity.Recorder
+	healthMu     sync.RWMutex
+	health       map[string]routeHealthState
+}
+
+type routeHealthState struct {
+	Status    string
+	CheckedAt time.Time
 }
 
 type SecretStoreFactory func(mode string) (secrets.MutableStore, error)
@@ -97,23 +110,29 @@ type CreateHTTPRoute struct {
 }
 
 type CreateSSHRoute struct {
-	Name             string `json:"name"`
-	Alias            string `json:"alias"`
-	Address          string `json:"address"`
-	Username         string `json:"username"`
-	Password         string `json:"password"`
-	LocalPassword    string `json:"local_password,omitempty"`
-	ExpectedHostKey  string `json:"expected_host_key"`
-	AllowedCommand   string `json:"allowed_command"`
-	AllowAllCommands bool   `json:"allow_all_commands"`
-	RecordCommands   bool   `json:"record_commands"`
-	Egress           string `json:"egress,omitempty"`
+	Name                         string `json:"name"`
+	Alias                        string `json:"alias"`
+	LocalUsername                string `json:"local_username,omitempty"`
+	Address                      string `json:"address"`
+	Username                     string `json:"username"`
+	Password                     string `json:"password"`
+	LocalPassword                string `json:"local_password,omitempty"`
+	ExpectedHostKey              string `json:"expected_host_key"`
+	AllowedCommand               string `json:"allowed_command"`
+	AllowAllCommands             bool   `json:"allow_all_commands"`
+	RecordCommands               bool   `json:"record_commands"`
+	AuthenticationTimeoutSeconds int    `json:"authentication_timeout_seconds,omitempty"`
+	Egress                       string `json:"egress,omitempty"`
 }
 
 type SSHPolicyUpdate struct {
-	AllowedCommand   string `json:"allowed_command"`
-	AllowAllCommands bool   `json:"allow_all_commands"`
-	RecordCommands   bool   `json:"record_commands"`
+	Name                         string `json:"name,omitempty"`
+	LocalUsername                string `json:"local_username,omitempty"`
+	AllowedCommand               string `json:"allowed_command"`
+	AllowAllCommands             bool   `json:"allow_all_commands"`
+	RecordCommands               bool   `json:"record_commands"`
+	AuthenticationTimeoutSeconds int    `json:"authentication_timeout_seconds,omitempty"`
+	Egress                       string `json:"egress,omitempty"`
 }
 
 type ProbeSSHHostKey struct {
@@ -130,24 +149,34 @@ type SSHConfiguration struct {
 	NetworkScope  string
 	HostKey       ssh.PublicKey
 	CommandAudit  sshgw.CommandAudit
+	Activity      activity.Recorder
 }
 
 type Response struct {
-	OK              bool              `json:"ok"`
-	Error           string            `json:"error,omitempty"`
-	Warning         string            `json:"warning,omitempty"`
-	Running         bool              `json:"running"`
-	Routes          []RouteSummary    `json:"routes,omitempty"`
-	Created         *CreatedRoute     `json:"created,omitempty"`
-	ProxyConfigured bool              `json:"proxy_configured"`
-	SSHReady        bool              `json:"ssh_ready"`
-	SSHHostKeyProbe *SSHHostKeyProbe  `json:"ssh_host_key_probe,omitempty"`
-	Activity        []ActivitySummary `json:"activity,omitempty"`
+	OK              bool                `json:"ok"`
+	Error           string              `json:"error,omitempty"`
+	Warning         string              `json:"warning,omitempty"`
+	Running         bool                `json:"running"`
+	Routes          []RouteSummary      `json:"routes,omitempty"`
+	Created         *CreatedRoute       `json:"created,omitempty"`
+	ProxyConfigured bool                `json:"proxy_configured"`
+	SSHReady        bool                `json:"ssh_ready"`
+	SSHHostKeyProbe *SSHHostKeyProbe    `json:"ssh_host_key_probe,omitempty"`
+	HealthCheck     *HealthCheckSummary `json:"health_check,omitempty"`
+	Activity        []ActivitySummary   `json:"activity,omitempty"`
 }
 
 type SSHHostKeyProbe struct {
 	HostKey     string `json:"host_key"`
 	Fingerprint string `json:"fingerprint"`
+}
+
+type HealthCheckSummary struct {
+	Alias     string `json:"alias"`
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+	Latency   string `json:"latency"`
+	CheckedAt string `json:"checkedAt"`
 }
 
 type CreatedRoute struct {
@@ -156,29 +185,31 @@ type CreatedRoute struct {
 }
 
 type RouteSummary struct {
-	ID                 string   `json:"id"`
-	Name               string   `json:"name"`
-	Alias              string   `json:"alias"`
-	Kind               string   `json:"kind"`
-	Status             string   `json:"status"`
-	LocalEndpoint      string   `json:"localEndpoint"`
-	PermissionSummary  string   `json:"permissionSummary"`
-	Egress             string   `json:"egress"`
-	Health             string   `json:"health"`
-	LastUsed           string   `json:"lastUsed"`
-	CurrentConnections int      `json:"currentConnections"`
-	AllowAllCommands   bool     `json:"allowAllCommands"`
-	RecordCommands     bool     `json:"recordCommands"`
-	AllowedCommand     string   `json:"allowedCommand,omitempty"`
-	Provider           string   `json:"provider,omitempty"`
-	AllowedModels      []string `json:"allowedModels,omitempty"`
-	MaxOutputTokens    int      `json:"maxOutputTokens,omitempty"`
-	RequestsPerMinute  int      `json:"requestsPerMinute,omitempty"`
-	MaxConcurrent      int      `json:"maxConcurrent,omitempty"`
-	TrackUsage         bool     `json:"trackUsage,omitempty"`
-	TotalRequests      uint64   `json:"totalRequests,omitempty"`
-	InputTokens        uint64   `json:"inputTokens,omitempty"`
-	OutputTokens       uint64   `json:"outputTokens,omitempty"`
+	ID                           string   `json:"id"`
+	Name                         string   `json:"name"`
+	Alias                        string   `json:"alias"`
+	LocalUsername                string   `json:"localUsername,omitempty"`
+	Kind                         string   `json:"kind"`
+	Status                       string   `json:"status"`
+	LocalEndpoint                string   `json:"localEndpoint"`
+	PermissionSummary            string   `json:"permissionSummary"`
+	Egress                       string   `json:"egress"`
+	Health                       string   `json:"health"`
+	LastUsed                     string   `json:"lastUsed"`
+	CurrentConnections           int      `json:"currentConnections"`
+	AllowAllCommands             bool     `json:"allowAllCommands"`
+	RecordCommands               bool     `json:"recordCommands"`
+	AllowedCommand               string   `json:"allowedCommand,omitempty"`
+	Provider                     string   `json:"provider,omitempty"`
+	AllowedModels                []string `json:"allowedModels,omitempty"`
+	MaxOutputTokens              int      `json:"maxOutputTokens,omitempty"`
+	RequestsPerMinute            int      `json:"requestsPerMinute,omitempty"`
+	MaxConcurrent                int      `json:"maxConcurrent,omitempty"`
+	TrackUsage                   bool     `json:"trackUsage,omitempty"`
+	TotalRequests                uint64   `json:"totalRequests,omitempty"`
+	InputTokens                  uint64   `json:"inputTokens,omitempty"`
+	OutputTokens                 uint64   `json:"outputTokens,omitempty"`
+	AuthenticationTimeoutSeconds int      `json:"authenticationTimeoutSeconds,omitempty"`
 }
 
 type ActivitySummary struct {
@@ -190,6 +221,9 @@ type ActivitySummary struct {
 	Result    string `json:"result"`
 	Latency   string `json:"latency"`
 	Egress    string `json:"egress"`
+	Category  string `json:"category"`
+	EventType string `json:"eventType"`
+	when      time.Time
 }
 
 func Listen(paths Paths, token string, registry *routes.Registry, store secrets.MutableStore, persistence routes.MetadataStore, egressManager *egress.Manager) (net.Listener, *Server, error) {
@@ -234,7 +268,11 @@ func listen(paths Paths, token string, registry *routes.Registry, store secrets.
 	if sshConfiguration != nil && sshConfiguration.HTTPAddress != "" {
 		httpAddress = sshConfiguration.HTTPAddress
 	}
-	return listener, &Server{registry: registry, secrets: store, persistence: persistence, egress: egressManager, ssh: sshConfiguration, httpAddress: httpAddress, token: token}, nil
+	var recorder activity.Recorder
+	if sshConfiguration != nil {
+		recorder = sshConfiguration.Activity
+	}
+	return listener, &Server{registry: registry, secrets: store, persistence: persistence, egress: egressManager, ssh: sshConfiguration, httpAddress: httpAddress, token: token, activity: recorder, health: make(map[string]routeHealthState)}, nil
 }
 
 func (s *Server) Serve(listener net.Listener) error {
@@ -249,7 +287,9 @@ func (s *Server) Serve(listener net.Listener) error {
 
 func (s *Server) handle(connection net.Conn) {
 	defer connection.Close()
-	_ = connection.SetDeadline(time.Now().Add(10 * time.Second))
+	// Keep request reads short while leaving enough time for a bounded remote
+	// authentication or health check to return a sanitized response.
+	_ = connection.SetDeadline(time.Now().Add(controlRequestReadWindow))
 
 	decoder := json.NewDecoder(io.LimitReader(connection, maxMessageBytes))
 	decoder.DisallowUnknownFields()
@@ -258,6 +298,11 @@ func (s *Server) handle(connection net.Conn) {
 		writeResponse(connection, Response{Error: "invalid control request"})
 		return
 	}
+	deadline := controlExchangeTimeout
+	if request.Action == "test_route_health" {
+		deadline = controlHealthCheckTimeout
+	}
+	_ = connection.SetDeadline(time.Now().Add(deadline))
 	response := s.dispatch(request)
 	writeResponse(connection, response)
 }
@@ -286,8 +331,18 @@ func (s *Server) dispatch(request Request) Response {
 		return s.createSSHRoute(request.CreateSSH)
 	case "set_ssh_policy":
 		return s.setSSHPolicy(request.Alias, request.SSHPolicy)
+	case "update_ssh_target":
+		return s.updateSSHTarget(request.Alias, request.CreateSSH)
+	case "rotate_ssh_credential":
+		return s.rotateSSHCredential(request.Alias, request.CreateSSH)
 	case "test_ssh_route":
 		return s.testSSHRoute(request.Alias, request.Capability, request.Command)
+	case "test_ssh_route_authentication":
+		return s.testSSHRouteAuthentication(request.Alias)
+	case "test_route_health":
+		return s.testRouteHealth(request.Alias)
+	case "test_proxy_health":
+		return s.testProxyHealth()
 	case "set_route_enabled":
 		return s.setRouteEnabled(request.Alias, request.Enabled)
 	case "stop_all":
@@ -687,6 +742,9 @@ func (s *Server) probeSSHHostKey(input *ProbeSSHHostKey) Response {
 	if err != nil {
 		return Response{Error: "invalid SSH address"}
 	}
+	if s.sshTargetIsLocalListener(address) {
+		return Response{Error: "SSH 上游地址指向 Airlock 本地监听地址"}
+	}
 	policy := input.Egress
 	if policy == "" {
 		policy = egress.Direct
@@ -695,7 +753,7 @@ func (s *Server) probeSSHHostKey(input *ProbeSSHHostKey) Response {
 	defer cancel()
 	key, err := sshgw.ProbeHostKey(ctx, s.egress, policy, address)
 	if err != nil {
-		return Response{Error: "could not inspect upstream SSH host key"}
+		return Response{Error: "上游 SSH 服务未返回 Host Key，请检查地址、端口和出口策略"}
 	}
 	response := s.successResponse()
 	response.SSHHostKeyProbe = &SSHHostKeyProbe{
@@ -705,6 +763,47 @@ func (s *Server) probeSSHHostKey(input *ProbeSSHHostKey) Response {
 	return response
 }
 
+func (s *Server) sshTargetIsLocalListener(address string) bool {
+	if s.ssh == nil {
+		return false
+	}
+	targetHost, targetPort, err := net.SplitHostPort(address)
+	if err != nil || !hostIsLocal(targetHost) {
+		return false
+	}
+	for _, listener := range []string{s.ssh.ListenAddress, s.ssh.DialAddress} {
+		_, listenerPort, splitErr := net.SplitHostPort(listener)
+		if splitErr == nil && listenerPort == targetPort {
+			return true
+		}
+	}
+	return false
+}
+
+func hostIsLocal(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() || ip.IsUnspecified() {
+		return true
+	}
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, address := range addresses {
+		localIP, _, parseErr := net.ParseCIDR(address.String())
+		if parseErr == nil && localIP.Equal(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
 	if s.ssh == nil || input == nil || strings.TrimSpace(input.Name) == "" || len(input.Name) > 80 || len(input.Address) > 512 || input.Username == "" || len(input.Username) > 255 || len(input.Password) == 0 || len(input.Password) > 8<<10 || (input.LocalPassword != "" && !validLocalPassword(input.LocalPassword)) || len(input.ExpectedHostKey) > 16<<10 || !validEgressPolicy(input.Egress) {
 		return Response{Error: "invalid SSH route details"}
@@ -712,6 +811,10 @@ func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
 	address, err := normalizeSSHAddress(input.Address)
 	if err != nil {
 		return Response{Error: "invalid SSH address"}
+	}
+	authenticationTimeout, err := sshgw.NormalizeAuthenticationTimeoutSeconds(input.AuthenticationTimeoutSeconds)
+	if err != nil {
+		return Response{Error: "SSH 认证预算需要在 3 到 120 秒之间"}
 	}
 	hostKey, err := base64.StdEncoding.DecodeString(input.ExpectedHostKey)
 	if err != nil || len(hostKey) == 0 {
@@ -725,14 +828,23 @@ func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 	if _, err := s.registry.Get(input.Alias); err == nil {
-		return Response{Error: "route alias already exists"}
+		return Response{Error: "本地路由别名已存在；相同上游 IP 可以复用，请更换本地别名"}
 	} else if !errors.Is(err, routes.ErrNotFound) {
 		return Response{Error: "could not inspect route registry"}
 	}
 	if _, err := s.ssh.Registry.Get(input.Alias); err == nil {
-		return Response{Error: "route alias already exists"}
+		return Response{Error: "本地路由别名已存在；相同上游 IP 可以复用，请更换本地别名"}
 	} else if !errors.Is(err, sshgw.ErrRouteNotFound) {
 		return Response{Error: "could not inspect route registry"}
+	}
+	localUsername := input.LocalUsername
+	if localUsername == "" {
+		localUsername = input.Alias
+	}
+	if _, err := s.ssh.Registry.GetByUsername(localUsername); err == nil {
+		return Response{Error: "本地 SSH 用户名已存在；相同上游 IP 可以复用，请更换本地 SSH 用户名"}
+	} else if !errors.Is(err, sshgw.ErrRouteNotFound) {
+		return Response{Error: "could not inspect SSH username mappings"}
 	}
 
 	var token string
@@ -762,16 +874,17 @@ func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
 		commands = nil
 	}
 	route := sshgw.Route{
-		Name: input.Name, Alias: input.Alias, TargetSecretRef: reference,
+		Name: input.Name, Alias: input.Alias, LocalUsername: localUsername,
+		TargetSecretRef:  reference,
 		CapabilityDigest: digest,
 		Policy: sshgw.NewPolicyWithOptions(
 			commands, nil, false, input.AllowAllCommands, input.RecordCommands,
 		),
-		Egress: policy, Enabled: false,
+		Egress: policy, AuthenticationTimeoutSeconds: authenticationTimeout, Enabled: false,
 	}
 	if err := s.ssh.Registry.Upsert(route); err != nil {
 		_ = s.secrets.DeleteTarget(context.Background(), reference)
-		return Response{Error: "invalid SSH alias or command policy"}
+		return Response{Error: "invalid SSH alias, local username, or command policy"}
 	}
 	if err := s.ssh.Persistence.Save(s.ssh.Registry.List()); err != nil {
 		_, _ = s.ssh.Registry.Delete(route.Alias)
@@ -788,29 +901,126 @@ func validLocalPassword(password string) bool {
 }
 
 func (s *Server) setSSHPolicy(alias string, input *SSHPolicyUpdate) Response {
-	if s.ssh == nil || input == nil {
-		return Response{Error: "SSH route policy is unavailable"}
+	if s.ssh == nil || input == nil || (input.Name != "" && (strings.TrimSpace(input.Name) == "" || len(input.Name) > 80)) || !validEgressPolicy(input.Egress) {
+		return Response{Error: "SSH 路由策略不可用"}
 	}
 	commands := []string{input.AllowedCommand}
 	if input.AllowAllCommands {
 		commands = nil
 	}
-	policy := sshgw.NewPolicyWithOptions(commands, nil, false, input.AllowAllCommands, input.RecordCommands)
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	previous, err := s.ssh.Registry.Get(alias)
+	if err != nil {
+		return Response{Error: "未找到 SSH 路由"}
+	}
+	localUsername := input.LocalUsername
+	if localUsername == "" {
+		localUsername = previous.EffectiveLocalUsername()
+	}
+	fingerprints := make([]string, 0, len(previous.Policy.LocalPublicKeyFingerprints))
+	for fingerprint := range previous.Policy.LocalPublicKeyFingerprints {
+		fingerprints = append(fingerprints, fingerprint)
+	}
+	updated := previous
+	if input.AuthenticationTimeoutSeconds != 0 {
+		authenticationTimeout, timeoutErr := sshgw.NormalizeAuthenticationTimeoutSeconds(input.AuthenticationTimeoutSeconds)
+		if timeoutErr != nil {
+			return Response{Error: "SSH 认证预算需要在 3 到 120 秒之间"}
+		}
+		updated.AuthenticationTimeoutSeconds = authenticationTimeout
+	} else {
+		updated.AuthenticationTimeoutSeconds = previous.EffectiveAuthenticationTimeoutSeconds()
+	}
+	updated.LocalUsername = localUsername
+	updated.Policy = sshgw.NewPolicyWithOptions(commands, fingerprints, false, input.AllowAllCommands, input.RecordCommands)
+	if input.Name != "" {
+		updated.Name = strings.TrimSpace(input.Name)
+	}
+	if input.Egress != "" {
+		updated.Egress = input.Egress
+	}
+	if err := s.ssh.Registry.Upsert(updated); err != nil {
+		if errors.Is(err, sshgw.ErrLocalUsernameInUse) {
+			return Response{Error: "本地 SSH 用户名已存在；相同上游 IP 可以复用，请更换本地 SSH 用户名"}
+		}
+		return Response{Error: "SSH 命令策略无效"}
+	}
+	if err := s.ssh.Persistence.Save(s.ssh.Registry.List()); err != nil {
+		_ = s.ssh.Registry.Upsert(previous)
+		return Response{Error: "无法保存 SSH 映射策略"}
+	}
+	return s.successResponse()
+}
+
+func (s *Server) updateSSHTarget(alias string, input *CreateSSHRoute) Response {
+	if s.ssh == nil || input == nil || input.Username == "" || len(input.Username) > 255 || len(input.Password) == 0 || len(input.Password) > 8<<10 || len(input.ExpectedHostKey) > 16<<10 || !validEgressPolicy(input.Egress) {
+		return Response{Error: "SSH 宿主机更新参数无效"}
+	}
+	address, err := normalizeSSHAddress(input.Address)
+	if err != nil || s.sshTargetIsLocalListener(address) {
+		return Response{Error: "SSH 宿主地址无效或指向 Airlock 自身"}
+	}
+	hostKey, err := base64.StdEncoding.DecodeString(input.ExpectedHostKey)
+	if err != nil || len(hostKey) == 0 {
+		clear(hostKey)
+		return Response{Error: "SSH Host Key 无效"}
+	}
+	defer clear(hostKey)
+	password := []byte(input.Password)
+	defer clear(password)
+
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	route, err := s.ssh.Registry.Get(alias)
+	if err != nil {
+		return Response{Error: "未找到 SSH 路由"}
+	}
+	target := secrets.SSHTarget{
+		Address: address, Username: input.Username, Password: password,
+		ExpectedHostKey: hostKey,
+	}
+	if err := s.secrets.PutSSHTarget(context.Background(), route.TargetSecretRef, target); err != nil {
+		return Response{Error: "无法替换受保护 SSH 宿主机"}
+	}
+	s.clearRouteHealth(alias)
+	return s.successResponse()
+}
+
+func (s *Server) rotateSSHCredential(alias string, input *CreateSSHRoute) Response {
+	if s.ssh == nil || input == nil || (input.LocalPassword != "" && !validLocalPassword(input.LocalPassword)) {
+		return Response{Error: "本地 SSH 凭据无效"}
+	}
+	var token string
+	var digest capability.Digest
+	var err error
+	if input.LocalPassword == "" {
+		token, digest, err = capability.Generate()
+		if err != nil {
+			return Response{Error: "无法生成本地 SSH 凭据"}
+		}
+	} else {
+		digest = capability.Hash(input.LocalPassword)
+	}
 
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 	previous, err := s.ssh.Registry.Get(alias)
 	if err != nil {
-		return Response{Error: "SSH route was not found"}
+		return Response{Error: "未找到 SSH 路由"}
 	}
-	if err := s.ssh.Registry.SetCommandPolicy(alias, policy); err != nil {
-		return Response{Error: "invalid SSH command policy"}
+	updated := previous
+	updated.CapabilityDigest = digest
+	if err := s.ssh.Registry.Upsert(updated); err != nil {
+		return Response{Error: "无法轮换本地 SSH 凭据"}
 	}
 	if err := s.ssh.Persistence.Save(s.ssh.Registry.List()); err != nil {
 		_ = s.ssh.Registry.Upsert(previous)
-		return Response{Error: "could not persist SSH command policy"}
+		return Response{Error: "无法保存本地 SSH 凭据"}
 	}
-	return s.successResponse()
+	response := s.successResponse()
+	response.Created = &CreatedRoute{Route: summarizeSSH(updated, s.ssh.ListenAddress), Capability: token}
+	return response
 }
 
 func (s *Server) testSSHRoute(alias, token, command string) Response {
@@ -834,7 +1044,7 @@ func (s *Server) testSSHRoute(alias, token, command string) Response {
 	algorithms := ssh.SupportedAlgorithms()
 	config := &ssh.ClientConfig{
 		Config: ssh.Config{KeyExchanges: algorithms.KeyExchanges, Ciphers: algorithms.Ciphers, MACs: algorithms.MACs},
-		User:   alias, Auth: []ssh.AuthMethod{ssh.Password(token)},
+		User:   route.EffectiveLocalUsername(), Auth: []ssh.AuthMethod{ssh.Password(token)},
 		HostKeyCallback: ssh.FixedHostKey(s.ssh.HostKey), HostKeyAlgorithms: algorithms.HostKeys,
 		ClientVersion: "SSH-2.0-Airlock-Self-Test", Timeout: 5 * time.Second,
 	}
@@ -855,6 +1065,221 @@ func (s *Server) testSSHRoute(alias, token, command string) Response {
 		return Response{Error: "upstream SSH command test failed"}
 	}
 	return s.successResponse()
+}
+
+func (s *Server) testSSHRouteAuthentication(alias string) Response {
+	if s.ssh == nil || s.secrets == nil || s.egress == nil || strings.TrimSpace(alias) == "" || len(alias) > 63 {
+		return Response{Error: "SSH 认证测试不可用"}
+	}
+	route, err := s.ssh.Registry.Get(alias)
+	if err != nil {
+		return Response{Error: "未找到 SSH 路由"}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(route.EffectiveAuthenticationTimeoutSeconds())*time.Second)
+	defer cancel()
+	target, err := s.secrets.ResolveSSHTarget(ctx, route.TargetSecretRef)
+	if err != nil {
+		return Response{Error: "上游 SSH 认证测试失败"}
+	}
+	if err := sshgw.VerifyUpstreamAuthentication(ctx, s.egress, route, &target); err != nil {
+		switch {
+		case errors.Is(err, sshgw.ErrUpstreamAuth):
+			return Response{Error: "上游 SSH 账号或密码被拒绝"}
+		case errors.Is(err, sshgw.ErrHostKeyMismatch):
+			return Response{Error: "上游 SSH Host Key 校验失败"}
+		default:
+			return Response{Error: "上游 SSH 服务不可达"}
+		}
+	}
+	return s.successResponse()
+}
+
+func (s *Server) testRouteHealth(alias string) Response {
+	if strings.TrimSpace(alias) == "" || len(alias) > 63 || s.egress == nil || s.secrets == nil {
+		return Response{Error: "route health check is unavailable"}
+	}
+	started := time.Now()
+	checkedAt := started.UTC()
+	status := "degraded"
+	result := "failed"
+	message := "上游不可达或受保护配置不可用"
+	category := ""
+	egressPolicy := egress.Direct
+
+	if route, err := s.registry.Get(alias); err == nil {
+		category = route.EffectiveKind()
+		egressPolicy = effectiveEgress(route.Egress)
+		if checkMessage, healthy := s.checkHTTPRoute(route); healthy {
+			status, result, message = "healthy", "allowed", checkMessage
+		} else {
+			message = checkMessage
+		}
+	} else if errors.Is(err, routes.ErrNotFound) && s.ssh != nil {
+		route, sshErr := s.ssh.Registry.Get(alias)
+		if sshErr != nil {
+			return Response{Error: "route was not found"}
+		}
+		category = "SSH"
+		egressPolicy = effectiveEgress(route.Egress)
+		if checkMessage, healthy := s.checkSSHRoute(route); healthy {
+			status, result, message = "healthy", "allowed", checkMessage
+		} else {
+			message = checkMessage
+		}
+	} else {
+		return Response{Error: "route was not found"}
+	}
+
+	duration := time.Since(started)
+	s.setRouteHealth(alias, routeHealthState{Status: status, CheckedAt: checkedAt})
+	if s.activity != nil {
+		_ = s.activity.Record(activity.Event{
+			RouteAlias: alias,
+			Category:   category,
+			EventType:  "health",
+			Caller:     "Airlock Desktop",
+			Action:     "Manual health check",
+			Result:     result,
+			DurationMS: duration.Milliseconds(),
+			Egress:     egressPolicy,
+		})
+	}
+	response := s.successResponse()
+	response.HealthCheck = &HealthCheckSummary{
+		Alias: alias, Status: status, Message: message,
+		Latency:   fmt.Sprintf("%d ms", duration.Milliseconds()),
+		CheckedAt: checkedAt.Local().Format("01-02 15:04:05"),
+	}
+	return response
+}
+
+func (s *Server) testProxyHealth() Response {
+	started := time.Now()
+	checkedAt := started.UTC()
+	status, result, message := "degraded", "failed", "代理尚未配置或受保护配置不可用"
+	if s.secrets != nil {
+		config, err := s.secrets.ResolveProxyConfig(context.Background(), egress.DefaultSecretReference)
+		if err == nil && config.URL != nil {
+			host, port := config.URL.Hostname(), config.URL.Port()
+			if port == "" {
+				switch strings.ToLower(config.URL.Scheme) {
+				case "http":
+					port = "80"
+				case "https":
+					port = "443"
+				case "socks5", "socks5h":
+					port = "1080"
+				}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			connection, dialErr := (&net.Dialer{}).DialContext(ctx, "tcp", net.JoinHostPort(host, port))
+			cancel()
+			if dialErr == nil {
+				_ = connection.Close()
+				status, result, message = "healthy", "allowed", "本地代理 TCP 端口可达"
+			} else {
+				message = "无法连接本地代理 TCP 端口"
+			}
+		}
+	}
+	duration := time.Since(started)
+	if s.activity != nil {
+		_ = s.activity.Record(activity.Event{
+			RouteAlias: "proxy", Category: "System", EventType: "health",
+			Caller: "Airlock Desktop", Action: "Manual proxy health check", Result: result,
+			DurationMS: duration.Milliseconds(), Egress: egress.Direct,
+		})
+	}
+	response := s.successResponse()
+	response.HealthCheck = &HealthCheckSummary{
+		Alias: "proxy", Status: status, Message: message,
+		Latency: fmt.Sprintf("%d ms", duration.Milliseconds()), CheckedAt: checkedAt.Local().Format("01-02 15:04:05"),
+	}
+	return response
+}
+
+func (s *Server) checkHTTPRoute(route routes.HTTPRoute) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	target, err := s.secrets.ResolveHTTPTarget(ctx, route.TargetSecretRef)
+	if err != nil || target.BaseURL == nil {
+		return "受保护目标无法读取", false
+	}
+	scheme := strings.ToLower(target.BaseURL.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "目标协议不受支持", false
+	}
+	host := target.BaseURL.Hostname()
+	port := target.BaseURL.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[scheme]
+	}
+	connection, err := s.egress.DialContext(ctx, effectiveEgress(route.Egress), "tcp", net.JoinHostPort(host, port))
+	if err != nil {
+		return "TCP 连通性检查失败", false
+	}
+	defer connection.Close()
+	if scheme == "https" {
+		tlsConnection := tls.Client(connection, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
+		if err := tlsConnection.HandshakeContext(ctx); err != nil {
+			return "TCP 可达，但 TLS 证书或握手校验失败", false
+		}
+		return "TCP 与 TLS 校验通过，未发送业务请求", true
+	}
+	return "目标 TCP 端口可达，未发送业务请求", true
+}
+
+func (s *Server) checkSSHRoute(route sshgw.Route) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(route.EffectiveAuthenticationTimeoutSeconds())*time.Second)
+	defer cancel()
+	target, err := s.secrets.ResolveSSHTarget(ctx, route.TargetSecretRef)
+	if err != nil {
+		return "受保护 SSH 目标无法读取", false
+	}
+	defer clearResolvedSSHTarget(&target)
+	if err := sshgw.VerifyUpstreamAuthentication(ctx, s.egress, route, &target); err != nil {
+		switch {
+		case errors.Is(err, sshgw.ErrUpstreamAuth):
+			return "SSH Host Key 已固定，但上游账号或密码被拒绝", false
+		case errors.Is(err, sshgw.ErrHostKeyMismatch):
+			return "SSH Host Key 与固定值不一致", false
+		default:
+			return "上游 SSH 服务不可达或认证超时", false
+		}
+	}
+	return "SSH Host Key 与上游身份认证通过，未执行命令", true
+}
+
+func effectiveEgress(policy string) string {
+	if policy == "" {
+		return egress.Direct
+	}
+	return policy
+}
+
+func (s *Server) setRouteHealth(alias string, state routeHealthState) {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	if s.health == nil {
+		s.health = make(map[string]routeHealthState)
+	}
+	s.health[alias] = state
+}
+
+func (s *Server) clearRouteHealth(alias string) {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	delete(s.health, alias)
+}
+
+func (s *Server) routeHealth(alias string) string {
+	s.healthMu.RLock()
+	defer s.healthMu.RUnlock()
+	state, ok := s.health[alias]
+	if !ok || (state.Status != "healthy" && state.Status != "degraded") {
+		return "unknown"
+	}
+	return state.Status
 }
 
 func (s *Server) setRouteEnabled(alias string, enabled bool) Response {
@@ -930,6 +1355,7 @@ func (s *Server) deleteRoute(alias string) Response {
 			_ = s.registry.Upsert(deleted)
 			return Response{Error: "could not persist route deletion"}
 		}
+		s.clearRouteHealth(alias)
 		response := s.successResponse()
 		if err := s.secrets.DeleteTarget(context.Background(), deleted.TargetSecretRef); err != nil && !errors.Is(err, secrets.ErrNotFound) {
 			response.Warning = "route deleted, but protected target cleanup needs attention"
@@ -947,6 +1373,7 @@ func (s *Server) deleteRoute(alias string) Response {
 		_ = s.ssh.Registry.Upsert(deletedSSH)
 		return Response{Error: "could not persist SSH route deletion"}
 	}
+	s.clearRouteHealth(alias)
 	response := s.successResponse()
 	if err := s.secrets.DeleteTarget(context.Background(), deletedSSH.TargetSecretRef); err != nil && !errors.Is(err, secrets.ErrNotFound) {
 		response.Warning = "route deleted, but protected target cleanup needs attention"
@@ -990,28 +1417,51 @@ func (s *Server) successResponse() Response {
 	return Response{
 		OK: true, Running: true, Routes: s.routeSummaries(),
 		ProxyConfigured: s.proxyConfigured(), SSHReady: s.ssh != nil,
-		Activity: s.commandActivities(),
+		Activity: s.recentActivities(),
 	}
 }
 
-func (s *Server) commandActivities() []ActivitySummary {
-	if s.ssh == nil || s.ssh.CommandAudit == nil {
-		return nil
-	}
-	events := s.ssh.CommandAudit.List(12)
-	result := make([]ActivitySummary, 0, len(events))
-	for _, event := range events {
-		routeName := event.RouteAlias
-		if route, err := s.ssh.Registry.Get(event.RouteAlias); err == nil && strings.TrimSpace(route.Name) != "" {
-			routeName = route.Name
+func (s *Server) recentActivities() []ActivitySummary {
+	result := make([]ActivitySummary, 0, 50)
+	if s.activity != nil {
+		for _, event := range s.activity.List(50) {
+			result = append(result, ActivitySummary{
+				ID: event.ID, Time: event.Time.Local().Format("01-02 15:04:05"),
+				RouteName: s.routeDisplayName(event.RouteAlias), Caller: event.Caller,
+				Action: event.Action, Result: event.Result,
+				Latency: fmt.Sprintf("%d ms", event.DurationMS), Egress: effectiveEgress(event.Egress),
+				Category: event.Category, EventType: event.EventType, when: event.Time,
+			})
 		}
-		result = append(result, ActivitySummary{
-			ID: event.ID, Time: event.Time.Local().Format("01-02 15:04:05"),
-			RouteName: routeName, Caller: event.RouteAlias + "@loopback", Action: commandPreview(event.Command),
-			Result: event.Result, Latency: fmt.Sprintf("%d ms", event.DurationMS), Egress: event.Egress,
-		})
+	}
+	if s.ssh != nil && s.ssh.CommandAudit != nil {
+		for _, event := range s.ssh.CommandAudit.List(50) {
+			result = append(result, ActivitySummary{
+				ID: event.ID, Time: event.Time.Local().Format("01-02 15:04:05"),
+				RouteName: s.routeDisplayName(event.RouteAlias), Caller: event.RouteAlias + "@loopback",
+				Action: commandPreview(event.Command), Result: event.Result,
+				Latency: fmt.Sprintf("%d ms", event.DurationMS), Egress: effectiveEgress(event.Egress),
+				Category: "SSH", EventType: "command", when: event.Time,
+			})
+		}
+	}
+	sort.SliceStable(result, func(i, j int) bool { return result[i].when.After(result[j].when) })
+	if len(result) > 50 {
+		result = result[:50]
 	}
 	return result
+}
+
+func (s *Server) routeDisplayName(alias string) string {
+	if route, err := s.registry.Get(alias); err == nil && strings.TrimSpace(route.Name) != "" {
+		return route.Name
+	}
+	if s.ssh != nil {
+		if route, err := s.ssh.Registry.Get(alias); err == nil && strings.TrimSpace(route.Name) != "" {
+			return route.Name
+		}
+	}
+	return alias
 }
 
 func commandPreview(command string) string {
@@ -1032,6 +1482,9 @@ func (s *Server) routeSummaries() []RouteSummary {
 		for _, route := range s.ssh.Registry.List() {
 			result = append(result, summarizeSSH(route, s.ssh.ListenAddress))
 		}
+	}
+	for index := range result {
+		result[index].Health = s.routeHealth(result[index].Alias)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result
@@ -1124,12 +1577,14 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 	}
 	return RouteSummary{
 		ID: route.Alias, Name: name, Alias: route.Alias, Kind: "SSH", Status: status,
-		LocalEndpoint:     route.Alias + "@" + listenAddress,
+		LocalUsername:     route.EffectiveLocalUsername(),
+		LocalEndpoint:     route.EffectiveLocalUsername() + "@" + listenAddress,
 		PermissionSummary: permissionSummary,
 		Egress:            egressPolicy, Health: "unknown", LastUsed: "从未", CurrentConnections: 0,
-		AllowAllCommands: route.Policy.AllowAllCommands,
-		RecordCommands:   route.Policy.RecordCommands,
-		AllowedCommand:   allowedCommand,
+		AllowAllCommands:             route.Policy.AllowAllCommands,
+		RecordCommands:               route.Policy.RecordCommands,
+		AllowedCommand:               allowedCommand,
+		AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
 	}
 }
 

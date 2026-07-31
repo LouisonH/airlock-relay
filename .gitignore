@@ -42,3 +42,4 @@ release/
 *.dmg
 *.msi
 *.AppImage
+*.tgz

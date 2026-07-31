@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/LouisonH/airlock-relay/internal/activity"
 	"github.com/LouisonH/airlock-relay/internal/capability"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
 	"golang.org/x/crypto/ssh"
@@ -20,6 +21,8 @@ var (
 
 type RouteLookup interface {
 	Lookup(alias string) (Route, error)
+	LookupByUsername(username string) (Route, error)
+	GetByUsername(username string) (Route, error)
 }
 
 type Server struct {
@@ -27,6 +30,7 @@ type Server struct {
 	secrets          secrets.Store
 	dialer           EgressDialer
 	commandAudit     CommandAudit
+	activity         activity.Recorder
 	config           *ssh.ServerConfig
 	handshakeTimeout time.Duration
 	allowLAN         bool
@@ -36,6 +40,10 @@ type ServerOption func(*Server)
 
 func WithCommandAudit(audit CommandAudit) ServerOption {
 	return func(server *Server) { server.commandAudit = audit }
+}
+
+func WithActivityRecorder(recorder activity.Recorder) ServerOption {
+	return func(server *Server) { server.activity = recorder }
 }
 
 func WithLANAccess() ServerOption {
@@ -126,8 +134,9 @@ func (s *Server) serveConnection(raw net.Conn) {
 }
 
 func (s *Server) authenticatePassword(metadata ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
-	route, err := s.routes.Lookup(metadata.User())
+	route, err := s.routes.LookupByUsername(metadata.User())
 	if err != nil {
+		s.recordDisabledAuthentication(metadata)
 		_ = capability.Verify(string(password), capability.Digest{})
 		return nil, ErrAuthentication
 	}
@@ -138,8 +147,9 @@ func (s *Server) authenticatePassword(metadata ssh.ConnMetadata, password []byte
 }
 
 func (s *Server) authenticatePublicKey(metadata ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-	route, err := s.routes.Lookup(metadata.User())
+	route, err := s.routes.LookupByUsername(metadata.User())
 	if err != nil {
+		s.recordDisabledAuthentication(metadata)
 		return nil, ErrAuthentication
 	}
 	fingerprint := ssh.FingerprintSHA256(key)
@@ -147,6 +157,35 @@ func (s *Server) authenticatePublicKey(metadata ssh.ConnMetadata, key ssh.Public
 		return nil, ErrAuthentication
 	}
 	return routePermissions(route.Alias), nil
+}
+
+func (s *Server) recordDisabledAuthentication(metadata ssh.ConnMetadata) {
+	if s.activity == nil || metadata == nil {
+		return
+	}
+	route, err := s.routes.GetByUsername(metadata.User())
+	if err != nil || route.Enabled {
+		return
+	}
+	caller := route.EffectiveLocalUsername() + "@network"
+	if address := metadata.RemoteAddr(); address != nil {
+		if host, _, splitErr := net.SplitHostPort(address.String()); splitErr == nil {
+			if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+				caller = route.EffectiveLocalUsername() + "@loopback"
+			} else if ip != nil && ip.IsPrivate() {
+				caller = route.EffectiveLocalUsername() + "@private-lan"
+			}
+		}
+	}
+	_ = s.activity.Record(activity.Event{
+		RouteAlias: route.Alias,
+		Category:   "SSH",
+		EventType:  "request",
+		Caller:     caller,
+		Action:     "SSH connection to disabled route",
+		Result:     "blocked",
+		Egress:     route.Egress,
+	})
 }
 
 func routePermissions(alias string) *ssh.Permissions {
@@ -166,7 +205,7 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 	if connection.Permissions != nil {
 		alias = connection.Permissions.Extensions[authenticatedRouteExtension]
 	}
-	if alias == "" || alias != connection.User() {
+	if alias == "" {
 		_ = local.Close()
 		return
 	}
@@ -192,7 +231,7 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 
 			var payload struct{ Command string }
 			route, err := s.routes.Lookup(alias)
-			if err != nil || ssh.Unmarshal(request.Payload, &payload) != nil || !route.Policy.AllowsCommand(payload.Command) {
+			if err != nil || route.EffectiveLocalUsername() != connection.User() || ssh.Unmarshal(request.Payload, &payload) != nil || !route.Policy.AllowsCommand(payload.Command) {
 				if err == nil && validCommand(payload.Command) {
 					s.recordCommand(route, payload.Command, "blocked", 0)
 				}

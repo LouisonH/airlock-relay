@@ -10,11 +10,12 @@ export interface SecuritySettings {
   secretStore: SecretStoreMode;
 }
 
-// IPC-facing summaries intentionally have no target or secret fields.
+// Persistent route summaries intentionally have no target or secret fields.
 export interface RouteSummary {
   id: string;
   name: string;
   alias: string;
+  localUsername?: string;
   kind: RouteKind;
   status: RouteStatus;
   localEndpoint: string;
@@ -35,6 +36,20 @@ export interface RouteSummary {
   totalRequests?: number;
   inputTokens?: number;
   outputTokens?: number;
+  authenticationTimeoutSeconds?: number;
+}
+
+export interface SSHHostKeyProbe {
+  hostKey: string;
+  fingerprint: string;
+}
+
+// The generated local credential is returned once for the Airlock completion
+// screen and is never included in later control-state responses.
+export interface SSHRouteCreationResult {
+  route: RouteSummary;
+  localCredential: string;
+  generatedCredential: boolean;
 }
 
 export interface ActivityEvent {
@@ -46,6 +61,8 @@ export interface ActivityEvent {
   result: "allowed" | "blocked" | "failed";
   latency: string;
   egress: "Direct" | "Proxy" | "Auto";
+  category: RouteKind | "System";
+  eventType: "request" | "command" | "health";
 }
 
 export interface ControlState {
@@ -68,3 +85,7 @@ export interface SecurityUpdate {
   securitySettings: SecuritySettings;
   message?: string;
 }
+
+export type RouteStatusFilter = "All" | RouteStatus;
+export type RouteHealthFilter = "All" | RouteHealth;
+export type RouteEgressFilter = "All" | RouteSummary["egress"];

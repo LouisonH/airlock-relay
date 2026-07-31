@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/ed25519"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/LouisonH/airlock-relay/internal/activity"
 	"github.com/LouisonH/airlock-relay/internal/capability"
 	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/routes"
@@ -358,52 +360,110 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 		},
 	}
 	response := server.createSSHRoute(&CreateSSHRoute{
-		Name: "Build", Alias: "build", Address: "ssh.private.invalid",
+		Name: "Build", Alias: "build", LocalUsername: "builder", Address: "192.0.2.10:22",
 		Username: "upstream-user-sentinel", Password: "upstream-password-sentinel",
 		ExpectedHostKey: base64.StdEncoding.EncodeToString(hostKey.Marshal()),
 		AllowedCommand:  "printf airlock-ok", RecordCommands: true, Egress: egress.Auto,
+		AuthenticationTimeoutSeconds: 37,
 	})
 	if !response.OK || response.Created == nil || response.Created.Capability == "" {
 		t.Fatalf("create SSH response = %+v", response)
 	}
-	if response.Created.Route.LocalEndpoint != "build@127.0.0.1:4770" || response.Created.Route.Kind != "SSH" || response.Created.Route.Status != "disabled" {
+	if response.Created.Route.LocalUsername != "builder" || response.Created.Route.LocalEndpoint != "builder@127.0.0.1:4770" || response.Created.Route.Kind != "SSH" || response.Created.Route.Status != "disabled" {
 		t.Fatalf("created SSH summary = %+v", response.Created.Route)
 	}
 	if response.Created.Route.AllowedCommand != "printf airlock-ok" {
 		t.Fatalf("created SSH allowed command = %q", response.Created.Route.AllowedCommand)
 	}
+	if response.Created.Route.AuthenticationTimeoutSeconds != 37 {
+		t.Fatalf("created SSH authentication timeout = %d", response.Created.Route.AuthenticationTimeoutSeconds)
+	}
 	raw, err := json.Marshal(response)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, protected := range []string{"ssh.private.invalid", "upstream-user-sentinel", "upstream-password-sentinel"} {
+	for _, protected := range []string{"192.0.2.10", "upstream-user-sentinel", "upstream-password-sentinel"} {
 		if strings.Contains(string(raw), protected) {
 			t.Fatalf("SSH control response leaked %q: %s", protected, raw)
 		}
 	}
 	target, err := store.ResolveSSHTarget(t.Context(), "ssh/build")
-	if err != nil || target.Address != "ssh.private.invalid:22" || target.Username != "upstream-user-sentinel" || string(target.Password) != "upstream-password-sentinel" {
+	if err != nil || target.Address != "192.0.2.10:22" || target.Username != "upstream-user-sentinel" || string(target.Password) != "upstream-password-sentinel" {
 		t.Fatalf("protected SSH target = %+v, %v", target, err)
 	}
 	loaded, err := sshMetadata.Load()
-	if err != nil || len(loaded) != 1 || loaded[0].TargetSecretRef != "ssh/build" || !loaded[0].Policy.AllowsCommand("printf airlock-ok") {
+	if err != nil || len(loaded) != 1 || loaded[0].TargetSecretRef != "ssh/build" || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || loaded[0].AuthenticationTimeoutSeconds != 37 {
 		t.Fatalf("persisted SSH routes = %+v, %v", loaded, err)
 	}
-	updated := server.setSSHPolicy("build", &SSHPolicyUpdate{AllowedCommand: "uname -a", RecordCommands: true})
-	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].AllowedCommand != "uname -a" || updated.Routes[0].AllowAllCommands {
+	duplicate := server.createSSHRoute(&CreateSSHRoute{
+		Name: "Duplicate", Alias: "duplicate", LocalUsername: "builder", Address: "ssh.private.invalid",
+		Username: "upstream-user", Password: "upstream-password",
+		ExpectedHostKey: base64.StdEncoding.EncodeToString(hostKey.Marshal()),
+		AllowedCommand:  "uptime", Egress: egress.Direct,
+	})
+	if duplicate.OK || duplicate.Error != "本地 SSH 用户名已存在；相同上游 IP 可以复用，请更换本地 SSH 用户名" {
+		t.Fatalf("duplicate SSH username response = %+v", duplicate)
+	}
+	if _, err := store.ResolveSSHTarget(t.Context(), "ssh/duplicate"); !errors.Is(err, secrets.ErrNotFound) {
+		t.Fatalf("duplicate username stored a protected target: %v", err)
+	}
+	sharedTarget := server.createSSHRoute(&CreateSSHRoute{
+		Name: "Deploy", Alias: "deploy", LocalUsername: "deployer", Address: "192.0.2.10:22",
+		Username: "second-upstream-user", Password: "upstream-password-sentinel",
+		ExpectedHostKey: base64.StdEncoding.EncodeToString(hostKey.Marshal()),
+		AllowedCommand:  "uptime", Egress: egress.Direct,
+	})
+	if !sharedTarget.OK || sharedTarget.Created == nil || sharedTarget.Created.Route.LocalUsername != "deployer" {
+		t.Fatalf("shared upstream SSH target response = %+v", sharedTarget)
+	}
+	secondTarget, err := store.ResolveSSHTarget(t.Context(), "ssh/deploy")
+	if err != nil || secondTarget.Address != "192.0.2.10:22" || secondTarget.Username != "second-upstream-user" || string(secondTarget.Password) != "upstream-password-sentinel" {
+		t.Fatalf("shared protected SSH target = %+v, %v", secondTarget, err)
+	}
+	if deleted := server.deleteRoute("deploy"); !deleted.OK || len(deleted.Routes) != 1 {
+		t.Fatalf("delete shared upstream route response = %+v", deleted)
+	}
+
+	updated := server.setSSHPolicy("build", &SSHPolicyUpdate{Name: "Release host", LocalUsername: "release", AllowedCommand: "uname -a", RecordCommands: true, AuthenticationTimeoutSeconds: 45, Egress: egress.Proxy})
+	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].Name != "Release host" || updated.Routes[0].LocalUsername != "release" || updated.Routes[0].LocalEndpoint != "release@127.0.0.1:4770" || updated.Routes[0].AllowedCommand != "uname -a" || updated.Routes[0].AllowAllCommands || updated.Routes[0].Egress != egress.Proxy || updated.Routes[0].AuthenticationTimeoutSeconds != 45 {
 		t.Fatalf("updated exact-command policy response = %+v", updated)
 	}
 	loaded, err = sshMetadata.Load()
-	if err != nil || len(loaded) != 1 || !loaded[0].Policy.AllowsCommand("uname -a") || loaded[0].Policy.AllowsCommand("printf airlock-ok") {
+	if err != nil || len(loaded) != 1 || loaded[0].Name != "Release host" || loaded[0].LocalUsername != "release" || loaded[0].Egress != egress.Proxy || loaded[0].AuthenticationTimeoutSeconds != 45 || !loaded[0].Policy.AllowsCommand("uname -a") || loaded[0].Policy.AllowsCommand("printf airlock-ok") {
 		t.Fatalf("persisted exact-command policy = %+v, %v", loaded, err)
 	}
 	updated = server.setSSHPolicy("build", &SSHPolicyUpdate{AllowAllCommands: true, RecordCommands: true})
-	if !updated.OK || len(updated.Routes) != 1 || !updated.Routes[0].AllowAllCommands || !updated.Routes[0].RecordCommands {
+	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].LocalUsername != "release" || !updated.Routes[0].AllowAllCommands || !updated.Routes[0].RecordCommands {
 		t.Fatalf("updated SSH policy response = %+v", updated)
 	}
 	loaded, err = sshMetadata.Load()
 	if err != nil || len(loaded) != 1 || !loaded[0].Policy.AllowsCommand("uname -a") || !loaded[0].Policy.RecordCommands {
 		t.Fatalf("persisted all-command policy = %+v, %v", loaded, err)
+	}
+	replaced := server.updateSSHTarget("build", &CreateSSHRoute{
+		Address: "192.0.2.44:2222", Username: "replacement-user", Password: "replacement-password",
+		ExpectedHostKey: base64.StdEncoding.EncodeToString(hostKey.Marshal()), Egress: egress.Proxy,
+	})
+	if !replaced.OK || len(replaced.Routes) != 1 {
+		t.Fatalf("replace SSH host response = %+v", replaced)
+	}
+	replacement, err := store.ResolveSSHTarget(t.Context(), "ssh/build")
+	if err != nil || replacement.Address != "192.0.2.44:2222" || replacement.Username != "replacement-user" || string(replacement.Password) != "replacement-password" || subtle.ConstantTimeCompare(replacement.ExpectedHostKey, hostKey.Marshal()) != 1 {
+		t.Fatalf("replacement SSH target = %+v, %v", replacement, err)
+	}
+	rotated := server.rotateSSHCredential("build", &CreateSSHRoute{})
+	if !rotated.OK || rotated.Created == nil || rotated.Created.Capability == "" {
+		t.Fatalf("rotate generated SSH credential response = %+v", rotated)
+	}
+	rotatedRoute, err := sshRegistry.Get("build")
+	if err != nil || capability.Verify(rotated.Created.Capability, rotatedRoute.CapabilityDigest) != nil || capability.Verify(response.Created.Capability, rotatedRoute.CapabilityDigest) == nil {
+		t.Fatalf("rotated SSH credential = %+v, %v", rotatedRoute, err)
+	}
+	const replacementLocalPassword = "replacement-local-password"
+	customRotation := server.rotateSSHCredential("build", &CreateSSHRoute{LocalPassword: replacementLocalPassword})
+	rotatedRoute, err = sshRegistry.Get("build")
+	if !customRotation.OK || customRotation.Created == nil || customRotation.Created.Capability != "" || err != nil || capability.Verify(replacementLocalPassword, rotatedRoute.CapabilityDigest) != nil {
+		t.Fatalf("custom SSH credential rotation = %+v, %+v, %v", customRotation, rotatedRoute, err)
 	}
 	if enabled := server.setRouteEnabled("build", true); !enabled.OK || enabled.Routes[0].Status != "enabled" {
 		t.Fatalf("enable SSH response = %+v", enabled)
@@ -435,11 +495,46 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 	}
 }
 
+func TestProbeSSHHostKeyRejectsTheLocalAirlockListener(t *testing.T) {
+	server := &Server{ssh: &SSHConfiguration{
+		ListenAddress: "0.0.0.0:4770",
+		DialAddress:   "127.0.0.1:4770",
+	}}
+	for _, address := range []string{"127.0.0.1:4770", "localhost:4770", "0.0.0.0:4770"} {
+		response := server.probeSSHHostKey(&ProbeSSHHostKey{Address: address, Egress: egress.Direct})
+		if response.OK || response.Error != "SSH 上游地址指向 Airlock 本地监听地址" {
+			t.Fatalf("local listener probe for %q = %+v", address, response)
+		}
+	}
+	if server.sshTargetIsLocalListener("127.0.0.1:22") {
+		t.Fatal("a different local SSH port was mistaken for the Airlock listener")
+	}
+}
+
 func TestCreateSSHRouteRejectsWeakCustomLocalPassword(t *testing.T) {
 	server := &Server{ssh: &SSHConfiguration{}}
 	response := server.createSSHRoute(&CreateSSHRoute{Name: "Weak", LocalPassword: "short"})
 	if response.OK || response.Error != "invalid SSH route details" {
 		t.Fatalf("weak local password response = %+v", response)
+	}
+}
+
+func TestSSHAuthenticationTestRejectsUnknownRoute(t *testing.T) {
+	registry, err := routes.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshRegistry, err := sshgw.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{
+		registry: registry, secrets: secrets.NewMemoryStore(), egress: egress.NewManager(nil),
+		ssh: &SSHConfiguration{Registry: sshRegistry},
+	}
+	response := server.testSSHRouteAuthentication("missing")
+	if response.OK || response.Error != "未找到 SSH 路由" {
+		t.Fatalf("authentication test response = %+v", response)
 	}
 }
 
@@ -552,6 +647,105 @@ func TestCommandPreviewIsBoundedAndValidUTF8(t *testing.T) {
 	preview := commandPreview(command)
 	if !strings.HasSuffix(preview, "... (truncated)") || len(preview) > 540 || !utf8.ValidString(preview) {
 		t.Fatalf("command preview = %q (%d bytes)", preview, len(preview))
+	}
+}
+
+func TestManualHTTPHealthCheckUpdatesSummaryAndCategorizedActivity(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse("http://" + listener.Addr().String() + "/protected/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, digest, err := capability.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	route := routes.HTTPRoute{
+		Name: "Downloads", Alias: "downloads", TargetSecretRef: "routes/downloads",
+		CapabilityDigest: digest, Policy: routes.NewHTTPPolicy([]string{http.MethodGet}, nil),
+		Egress: egress.Direct, Enabled: true,
+	}
+	registry, err := routes.NewRegistry(route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := secrets.NewMemoryStore()
+	if err := store.PutHTTPTarget(t.Context(), route.TargetSecretRef, secrets.HTTPTarget{BaseURL: parsed}); err != nil {
+		t.Fatal(err)
+	}
+	recorder := activity.NewMemoryRecorder()
+	server := &Server{
+		registry: registry, secrets: store,
+		persistence: routes.NewFileStore(filepath.Join(t.TempDir(), "routes.json")),
+		egress:      egress.NewManager(nil), activity: recorder,
+	}
+
+	healthy := server.testRouteHealth(route.Alias)
+	if !healthy.OK || healthy.HealthCheck == nil || healthy.HealthCheck.Status != "healthy" || len(healthy.Routes) != 1 || healthy.Routes[0].Health != "healthy" {
+		t.Fatalf("healthy response = %+v", healthy)
+	}
+	events := recorder.List(10)
+	if len(events) != 1 || events[0].Category != "HTTP" || events[0].EventType != "health" || events[0].Result != "allowed" || strings.Contains(events[0].Action, parsed.Host) {
+		t.Fatalf("healthy activity = %+v", events)
+	}
+
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	degraded := server.testRouteHealth(route.Alias)
+	if !degraded.OK || degraded.HealthCheck == nil || degraded.HealthCheck.Status != "degraded" || degraded.Routes[0].Health != "degraded" {
+		t.Fatalf("degraded response = %+v", degraded)
+	}
+	events = recorder.List(10)
+	if len(events) != 2 || events[0].Result != "failed" {
+		t.Fatalf("degraded activity = %+v", events)
+	}
+}
+
+func TestManualProxyHealthCheckUsesProtectedConfigurationAndRecordsActivity(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyURL, err := url.Parse("socks5://user:secret@" + listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := secrets.NewMemoryStore()
+	if err := store.PutProxyConfig(t.Context(), egress.DefaultSecretReference, secrets.ProxyConfig{URL: proxyURL}); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := routes.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := activity.NewMemoryRecorder()
+	server := &Server{
+		registry: registry, secrets: store, egress: egress.NewManager(nil), activity: recorder,
+	}
+
+	healthy := server.testProxyHealth()
+	if !healthy.OK || healthy.HealthCheck == nil || healthy.HealthCheck.Alias != "proxy" || healthy.HealthCheck.Status != "healthy" {
+		t.Fatalf("healthy response = %+v", healthy)
+	}
+	events := recorder.List(10)
+	if len(events) != 1 || events[0].Category != "System" || events[0].EventType != "health" || events[0].Result != "allowed" || events[0].Action != "Manual proxy health check" || strings.Contains(events[0].Action, proxyURL.Host) {
+		t.Fatalf("healthy activity = %+v", events)
+	}
+
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	degraded := server.testProxyHealth()
+	if !degraded.OK || degraded.HealthCheck == nil || degraded.HealthCheck.Status != "degraded" {
+		t.Fatalf("degraded response = %+v", degraded)
+	}
+	events = recorder.List(10)
+	if len(events) != 2 || events[0].Result != "failed" {
+		t.Fatalf("degraded activity = %+v", events)
 	}
 }
 

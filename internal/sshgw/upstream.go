@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/LouisonH/airlock-relay/internal/secrets"
@@ -35,14 +36,23 @@ func pinnedHostKeyCallback(expected []byte) (ssh.HostKeyCallback, error) {
 	}, nil
 }
 
-func upstreamAuthMethod(target secrets.SSHTarget) (ssh.AuthMethod, error) {
+func upstreamAuthMethods(target secrets.SSHTarget) ([]ssh.AuthMethod, error) {
 	hasPassword := len(target.Password) > 0
 	hasPrivateKey := len(target.PrivateKey) > 0
 	if hasPassword == hasPrivateKey {
 		return nil, ErrUpstreamAuth
 	}
 	if hasPassword {
-		return ssh.Password(string(target.Password)), nil
+		password := string(target.Password)
+		return []ssh.AuthMethod{
+			ssh.Password(password),
+			ssh.KeyboardInteractive(func(_ string, _ string, questions []string, echos []bool) ([]string, error) {
+				if len(questions) != 1 || len(echos) != 1 || echos[0] {
+					return nil, ErrUpstreamAuth
+				}
+				return []string{password}, nil
+			}),
+		}, nil
 	}
 	var (
 		signer ssh.Signer
@@ -56,17 +66,17 @@ func upstreamAuthMethod(target secrets.SSHTarget) (ssh.AuthMethod, error) {
 	if err != nil {
 		return nil, ErrUpstreamAuth
 	}
-	return ssh.PublicKeys(signer), nil
+	return []ssh.AuthMethod{ssh.PublicKeys(signer)}, nil
 }
 
 func dialUpstream(ctx context.Context, dialer EgressDialer, route Route, target secrets.SSHTarget) (*ssh.Client, error) {
 	callback, err := pinnedHostKeyCallback(target.ExpectedHostKey)
 	if err != nil {
-		return nil, ErrUpstreamUnavailable
+		return nil, err
 	}
-	auth, err := upstreamAuthMethod(target)
+	auth, err := upstreamAuthMethods(target)
 	if err != nil {
-		return nil, ErrUpstreamUnavailable
+		return nil, err
 	}
 	raw, err := dialer.DialContext(ctx, route.Egress, "tcp", target.Address)
 	if err != nil {
@@ -84,7 +94,7 @@ func dialUpstream(ctx context.Context, dialer EgressDialer, route Route, target 
 			MACs:         algorithms.MACs,
 		},
 		User:              target.Username,
-		Auth:              []ssh.AuthMethod{auth},
+		Auth:              auth,
 		HostKeyCallback:   callback,
 		HostKeyAlgorithms: algorithms.HostKeys,
 		ClientVersion:     "SSH-2.0-Airlock",
@@ -93,10 +103,41 @@ func dialUpstream(ctx context.Context, dialer EgressDialer, route Route, target 
 	connection, channels, requests, err := ssh.NewClientConn(raw, target.Address, config)
 	if err != nil {
 		_ = raw.Close()
-		return nil, ErrUpstreamUnavailable
+		return nil, classifyUpstreamHandshakeError(err)
 	}
 	_ = raw.SetDeadline(time.Time{})
 	return ssh.NewClient(connection, channels, requests), nil
+}
+
+func classifyUpstreamHandshakeError(err error) error {
+	if errors.Is(err, ErrUpstreamAuth) {
+		return ErrUpstreamAuth
+	}
+	if errors.Is(err, ErrHostKeyMismatch) {
+		return ErrHostKeyMismatch
+	}
+	// x/crypto/ssh exposes client-side authentication rejection as a wrapped
+	// handshake error rather than a typed error. The text is library-defined and
+	// never returned to callers; we reduce it to a safe category here.
+	if strings.Contains(err.Error(), "unable to authenticate") || strings.Contains(err.Error(), "unexpected message type 51 (expected 60)") {
+		return ErrUpstreamAuth
+	}
+	return ErrUpstreamUnavailable
+}
+
+// VerifyUpstreamAuthentication proves the pinned host key and upstream
+// credentials without executing a command on the protected host.
+func VerifyUpstreamAuthentication(ctx context.Context, dialer EgressDialer, route Route, target *secrets.SSHTarget) error {
+	if target == nil {
+		return ErrUpstreamUnavailable
+	}
+	defer clearTarget(target)
+	client, err := dialUpstream(ctx, dialer, route, *target)
+	if err != nil {
+		return err
+	}
+	_ = client.Close()
+	return nil
 }
 
 func clearTarget(target *secrets.SSHTarget) {

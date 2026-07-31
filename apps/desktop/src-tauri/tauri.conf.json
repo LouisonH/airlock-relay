@@ -22,11 +22,18 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost https://api.github.com"
     }
   },
   "bundle": {
     "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "copyright": "Copyright © 2026 LouisonH",
     "shortDescription": "Local credential-isolation relay for HTTP, SSH, and LLM traffic",
     "targets": "all",

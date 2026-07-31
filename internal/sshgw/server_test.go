@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LouisonH/airlock-relay/internal/activity"
 	"github.com/LouisonH/airlock-relay/internal/capability"
 	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
@@ -91,6 +92,82 @@ func TestGatewayPasswordIsolationAndRestrictedExec(t *testing.T) {
 	}
 	if got := upstream.snapshot().connections; got != 1 {
 		t.Fatalf("failed local authentication reached upstream: %d connections", got)
+	}
+}
+
+func TestGatewayRoutesSharedPasswordByLocalUsername(t *testing.T) {
+	firstUpstream := startUpstream(t, upstreamAuth{username: "first-upstream", password: "first-password"})
+	secondUpstream := startUpstream(t, upstreamAuth{username: "second-upstream", password: "second-password"})
+	const sharedPassword = "shared-local-password"
+	policy := NewPolicy([]string{"uptime"}, nil, false)
+	firstRoute := Route{
+		Name: "First", Alias: "first", LocalUsername: "alpha",
+		TargetSecretRef: "ssh/first", CapabilityDigest: capability.Hash(sharedPassword),
+		Policy: policy, Egress: egress.Direct, Enabled: true,
+	}
+	secondRoute := Route{
+		Name: "Second", Alias: "second", LocalUsername: "beta",
+		TargetSecretRef: "ssh/second", CapabilityDigest: capability.Hash(sharedPassword),
+		Policy: policy, Egress: egress.Direct, Enabled: true,
+	}
+	gateway := startGatewayRoutes(t, []Route{firstRoute, secondRoute}, map[string]secrets.SSHTarget{
+		"ssh/first": {
+			Address: firstUpstream.address(), Username: "first-upstream", Password: []byte("first-password"),
+			ExpectedHostKey: firstUpstream.hostSigner.PublicKey().Marshal(),
+		},
+		"ssh/second": {
+			Address: secondUpstream.address(), Username: "second-upstream", Password: []byte("second-password"),
+			ExpectedHostKey: secondUpstream.hostSigner.PublicKey().Marshal(),
+		},
+	}, egress.NewManager(nil))
+
+	unknownConfig := gateway.clientConfigForUsername("unknown", ssh.Password(sharedPassword))
+	if client, err := ssh.Dial("tcp", gateway.address, unknownConfig); err == nil {
+		_ = client.Close()
+		t.Fatal("unknown local username authenticated")
+	}
+	if firstUpstream.snapshot().connections != 0 || secondUpstream.snapshot().connections != 0 {
+		t.Fatal("unknown local username reached an upstream host")
+	}
+
+	for _, login := range []struct {
+		username string
+		upstream *upstreamHarness
+		wantUser string
+	}{
+		{username: "alpha", upstream: firstUpstream, wantUser: "first-upstream"},
+		{username: "beta", upstream: secondUpstream, wantUser: "second-upstream"},
+	} {
+		client := dialGatewayAs(t, gateway, login.username, ssh.Password(sharedPassword))
+		session, err := client.NewSession()
+		if err != nil {
+			client.Close()
+			t.Fatal(err)
+		}
+		if err := session.Run("uptime"); err != nil {
+			client.Close()
+			t.Fatalf("route %q exec failed: %v", login.username, err)
+		}
+		_ = client.Close()
+		snapshot := login.upstream.snapshot()
+		if snapshot.connections != 1 || snapshot.commands != 1 || snapshot.lastUser != login.wantUser {
+			t.Fatalf("route %q reached wrong upstream: %+v", login.username, snapshot)
+		}
+	}
+}
+
+func TestDisabledRouteConnectionAttemptIsRecorded(t *testing.T) {
+	route := testSSHRoute(NewPolicy([]string{"uptime"}, nil, false), egress.Direct)
+	route.Enabled = false
+	recorder := activity.NewMemoryRecorder()
+	gateway := startGatewayRoutesWithOptions(t, []Route{route}, nil, egress.NewManager(nil), WithActivityRecorder(recorder))
+	if client, err := ssh.Dial("tcp", gateway.address, gateway.clientConfig(ssh.Password(localCapability))); err == nil {
+		_ = client.Close()
+		t.Fatal("disabled route authenticated")
+	}
+	events := recorder.List(10)
+	if len(events) != 1 || events[0].RouteAlias != route.Alias || events[0].Category != "SSH" || events[0].EventType != "request" || events[0].Result != "blocked" || events[0].Action != "SSH connection to disabled route" || events[0].Caller != "build@loopback" {
+		t.Fatalf("disabled route activity = %+v", events)
 	}
 }
 
@@ -359,19 +436,31 @@ type gatewayHarness struct {
 
 func startGateway(t *testing.T, route Route, target secrets.SSHTarget, dialer EgressDialer, audits ...CommandAudit) gatewayHarness {
 	t.Helper()
-	store := secrets.NewMemoryStore()
-	if err := store.PutSSHTarget(t.Context(), route.TargetSecretRef, target); err != nil {
-		t.Fatal(err)
-	}
-	registry, err := NewRegistry(route)
-	if err != nil {
-		t.Fatal(err)
-	}
-	hostSigner := generateSigner(t)
+	return startGatewayRoutes(t, []Route{route}, map[string]secrets.SSHTarget{route.TargetSecretRef: target}, dialer, audits...)
+}
+
+func startGatewayRoutes(t *testing.T, routes []Route, targets map[string]secrets.SSHTarget, dialer EgressDialer, audits ...CommandAudit) gatewayHarness {
+	t.Helper()
 	var options []ServerOption
 	if len(audits) > 0 {
 		options = append(options, WithCommandAudit(audits[0]))
 	}
+	return startGatewayRoutesWithOptions(t, routes, targets, dialer, options...)
+}
+
+func startGatewayRoutesWithOptions(t *testing.T, routes []Route, targets map[string]secrets.SSHTarget, dialer EgressDialer, options ...ServerOption) gatewayHarness {
+	t.Helper()
+	store := secrets.NewMemoryStore()
+	for reference, target := range targets {
+		if err := store.PutSSHTarget(t.Context(), reference, target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	registry, err := NewRegistry(routes...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostSigner := generateSigner(t)
 	server, err := NewServer(registry, store, dialer, hostSigner, options...)
 	if err != nil {
 		t.Fatal(err)
@@ -386,6 +475,10 @@ func startGateway(t *testing.T, route Route, target secrets.SSHTarget, dialer Eg
 }
 
 func (g gatewayHarness) clientConfig(authentication ssh.AuthMethod) *ssh.ClientConfig {
+	return g.clientConfigForUsername("build", authentication)
+}
+
+func (g gatewayHarness) clientConfigForUsername(username string, authentication ssh.AuthMethod) *ssh.ClientConfig {
 	algorithms := ssh.SupportedAlgorithms()
 	return &ssh.ClientConfig{
 		Config: ssh.Config{
@@ -393,7 +486,7 @@ func (g gatewayHarness) clientConfig(authentication ssh.AuthMethod) *ssh.ClientC
 			Ciphers:      algorithms.Ciphers,
 			MACs:         algorithms.MACs,
 		},
-		User:              "build",
+		User:              username,
 		Auth:              []ssh.AuthMethod{authentication},
 		HostKeyCallback:   ssh.FixedHostKey(g.localHostKey),
 		HostKeyAlgorithms: algorithms.HostKeys,
@@ -402,8 +495,12 @@ func (g gatewayHarness) clientConfig(authentication ssh.AuthMethod) *ssh.ClientC
 }
 
 func dialGateway(t *testing.T, gateway gatewayHarness, authentication ssh.AuthMethod) *ssh.Client {
+	return dialGatewayAs(t, gateway, "build", authentication)
+}
+
+func dialGatewayAs(t *testing.T, gateway gatewayHarness, username string, authentication ssh.AuthMethod) *ssh.Client {
 	t.Helper()
-	client, err := ssh.Dial("tcp", gateway.address, gateway.clientConfig(authentication))
+	client, err := ssh.Dial("tcp", gateway.address, gateway.clientConfigForUsername(username, authentication))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,20 +545,22 @@ func (d *countingDialer) DialContext(ctx context.Context, policy, network, addre
 }
 
 type upstreamAuth struct {
-	username             string
-	password             string
-	publicKeyFingerprint string
+	username                string
+	password                string
+	publicKeyFingerprint    string
+	keyboardInteractiveOnly bool
 }
 
 type upstreamSnapshot struct {
-	connections    int
-	passwordAuths  int
-	publicKeyAuths int
-	commands       int
-	lastUser       string
-	lastPassword   string
-	lastCommand    string
-	lastStdin      string
+	connections              int
+	passwordAuths            int
+	keyboardInteractiveAuths int
+	publicKeyAuths           int
+	commands                 int
+	lastUser                 string
+	lastPassword             string
+	lastCommand              string
+	lastStdin                string
 }
 
 type upstreamHarness struct {
@@ -515,14 +614,28 @@ func (h *upstreamHarness) serveConnection(raw net.Conn) {
 			MACs:         algorithms.MACs,
 		},
 		PublicKeyAuthAlgorithms: algorithms.PublicKeyAuths,
-		MaxAuthTries:            3,
+		MaxAuthTries:            6,
 		PasswordCallback: func(metadata ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 			h.mu.Lock()
 			h.state.passwordAuths++
 			h.state.lastUser = metadata.User()
 			h.state.lastPassword = string(password)
 			h.mu.Unlock()
-			if metadata.User() != h.auth.username || subtle.ConstantTimeCompare(password, []byte(h.auth.password)) != 1 || h.auth.password == "" {
+			if h.auth.keyboardInteractiveOnly || metadata.User() != h.auth.username || subtle.ConstantTimeCompare(password, []byte(h.auth.password)) != 1 || h.auth.password == "" {
+				return nil, ErrAuthentication
+			}
+			return nil, nil
+		},
+		KeyboardInteractiveCallback: func(metadata ssh.ConnMetadata, challenge ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
+			h.mu.Lock()
+			h.state.keyboardInteractiveAuths++
+			h.state.lastUser = metadata.User()
+			h.mu.Unlock()
+			if !h.auth.keyboardInteractiveOnly || metadata.User() != h.auth.username || h.auth.password == "" {
+				return nil, ErrAuthentication
+			}
+			answers, err := challenge("Password authentication", "", []string{"Password: "}, []bool{false})
+			if err != nil || len(answers) != 1 || subtle.ConstantTimeCompare([]byte(answers[0]), []byte(h.auth.password)) != 1 {
 				return nil, ErrAuthentication
 			}
 			return nil, nil
