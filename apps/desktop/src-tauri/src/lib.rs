@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
-    fs::OpenOptions,
+    fs::{File, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     os::unix::net::UnixStream,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicU8, Ordering},
@@ -22,6 +22,9 @@ use tauri::{
 const CONTROL_PROTOCOL_VERSION: u8 = 1;
 const MAX_CONTROL_RESPONSE: u64 = 64 << 10;
 const CONTROL_EXCHANGE_TIMEOUT: Duration = Duration::from_secs(20);
+const CONTROL_STATUS_TIMEOUT: Duration = Duration::from_millis(800);
+const CONTROL_STARTUP_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
+const SIDECAR_STARTUP_LOG_MAX_BYTES: u64 = 8 << 10;
 const SECURITY_SETTINGS_VERSION: u8 = 1;
 const DEVELOPER_WEBSITE_URL: &str = "https://0o0.site";
 const DEVELOPER_GITHUB_URL: &str = "https://github.com/LouisonH";
@@ -150,23 +153,56 @@ impl Drop for SecretToken {
     }
 }
 
+struct ManagedDaemon {
+    child: Child,
+    startup_log: PathBuf,
+}
+
 #[derive(Clone)]
-struct DaemonProcess(Arc<Mutex<Option<Child>>>);
+struct DaemonProcess(Arc<Mutex<Option<ManagedDaemon>>>);
 
 impl DaemonProcess {
     fn stop(&self) {
         if let Ok(mut guard) = self.0.lock() {
-            if let Some(mut child) = guard.take() {
-                let _ = child.kill();
-                let _ = child.wait();
+            if let Some(mut daemon) = guard.take() {
+                let _ = daemon.child.kill();
+                let _ = daemon.child.wait();
             }
         }
     }
 
-    fn replace(&self, child: Child) {
+    fn replace(&self, child: Child, startup_log: PathBuf) {
         if let Ok(mut guard) = self.0.lock() {
-            *guard = Some(child);
+            *guard = Some(ManagedDaemon { child, startup_log });
         }
+    }
+
+    fn startup_log(&self) -> Option<PathBuf> {
+        self.0
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|daemon| daemon.startup_log.clone()))
+    }
+}
+
+#[derive(Clone, Default)]
+struct CoreStartupState(Arc<Mutex<Option<String>>>);
+
+impl CoreStartupState {
+    fn clear(&self) {
+        if let Ok(mut state) = self.0.lock() {
+            *state = None;
+        }
+    }
+
+    fn set(&self, message: impl Into<String>) {
+        if let Ok(mut state) = self.0.lock() {
+            *state = Some(message.into());
+        }
+    }
+
+    fn message(&self) -> Option<String> {
+        self.0.lock().ok().and_then(|state| state.clone())
     }
 }
 
@@ -577,10 +613,10 @@ impl ControlClient {
     }
 }
 
-#[tauri::command]
-fn get_control_state(
-    client: tauri::State<'_, ControlClient>,
-    security: tauri::State<'_, SecurityConfiguration>,
+fn read_control_state(
+    client: &ControlClient,
+    security: &SecurityConfiguration,
+    startup: &CoreStartupState,
 ) -> ControlState {
     let security_settings = security
         .settings
@@ -602,7 +638,7 @@ fn get_control_state(
         command: None,
         secret_store_mode: None,
     };
-    match client.request(&request) {
+    match client.request_with_timeout(&request, CONTROL_STATUS_TIMEOUT) {
         Ok(response) => ControlState {
             connected: true,
             running: response.running,
@@ -617,13 +653,38 @@ fn get_control_state(
             connected: false,
             running: false,
             routes: Vec::new(),
-            message: Some(message),
+            message: startup.message().or(Some(message)),
             proxy_configured: false,
             ssh_ready: false,
             activity: Vec::new(),
             security_settings,
         },
     }
+}
+
+#[tauri::command]
+async fn get_control_state(
+    client: tauri::State<'_, ControlClient>,
+    security: tauri::State<'_, SecurityConfiguration>,
+    startup: tauri::State<'_, CoreStartupState>,
+) -> Result<ControlState, String> {
+    let client = client.inner().clone();
+    let security = security.inner().clone();
+    let startup = startup.inner().clone();
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        read_control_state(&client, &security, &startup)
+    })
+    .await
+    .unwrap_or_else(|_| ControlState {
+        connected: false,
+        running: false,
+        routes: Vec::new(),
+        message: Some("无法读取本地核心状态，请重试".to_string()),
+        proxy_configured: false,
+        ssh_ready: false,
+        activity: Vec::new(),
+        security_settings: SecuritySettings::default(),
+    }))
 }
 
 #[tauri::command]
@@ -2352,7 +2413,10 @@ fn secret_store_request<'a>(action: &'a str, mode: &'a str) -> ControlRequest<'a
 
 fn wait_for_control(client: &ControlClient) -> bool {
     for _ in 0..40 {
-        if client.request(&status_request()).is_ok() {
+        if client
+            .request_with_timeout(&status_request(), CONTROL_STARTUP_PROBE_TIMEOUT)
+            .is_ok()
+        {
             return true;
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -2453,17 +2517,63 @@ fn locate_sidecar(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .ok_or_else(|| "找不到 airlockd sidecar，请先运行 npm run sidecar:build".to_string())
 }
 
+fn create_sidecar_startup_log(app: &tauri::AppHandle) -> Result<(PathBuf, File), String> {
+    let directory = app
+        .path()
+        .app_config_dir()
+        .map_err(|_| "无法读取 Airlock 配置目录".to_string())?;
+    std::fs::create_dir_all(&directory).map_err(|_| "无法创建 Airlock 配置目录".to_string())?;
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))
+        .map_err(|_| "无法保护 Airlock 配置目录".to_string())?;
+    let path = directory.join("airlockd-startup.log");
+    let file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|_| "无法创建本地核心启动日志".to_string())?;
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))
+        .map_err(|_| "无法保护本地核心启动日志".to_string())?;
+    Ok((path, file))
+}
+
+fn sidecar_start_failure(log_path: Option<&Path>) -> String {
+    let log = log_path
+        .and_then(|path| File::open(path).ok())
+        .and_then(|file| {
+            let mut output = String::new();
+            BufReader::new(file)
+                .take(SIDECAR_STARTUP_LOG_MAX_BYTES)
+                .read_to_string(&mut output)
+                .ok()
+                .map(|_| output)
+        })
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if log.contains("address already in use") {
+        "本地核心未能启动：127.0.0.1:4768 或 127.0.0.1:4770 已被其他程序占用。请退出其他 Airlock 副本或释放该端口后重试。".to_string()
+    } else if log.contains("control socket") || log.contains("control channel") {
+        "本地核心未能启动：当前用户的受保护控制通道不可用。请退出其他 Airlock 副本后重试。"
+            .to_string()
+    } else {
+        "本地核心未能在 4 秒内准备就绪。请重试；若问题持续，请退出其他 Airlock 副本并检查端口 4768 与 4770。".to_string()
+    }
+}
+
 fn spawn_sidecar(
     app: &tauri::AppHandle,
     token: &SecretToken,
     settings: &SecuritySettings,
-) -> Result<Child, String> {
+) -> Result<(Child, PathBuf), String> {
     let binary = locate_sidecar(app)?;
+    let (startup_log, stderr) = create_sidecar_startup_log(app)?;
     let mut command = Command::new(binary);
     command
         .arg("--control-token-stdin")
         .args(["--network-scope", &settings.network_scope])
-        .args(["--secret-store", &settings.secret_store]);
+        .args(["--secret-store", &settings.secret_store])
+        .stderr(Stdio::from(stderr));
     let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -2483,22 +2593,49 @@ fn spawn_sidecar(
         let _ = child.wait();
         return Err(error);
     }
-    Ok(child)
+    Ok((child, startup_log))
 }
 
 fn start_configured_sidecar(
     app: &tauri::AppHandle,
     client: &ControlClient,
     process: &DaemonProcess,
+    startup: &CoreStartupState,
     settings: &SecuritySettings,
 ) -> Result<(), String> {
-    let child = spawn_sidecar(app, client.token.as_ref(), settings)?;
-    process.replace(child);
+    startup.set("正在启动本地核心");
+    let (child, startup_log) = match spawn_sidecar(app, client.token.as_ref(), settings) {
+        Ok(result) => result,
+        Err(error) => {
+            startup.set(error.clone());
+            return Err(error);
+        }
+    };
+    process.replace(child, startup_log);
     if wait_for_control(client) {
+        startup.clear();
         return Ok(());
     }
+    let error = sidecar_start_failure(process.startup_log().as_deref());
     process.stop();
-    Err("airlockd 重启后未能建立受保护控制通道".to_string())
+    startup.set(error.clone());
+    Err(error)
+}
+
+fn monitor_initial_sidecar(
+    client: ControlClient,
+    process: DaemonProcess,
+    startup: CoreStartupState,
+) {
+    std::thread::spawn(move || {
+        if wait_for_control(&client) {
+            startup.clear();
+            return;
+        }
+        let error = sidecar_start_failure(process.startup_log().as_deref());
+        process.stop();
+        startup.set(error);
+    });
 }
 
 fn apply_security_settings_blocking(
@@ -2506,6 +2643,7 @@ fn apply_security_settings_blocking(
     client: ControlClient,
     process: DaemonProcess,
     security: SecurityConfiguration,
+    startup: CoreStartupState,
     network_scope: String,
     secret_store: String,
 ) -> Result<SecurityUpdate, String> {
@@ -2545,10 +2683,10 @@ fn apply_security_settings_blocking(
     }
 
     process.stop();
-    let restart_result = start_configured_sidecar(&app, &client, &process, &next);
+    let restart_result = start_configured_sidecar(&app, &client, &process, &startup, &next);
     if let Err(error) = restart_result {
         let _ = save_security_settings(&security.path, &current);
-        let rollback = start_configured_sidecar(&app, &client, &process, &current);
+        let rollback = start_configured_sidecar(&app, &client, &process, &startup, &current);
         if rollback.is_ok() && store_changed {
             let _ = client.request(&secret_store_request(
                 "cleanup_secret_store",
@@ -2594,24 +2732,63 @@ async fn apply_security_settings(
     client: tauri::State<'_, ControlClient>,
     process: tauri::State<'_, DaemonProcess>,
     security: tauri::State<'_, SecurityConfiguration>,
+    startup: tauri::State<'_, CoreStartupState>,
     network_scope: String,
     secret_store: String,
 ) -> Result<SecurityUpdate, String> {
     let client = client.inner().clone();
     let process = process.inner().clone();
     let security = security.inner().clone();
+    let startup = startup.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         apply_security_settings_blocking(
             app,
             client,
             process,
             security,
+            startup,
             network_scope,
             secret_store,
         )
     })
     .await
     .map_err(|_| "安全设置更新意外终止".to_string())?
+}
+
+fn restart_local_core_blocking(
+    app: tauri::AppHandle,
+    client: ControlClient,
+    process: DaemonProcess,
+    security: SecurityConfiguration,
+    startup: CoreStartupState,
+) -> Result<String, String> {
+    let settings = security
+        .settings
+        .lock()
+        .map_err(|_| "无法读取本地核心设置".to_string())?
+        .clone();
+    process.stop();
+    start_configured_sidecar(&app, &client, &process, &startup, &settings)?;
+    Ok("本地核心已启动".to_string())
+}
+
+#[tauri::command]
+async fn restart_local_core(
+    app: tauri::AppHandle,
+    client: tauri::State<'_, ControlClient>,
+    process: tauri::State<'_, DaemonProcess>,
+    security: tauri::State<'_, SecurityConfiguration>,
+    startup: tauri::State<'_, CoreStartupState>,
+) -> Result<String, String> {
+    let client = client.inner().clone();
+    let process = process.inner().clone();
+    let security = security.inner().clone();
+    let startup = startup.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        restart_local_core_blocking(app, client, process, security, startup)
+    })
+    .await
+    .map_err(|_| "本地核心重启意外终止".to_string())?
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -2630,13 +2807,23 @@ pub fn run() {
             let security_settings =
                 load_security_settings(&security_path).map_err(std::io::Error::other)?;
             let token = generate_control_token().map_err(std::io::Error::other)?;
-            let child = spawn_sidecar(app.handle(), &token, &security_settings)
-                .map_err(std::io::Error::other)?;
-            app.manage(ControlClient {
+            let client = ControlClient {
                 socket_path: config_directory.join("control.sock"),
                 token,
-            });
-            app.manage(DaemonProcess(Arc::new(Mutex::new(Some(child)))));
+            };
+            let process = DaemonProcess(Arc::new(Mutex::new(None)));
+            let startup = CoreStartupState::default();
+            startup.set("正在启动本地核心");
+            match spawn_sidecar(app.handle(), client.token.as_ref(), &security_settings) {
+                Ok((child, startup_log)) => {
+                    process.replace(child, startup_log);
+                    monitor_initial_sidecar(client.clone(), process.clone(), startup.clone());
+                }
+                Err(error) => startup.set(error),
+            }
+            app.manage(client);
+            app.manage(process);
+            app.manage(startup);
             app.manage(SecurityConfiguration {
                 path: security_path,
                 settings: Arc::new(Mutex::new(security_settings)),
@@ -2699,6 +2886,7 @@ pub fn run() {
             configure_proxy,
             clear_proxy,
             apply_security_settings,
+            restart_local_core,
             open_external_url,
             set_ui_locale
         ])
@@ -2822,6 +3010,28 @@ mod tests {
         assert!(validate_ssh_upstream("host.internal", "", "secret").is_err());
         assert!(validate_ssh_upstream("host.internal", "deploy", "").is_err());
         assert!(validate_ssh_upstream("host.internal", "deploy", "bad\0secret").is_err());
+    }
+
+    #[test]
+    fn sidecar_startup_diagnostic_identifies_port_collisions_without_echoing_logs() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("airlockd-startup.log");
+        std::fs::write(
+            &path,
+            "time=... level=ERROR msg=\"airlockd stopped\" error=\"listen tcp 127.0.0.1:4770: bind: address already in use\"",
+        )
+        .expect("test startup log should be written");
+        let message = sidecar_start_failure(Some(&path));
+        assert!(message.contains("127.0.0.1:4768"));
+        assert!(message.contains("占用"));
+        assert!(!message.contains("level=ERROR"));
+    }
+
+    #[test]
+    fn sidecar_startup_diagnostic_falls_back_to_a_safe_generic_message() {
+        let message = sidecar_start_failure(None);
+        assert!(message.contains("4 秒"));
+        assert!(!message.contains("airlockd-startup.log"));
     }
 
     #[test]

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { createReadStream, realpathSync } from "node:fs";
+import { constants, createReadStream, realpathSync } from "node:fs";
 import {
   access,
-  copyFile,
+  mkdtemp,
   mkdir,
   rename,
   rm,
 } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -21,7 +21,7 @@ const releasedMacArtifact = resolveReleasedArtifact("darwin", "arm64");
 export const ASSET_NAME = releasedMacArtifact.artifactName;
 export const ASSET_SHA256 = releasedMacArtifact.sha256;
 export const RELEASE_URL =
-  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1";
+  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.2";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const bundledAssetPath = resolve(scriptDirectory, "../dist", ASSET_NAME);
@@ -40,7 +40,7 @@ Usage:
   airlock help
 
 Commands:
-  install   Copy the verified Airlock DMG to ~/Downloads.
+  install   Install the verified Airlock.app to ~/Applications.
   verify    Verify the SHA-256 digest of the bundled DMG.
   path      Print the bundled DMG path.
   status    Print the current platform and artifact status.
@@ -50,13 +50,13 @@ Commands:
   version   Print the package version.
 
 Options:
-  --output  Destination directory for the DMG.
-  --force   Replace a different file at the destination.
-  --open    Open the verified DMG after copying it.
+  --output  Destination Applications directory for Airlock.app.
+  --force   Replace an incomplete Airlock.app at the destination.
+  --open    Launch Airlock after it is installed.
   --json    Emit machine-readable status or platform data.
   --help    Show this help.
 
-Airlock v0.1.1 supports Apple Silicon Macs running macOS 12 or newer.
+Airlock v0.1.2 supports Apple Silicon Macs running macOS 12 or newer.
 The app is ad-hoc signed and is not Apple-notarized. Read the release notes:
 ${RELEASE_URL}
 `;
@@ -145,56 +145,102 @@ async function fileExists(filePath) {
   }
 }
 
-function openDiskImage(filePath) {
-  const result = spawnSync("/usr/bin/open", [filePath], { stdio: "inherit" });
+function runMacOSCommand(binary, args, label) {
+  const result = spawnSync(binary, args, { encoding: "utf8" });
   if (result.error) {
     throw result.error;
   }
   if (result.status !== 0) {
-    throw new Error(`macOS could not open ${filePath}`);
+    const detail = result.stderr?.trim();
+    throw new Error(`${label} failed${detail ? `: ${detail}` : ""}`);
   }
+}
+
+async function verifyApplicationBundle(applicationPath) {
+  const desktopBinary = join(applicationPath, "Contents", "MacOS", "airlock-desktop");
+  const sidecar = join(applicationPath, "Contents", "Resources", "airlockd");
+  try {
+    await access(desktopBinary, constants.X_OK);
+    await access(sidecar, constants.X_OK);
+  } catch {
+    throw new Error("The Airlock.app bundle is incomplete or its local core is not executable.");
+  }
+}
+
+async function mountDiskImage(filePath) {
+  const mountDirectory = await mkdtemp(join(tmpdir(), "airlock-mount-"));
+  try {
+    runMacOSCommand(
+      "/usr/bin/hdiutil",
+      ["attach", "-nobrowse", "-readonly", "-mountpoint", mountDirectory, filePath],
+      "macOS could not mount the verified installer",
+    );
+    return mountDirectory;
+  } catch (error) {
+    await rm(mountDirectory, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function detachDiskImage(mountDirectory) {
+  try {
+    runMacOSCommand("/usr/bin/hdiutil", ["detach", mountDirectory], "macOS could not detach the installer");
+  } catch (error) {
+    console.warn(`Warning: ${error.message}`);
+  } finally {
+    await rm(mountDirectory, { recursive: true, force: true });
+  }
+}
+
+function openApplication(applicationPath) {
+  runMacOSCommand("/usr/bin/open", [applicationPath], "macOS could not launch Airlock");
 }
 
 async function install(options) {
   assertSupportedPlatform();
   await verifyFile(bundledAssetPath);
 
-  const outputDirectory = resolve(options.output ?? join(homedir(), "Downloads"));
-  const destination = join(outputDirectory, ASSET_NAME);
-  await mkdir(outputDirectory, { recursive: true });
+  const applicationsDirectory = resolve(options.output ?? join(homedir(), "Applications"));
+  const destination = join(applicationsDirectory, "Airlock.app");
+  await mkdir(applicationsDirectory, { recursive: true });
 
   if (await fileExists(destination)) {
-    const currentDigest = await sha256(destination);
-    if (currentDigest === ASSET_SHA256) {
-      console.log(`Already installed and verified: ${destination}`);
-      if (options.open) {
-        openDiskImage(destination);
+    try {
+      await verifyApplicationBundle(destination);
+      console.log(`Updating installed Airlock: ${destination}`);
+    } catch {
+      if (!options.force) {
+        throw new Error(
+          `An incomplete Airlock.app already exists at ${destination}. Use --force to replace it.`,
+        );
       }
-      return;
-    }
-    if (!options.force) {
-      throw new Error(
-        `A different file already exists at ${destination}. Use --force to replace it.`,
-      );
     }
   }
 
-  const temporaryPath = `${destination}.airlock-${process.pid}.part`;
+  const mountDirectory = await mountDiskImage(bundledAssetPath);
+  const source = join(mountDirectory, "Airlock.app");
+  const temporaryPath = join(applicationsDirectory, `.Airlock-${process.pid}.app`);
   try {
-    await copyFile(bundledAssetPath, temporaryPath);
-    await verifyFile(temporaryPath);
+    await verifyApplicationBundle(source);
+    await rm(temporaryPath, { recursive: true, force: true });
+    runMacOSCommand("/usr/bin/ditto", [source, temporaryPath], "macOS could not copy Airlock.app");
+    await verifyApplicationBundle(temporaryPath);
+    if (await fileExists(destination)) {
+      await rm(destination, { recursive: true, force: true });
+    }
     await rename(temporaryPath, destination);
   } catch (error) {
-    await rm(temporaryPath, { force: true });
+    await rm(temporaryPath, { recursive: true, force: true });
     throw error;
+  } finally {
+    await detachDiskImage(mountDirectory);
   }
 
-  console.log(`Installed and verified: ${destination}`);
+  console.log(`Installed Airlock: ${destination}`);
   console.log(`SHA-256: ${ASSET_SHA256}`);
-  console.log("Next: open the DMG, then drag Airlock into Applications.");
 
   if (options.open) {
-    openDiskImage(destination);
+    openApplication(destination);
   }
 }
 
@@ -237,7 +283,7 @@ function platform(options) {
 async function doctor() {
   assertSupportedPlatform();
   const digest = await verifyFile(bundledAssetPath);
-  console.log(`Installer integrity: verified`);
+  console.log("Installer integrity: verified");
   console.log(`SHA-256: ${digest}`);
   console.log("No application was opened or installed.");
 }

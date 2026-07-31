@@ -201,6 +201,7 @@ h3 { margin-bottom: 18px; font-size: 17px; line-height: 23px; font-weight: 700; 
 .listener-status span { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px; color: var(--text-secondary); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; font-size: 10px; font-weight: 650; }
 .listener-status svg { color: var(--accent); }
 .listener-status b { color: var(--success); font-size: 9px; }
+.core-retry { flex: 0 0 auto; }
 .metric-strip { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-soft); overflow: hidden; transition: background-color 220ms ease, border-color 220ms ease; }
 .metric { min-width: 0; padding: 15px 18px; border-right: 1px solid var(--border); transition: background-color 150ms ease, transform 150ms ease; }
 .metric:hover { background: var(--surface-subtle); }

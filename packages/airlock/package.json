@@ -1,6 +1,6 @@
 {
   "name": "airlock-relay",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Verified macOS installer for the Airlock credential-isolation relay",
   "keywords": [
     "airlock",

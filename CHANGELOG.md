@@ -4,6 +4,16 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
+## [0.1.2] - 2026-07-31
+
+### Fixed
+
+- Verify desktop-sidecar readiness without blocking the interface, expose a
+  retry action, and show sanitized diagnostics when the local core cannot bind
+  its ports or establish its protected control channel.
+- Change the npm installer from opening a verified DMG to atomically installing
+  the verified app bundle in the current user's `~/Applications` directory.
+
 ## [0.1.1] - 2026-07-31
 
 ### Added
@@ -56,3 +66,4 @@ technical previews whose interfaces may still change.
 
 [0.1.0]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0
 [0.1.1]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1
+[0.1.2]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.2

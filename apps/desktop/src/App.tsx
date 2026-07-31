@@ -124,6 +124,7 @@ export default function App() {
   const [proxyTesting, setProxyTesting] = useState(false);
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckResult>();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [coreRetrying, setCoreRetrying] = useState(false);
 
   const refresh = async () => {
     if (!isTauri) return;
@@ -170,6 +171,21 @@ export default function App() {
   const openEditor = (kind: RouteKind = "HTTP") => {
     setEditorKind(kind);
     setEditorOpen(true);
+  };
+
+  const restartLocalCore = async () => {
+    if (!isTauri || coreRetrying) return;
+    setCoreRetrying(true);
+    try {
+      const message = await invoke<string>("restart_local_core");
+      setNotice(message);
+      await refresh();
+    } catch (error) {
+      setNotice(String(error));
+      await refresh();
+    } finally {
+      setCoreRetrying(false);
+    }
   };
 
   const stopAll = async () => {
@@ -410,13 +426,13 @@ export default function App() {
         </nav>
         <div className="daemon-summary">
           <span className={`status-dot ${control.connected ? "online" : "offline"}`} />
-		  <div><strong>{control.connected ? "本地核心已连接" : "等待本地核心"}</strong><span>airlockd · {control.securitySettings.networkScope === "lan" ? "LAN relay" : "loopback only"}</span></div>
+          <div><strong>{translate(control.connected ? "本地核心已连接" : "等待本地核心")}</strong><span>airlockd · {control.securitySettings.networkScope === "lan" ? "LAN relay" : "loopback only"}</span></div>
         </div>
       </aside>
 
       <main className="workspace">
         <header className="toolbar">
-          <div className="service-state"><ShieldCheck size={16} /><span>{control.connected ? translate(`${enabledCount} 条路由已开放`) : "控制通道未连接"}</span></div>
+          <div className="service-state"><ShieldCheck size={16} /><span>{control.connected ? translate(`${enabledCount} 条路由已开放`) : translate("控制通道未连接")}</span></div>
           <div className="toolbar-actions">
             <button className="icon-button" onClick={() => void refresh()} title="刷新状态" aria-label="刷新状态"><RefreshCw size={16} /></button>
             <button className="danger-button" onClick={() => setEmergencyOpen(true)} disabled={!control.connected || enabledCount === 0}><CircleStop size={16} />停止全部</button>
@@ -424,7 +440,7 @@ export default function App() {
         </header>
 
         <div className="page-content" key={page}>
-          {page === "overview" && <Overview control={control} onRoutes={() => setPage("routes")} onAdd={() => openEditor()} />}
+          {page === "overview" && <Overview control={control} onRoutes={() => setPage("routes")} onAdd={() => openEditor()} onRetry={restartLocalCore} retrying={coreRetrying} />}
           {page === "routes" && <Routes routes={control.routes} connected={control.connected} testingAliases={testingAliases} onToggle={toggleRoute} onDelete={setPendingDelete} onPolicy={setPolicyRoute} onTest={runHealthCheck} onTestAll={testAllRoutes} onAdd={() => openEditor()} />}
           {page === "activity" && <ActivityPage events={control.activity} />}
           {page === "guide" && <GuidePage onRoutes={() => setPage("routes")} />}
@@ -442,15 +458,16 @@ export default function App() {
   );
 }
 
-function Overview({ control, onRoutes, onAdd }: { control: ControlState; onRoutes: () => void; onAdd: () => void }) {
+function Overview({ control, onRoutes, onAdd, onRetry, retrying }: { control: ControlState; onRoutes: () => void; onAdd: () => void; onRetry: () => void; retrying: boolean }) {
   const enabled = control.routes.filter((route) => route.status === "enabled").length;
   const connections = control.routes.reduce((sum, route) => sum + route.currentConnections, 0);
   return <>
     <PageHeader title="概览" subtitle="本机开放能力与安全状态" action={<button className="primary-button" onClick={onAdd} disabled={!control.connected}><Plus size={16} />新增路由</button>} />
     <section className={`service-band ${control.connected ? "running" : "stopped"}`}>
       <span className="service-icon"><ShieldCheck size={20} /></span>
-      <div className="service-copy"><strong>{control.connected ? "受保护控制通道已连接" : "airlockd 尚未连接"}</strong><span>{control.connected ? "Unix Socket · 当前用户专用" : control.message ?? "启动本地核心后将自动重连"}</span></div>
+      <div className="service-copy"><strong>{translate(control.connected ? "受保护控制通道已连接" : "airlockd 尚未连接")}</strong><span>{control.connected ? translate("Unix Socket · 当前用户专用") : translate(control.message ?? "启动本地核心后将自动重连")}</span></div>
       <div className="listener-status"><span><Server size={14} />HTTP <b>{control.connected ? "ON" : "OFF"}</b></span><span><SquareTerminal size={14} />SSH <b>{control.sshReady ? "ON" : "OFF"}</b></span></div>
+      {!control.connected && <button className="secondary-button compact core-retry" onClick={onRetry} disabled={retrying}>{retrying ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}{translate(retrying ? "正在重启本地核心" : "重试本地核心")}</button>}
     </section>
     <section className="metric-strip" aria-label="运行指标">
       <Metric label="开放路由" value={String(enabled)} detail={translate(`共 ${control.routes.length} 条`)} />

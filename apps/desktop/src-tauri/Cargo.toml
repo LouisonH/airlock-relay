@@ -1,6 +1,6 @@
 [package]
 name = "airlock-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "Native control plane for the Airlock local relay"
 authors = ["LouisonH"]
 edition = "2021"

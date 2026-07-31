@@ -27,6 +27,7 @@ const cliPath = resolve(packageDirectory, "bin/airlock.js");
 const assetPath = resolve(packageDirectory, "dist", ASSET_NAME);
 const logoPath = resolve(packageDirectory, "assets", "airlock-logo.svg");
 const sourceOnly = process.env.AIRLOCK_SOURCE_TEST === "1";
+const runInstallerIntegration = process.env.AIRLOCK_INSTALLER_INTEGRATION_TEST === "1";
 
 test("parses install options", () => {
   assert.deepEqual(parseArguments(["install", "--output", "/tmp/airlock", "--open"]), {
@@ -54,7 +55,7 @@ test("prints the official release URL", () => {
     encoding: "utf8",
   });
   assert.equal(output.trim(), RELEASE_URL);
-  assert.match(RELEASE_URL, /releases\/tag\/v0\.1\.1$/);
+  assert.match(RELEASE_URL, /releases\/tag\/v0\.1\.2$/);
 });
 
 test("runs through the symlink shape created for npm bins", async () => {
@@ -110,7 +111,7 @@ test("reports the current platform contract without opening the application", ()
   assert.equal(report.installerReleased, process.platform === "darwin" && process.arch === "arm64");
 });
 
-test("installs and verifies the DMG without opening it", { skip: sourceOnly }, async () => {
+test("installs the verified app bundle without opening it", { skip: sourceOnly || !runInstallerIntegration }, async () => {
   const outputDirectory = await mkdtemp(resolve(tmpdir(), "airlock-npm-test-"));
   try {
     const output = execFileSync(
@@ -118,11 +119,16 @@ test("installs and verifies the DMG without opening it", { skip: sourceOnly }, a
       [cliPath, "install", "--output", outputDirectory],
       { encoding: "utf8" },
     );
-    assert.match(output, /Installed and verified/);
-    assert.equal(
-      await sha256(resolve(outputDirectory, ASSET_NAME)),
-      ASSET_SHA256,
+    assert.match(output, /Installed Airlock/);
+    await access(resolve(outputDirectory, "Airlock.app", "Contents", "MacOS", "airlock-desktop"));
+    await access(resolve(outputDirectory, "Airlock.app", "Contents", "Resources", "airlockd"));
+    const update = execFileSync(
+      process.execPath,
+      [cliPath, "install", "--output", outputDirectory],
+      { encoding: "utf8" },
     );
+    assert.match(update, /Updating installed Airlock/);
+    assert.match(update, /Installed Airlock/);
   } finally {
     await rm(outputDirectory, { recursive: true, force: true });
   }

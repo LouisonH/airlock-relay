@@ -1,7 +1,7 @@
 {
   "name": "airlock-desktop",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": "LouisonH",
   "type": "module",
   "scripts": {
