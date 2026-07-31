@@ -51,7 +51,7 @@ import {
 import { applyTheme, getAccentTheme, getDensityPreference, getMotionPreference, getRefreshInterval, getThemePreference, saveAccentTheme, saveDensityPreference, saveMotionPreference, saveRefreshInterval, saveThemePreference, watchSystemTheme, type AccentTheme, type DensityPreference, type MotionPreference, type RefreshInterval, type ThemePreference } from "./theme";
 import { getLocalePreference, getResolvedLocale, saveLocalePreference, translate, watchSystemLocale, type LocalePreference } from "./i18n";
 import { APP_VERSION, checkForUpdates, type UpdateCheckResult } from "./version";
-import type { ActivityEvent, ControlState, ControlUpdate, NetworkScope, RouteEgressFilter, RouteHealthFilter, RouteKind, RouteStatusFilter, RouteSummary, SecretStoreMode, SecuritySettings, SecurityUpdate, SSHHostKeyProbe, SSHRouteCreationResult } from "./types";
+import type { ActivityEvent, ControlState, ControlUpdate, NetworkScope, PortOwner, RouteEgressFilter, RouteHealthFilter, RouteKind, RouteStatusFilter, RouteSummary, SecretStoreMode, SecuritySettings, SecurityUpdate, SSHHostKeyProbe, SSHRouteCreationResult } from "./types";
 
 type Page = "overview" | "routes" | "activity" | "guide" | "settings";
 type RouteFilter = "All" | RouteKind;
@@ -101,7 +101,7 @@ const emptyControl: ControlState = {
   proxyConfigured: false,
   sshReady: !isTauri,
   activity: previewActivity,
-  securitySettings: { version: 1, networkScope: "loopback", secretStore: "local_file" },
+  securitySettings: { version: 1, networkScope: "loopback", secretStore: "local_file", httpPort: 4768, sshPort: 4770 },
   message: isTauri ? "正在连接 airlockd" : undefined,
 };
 
@@ -125,6 +125,7 @@ export default function App() {
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckResult>();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [coreRetrying, setCoreRetrying] = useState(false);
+  const [portManagerOpen, setPortManagerOpen] = useState(false);
 
   const refresh = async () => {
     if (!isTauri) return;
@@ -404,15 +405,27 @@ export default function App() {
 	const applySecuritySettings = async (settings: SecuritySettings) => {
 		try {
 			const update = isTauri
-				? await invoke<SecurityUpdate>("apply_security_settings", { networkScope: settings.networkScope, secretStore: settings.secretStore })
+				? await invoke<SecurityUpdate>("apply_security_settings", { networkScope: settings.networkScope, secretStore: settings.secretStore, httpPort: settings.httpPort, sshPort: settings.sshPort })
 				: { securitySettings: settings, message: "安全设置已更新" };
 			setControl((current) => ({ ...current, securitySettings: update.securitySettings }));
 			setNotice(update.message ?? "安全设置已更新");
 			await refresh();
 		} catch (error) {
 			setNotice(String(error));
+			throw error;
 		}
 	};
+
+  const terminatePortOwner = async (owner: PortOwner) => {
+    try {
+      const message = await invoke<string>("terminate_listener_port_owner", { port: owner.port, pid: owner.pid });
+      setNotice(message);
+      await restartLocalCore();
+    } catch (error) {
+      setNotice(String(error));
+      throw error;
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -440,15 +453,16 @@ export default function App() {
         </header>
 
         <div className="page-content" key={page}>
-          {page === "overview" && <Overview control={control} onRoutes={() => setPage("routes")} onAdd={() => openEditor()} onRetry={restartLocalCore} retrying={coreRetrying} />}
+          {page === "overview" && <Overview control={control} onRoutes={() => setPage("routes")} onAdd={() => openEditor()} onRetry={restartLocalCore} onManagePorts={() => setPortManagerOpen(true)} retrying={coreRetrying} />}
           {page === "routes" && <Routes routes={control.routes} connected={control.connected} testingAliases={testingAliases} onToggle={toggleRoute} onDelete={setPendingDelete} onPolicy={setPolicyRoute} onTest={runHealthCheck} onTestAll={testAllRoutes} onAdd={() => openEditor()} />}
           {page === "activity" && <ActivityPage events={control.activity} />}
           {page === "guide" && <GuidePage onRoutes={() => setPage("routes")} />}
-          {page === "settings" && <SettingsPage language={language} onLanguage={setLanguage} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} density={density} onDensity={setDensity} motion={motion} onMotion={setMotion} refreshInterval={refreshInterval} onRefreshInterval={setRefreshInterval} connected={control.connected} proxyConfigured={control.proxyConfigured} proxyTesting={proxyTesting} sshReady={control.sshReady} securitySettings={control.securitySettings} onSecuritySettings={applySecuritySettings} onConfigureProxy={configureProxy} onClearProxy={clearProxy} onTestProxy={testProxyHealth} updateCheck={updateCheck} checkingUpdate={checkingUpdate} onCheckUpdates={checkUpdates} onOpenGuide={() => setPage("guide")} />}
+          {page === "settings" && <SettingsPage language={language} onLanguage={setLanguage} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} density={density} onDensity={setDensity} motion={motion} onMotion={setMotion} refreshInterval={refreshInterval} onRefreshInterval={setRefreshInterval} connected={control.connected} proxyConfigured={control.proxyConfigured} proxyTesting={proxyTesting} sshReady={control.sshReady} securitySettings={control.securitySettings} onSecuritySettings={applySecuritySettings} onConfigureProxy={configureProxy} onClearProxy={clearProxy} onTestProxy={testProxyHealth} updateCheck={updateCheck} checkingUpdate={checkingUpdate} onCheckUpdates={checkUpdates} onOpenGuide={() => setPage("guide")} onManagePorts={() => setPortManagerOpen(true)} />}
         </div>
       </main>
 
       {notice && <div className="toast" role="status">{notice}</div>}
+      {portManagerOpen && <PortManager securitySettings={control.securitySettings} onClose={() => setPortManagerOpen(false)} onSave={applySecuritySettings} onTerminate={terminatePortOwner} />}
       {emergencyOpen && <Modal title="停止全部路由" onClose={() => setEmergencyOpen(false)}><div className="warning-panel"><AlertTriangle size={19} /><p>新请求将立即被拒绝，已建立的连接会进入关闭流程。</p></div><div className="modal-actions"><button className="secondary-button" onClick={() => setEmergencyOpen(false)}>取消</button><button className="danger-button" onClick={() => void stopAll()}><CircleStop size={16} />确认停止</button></div></Modal>}
 	  {pendingDelete && <Modal title="删除路由" onClose={() => setPendingDelete(undefined)}><div className="danger-panel"><Trash2 size={19} /><div><strong>{pendingDelete.name}</strong><p>本地入口、Capability 和当前 SecretStore 中的受保护目标都会被永久删除。</p></div></div><div className="modal-actions"><button className="secondary-button" onClick={() => setPendingDelete(undefined)}>取消</button><button className="danger-button" onClick={() => void deleteRoute()}><Trash2 size={16} />删除路由</button></div></Modal>}
       {policyRoute?.kind === "SSH" && <SSHPolicyEditor route={policyRoute} testing={testingAliases.has(policyRoute.alias)} onClose={() => setPolicyRoute(undefined)} onSave={updateSSHPolicy} onUpdateHost={updateSSHHost} onRotateCredential={rotateSSHCredential} onTest={() => runHealthCheck(policyRoute.alias)} onAddHost={() => { setPolicyRoute(undefined); openEditor("SSH"); }} onDelete={() => { setPendingDelete(policyRoute); setPolicyRoute(undefined); }} />}
@@ -458,7 +472,7 @@ export default function App() {
   );
 }
 
-function Overview({ control, onRoutes, onAdd, onRetry, retrying }: { control: ControlState; onRoutes: () => void; onAdd: () => void; onRetry: () => void; retrying: boolean }) {
+function Overview({ control, onRoutes, onAdd, onRetry, onManagePorts, retrying }: { control: ControlState; onRoutes: () => void; onAdd: () => void; onRetry: () => void; onManagePorts: () => void; retrying: boolean }) {
   const enabled = control.routes.filter((route) => route.status === "enabled").length;
   const connections = control.routes.reduce((sum, route) => sum + route.currentConnections, 0);
   return <>
@@ -467,7 +481,7 @@ function Overview({ control, onRoutes, onAdd, onRetry, retrying }: { control: Co
       <span className="service-icon"><ShieldCheck size={20} /></span>
       <div className="service-copy"><strong>{translate(control.connected ? "受保护控制通道已连接" : "airlockd 尚未连接")}</strong><span>{control.connected ? translate("Unix Socket · 当前用户专用") : translate(control.message ?? "启动本地核心后将自动重连")}</span></div>
       <div className="listener-status"><span><Server size={14} />HTTP <b>{control.connected ? "ON" : "OFF"}</b></span><span><SquareTerminal size={14} />SSH <b>{control.sshReady ? "ON" : "OFF"}</b></span></div>
-      {!control.connected && <button className="secondary-button compact core-retry" onClick={onRetry} disabled={retrying}>{retrying ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}{translate(retrying ? "正在重启本地核心" : "重试本地核心")}</button>}
+      {!control.connected && <div className="core-recovery-actions"><button className="secondary-button compact" onClick={onManagePorts} disabled={retrying}><Cable size={14} />{translate("管理端口")}</button><button className="secondary-button compact core-retry" onClick={onRetry} disabled={retrying}>{retrying ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}{translate(retrying ? "正在重启本地核心" : "重试本地核心")}</button></div>}
     </section>
     <section className="metric-strip" aria-label="运行指标">
       <Metric label="开放路由" value={String(enabled)} detail={translate(`共 ${control.routes.length} 条`)} />
@@ -578,19 +592,19 @@ function GuidePage({ onRoutes }: { onRoutes: () => void }) {
   </>;
 }
 
-function SettingsPage({ language, onLanguage, theme, onTheme, accent, onAccent, density, onDensity, motion, onMotion, refreshInterval, onRefreshInterval, connected, proxyConfigured, proxyTesting, sshReady, securitySettings, onSecuritySettings, onConfigureProxy, onClearProxy, onTestProxy, updateCheck, checkingUpdate, onCheckUpdates, onOpenGuide }: { language: LocalePreference; onLanguage: (language: LocalePreference) => void; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; accent: AccentTheme; onAccent: (accent: AccentTheme) => void; density: DensityPreference; onDensity: (density: DensityPreference) => void; motion: MotionPreference; onMotion: (motion: MotionPreference) => void; refreshInterval: RefreshInterval; onRefreshInterval: (interval: RefreshInterval) => void; connected: boolean; proxyConfigured: boolean; proxyTesting: boolean; sshReady: boolean; securitySettings: SecuritySettings; onSecuritySettings: (settings: SecuritySettings) => Promise<void>; onConfigureProxy: () => void; onClearProxy: () => void; onTestProxy: () => void; updateCheck?: UpdateCheckResult; checkingUpdate: boolean; onCheckUpdates: () => Promise<void>; onOpenGuide: () => void }) {
+function SettingsPage({ language, onLanguage, theme, onTheme, accent, onAccent, density, onDensity, motion, onMotion, refreshInterval, onRefreshInterval, connected, proxyConfigured, proxyTesting, sshReady, securitySettings, onSecuritySettings, onConfigureProxy, onClearProxy, onTestProxy, updateCheck, checkingUpdate, onCheckUpdates, onOpenGuide, onManagePorts }: { language: LocalePreference; onLanguage: (language: LocalePreference) => void; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; accent: AccentTheme; onAccent: (accent: AccentTheme) => void; density: DensityPreference; onDensity: (density: DensityPreference) => void; motion: MotionPreference; onMotion: (motion: MotionPreference) => void; refreshInterval: RefreshInterval; onRefreshInterval: (interval: RefreshInterval) => void; connected: boolean; proxyConfigured: boolean; proxyTesting: boolean; sshReady: boolean; securitySettings: SecuritySettings; onSecuritySettings: (settings: SecuritySettings) => Promise<void>; onConfigureProxy: () => void; onClearProxy: () => void; onTestProxy: () => void; updateCheck?: UpdateCheckResult; checkingUpdate: boolean; onCheckUpdates: () => Promise<void>; onOpenGuide: () => void; onManagePorts: () => void }) {
   const [draft, setDraft] = useState(securitySettings);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     setDraft((current) => {
-      const hasUnsavedChanges = current.secretStore !== securitySettings.secretStore || current.networkScope !== securitySettings.networkScope;
+      const hasUnsavedChanges = current.secretStore !== securitySettings.secretStore || current.networkScope !== securitySettings.networkScope || current.httpPort !== securitySettings.httpPort || current.sshPort !== securitySettings.sshPort;
       return saving || hasUnsavedChanges ? current : securitySettings;
     });
   }, [securitySettings, saving]);
   const preset = draft.secretStore === "keychain" && draft.networkScope === "loopback" ? "strict" : draft.secretStore === "local_file" && draft.networkScope === "loopback" ? "standard" : draft.secretStore === "local_file" && draft.networkScope === "lan" ? "convenient" : "custom";
-  const dirty = draft.secretStore !== securitySettings.secretStore || draft.networkScope !== securitySettings.networkScope;
+  const dirty = draft.secretStore !== securitySettings.secretStore || draft.networkScope !== securitySettings.networkScope || draft.httpPort !== securitySettings.httpPort || draft.sshPort !== securitySettings.sshPort;
   const choosePreset = (value: "strict" | "standard" | "convenient") => setDraft((current) => ({ ...current, secretStore: value === "strict" ? "keychain" : "local_file", networkScope: value === "convenient" ? "lan" : "loopback" }));
-  const apply = async () => { setSaving(true); try { await onSecuritySettings(draft); } finally { setSaving(false); } };
+  const apply = async () => { setSaving(true); try { await onSecuritySettings(draft); } catch {} finally { setSaving(false); } };
   const activeNetwork = securitySettings.networkScope;
   const presetLabel = preset === "strict" ? "严格" : preset === "standard" ? "标准" : preset === "convenient" ? "便捷" : "自定义";
   const levelLabel = preset === "strict" ? "高保护" : preset === "convenient" ? "局域网暴露" : preset === "standard" ? "推荐默认" : "自定义边界";
@@ -610,12 +624,96 @@ function SettingsPage({ language, onLanguage, theme, onTheme, accent, onAccent, 
       <details className="security-advanced"><summary><Settings2 size={14} />高级组合<span>分别调整凭据保护与入口范围</span></summary><div className="security-advanced-body"><SecurityChoice label="凭据保护" detail="上游地址、账号、密码与代理认证" value={draft.secretStore} options={[{ value: "keychain", label: "Keychain", icon: KeyRound }, { value: "local_file", label: "0600 文件", icon: HardDrive }]} onChange={(secretStore) => setDraft((current) => ({ ...current, secretStore }))} /><SecurityChoice label="网络范围" detail="只影响数据入口，控制面始终仅当前用户" value={draft.networkScope} options={[{ value: "loopback", label: "仅本机", icon: Monitor }, { value: "lan", label: "局域网", icon: Wifi }]} onChange={(networkScope) => setDraft((current) => ({ ...current, networkScope }))} /></div></details>
       <div className={`security-explainer ${draft.secretStore === "local_file" || draft.networkScope === "lan" ? "warning" : "safe"}`}>{draft.secretStore === "keychain" ? <ShieldCheck size={17} /> : <TriangleAlert size={17} />}<div><strong>{draft.secretStore === "keychain" ? "系统加密保护，会按需授权" : draft.networkScope === "lan" ? "免钥匙串提示，但入口对私网开放" : "免钥匙串提示，但 Secret 不加密"}</strong><p>{draft.secretStore === "keychain" ? "macOS 决定何时显示密码框，Airlock 不能绕过该系统授权。" : "Secret 仅由当前 macOS 账户与 0600 文件权限隔离；同账户的其他进程可能读取。"}{draft.networkScope === "lan" ? " 请只在受信任局域网使用，绝不要映射到公网。" : ""}</p></div></div>
       {draft.secretStore === "keychain" && <div className="keychain-explanation"><KeyRound size={17} /><div><strong>为什么调试包更容易弹出系统密码框？</strong><p>本地开发包采用 ad-hoc 签名；每次重建后，macOS 可能把新的 airlockd 视为不同程序并重新验证钥匙串访问。选择“始终允许”只对当前构建有效。正式稳定签名可减少询问，但 Keychain 仍保留最终授权决定。</p></div></div>}
-      <div className="security-actions"><span>{dirty ? "应用后会校验迁移结果并短暂重启 airlockd" : preset === "standard" ? "标准模式启动时不会读取 macOS Keychain" : "已与当前运行设置一致"}</span><button className="primary-button" disabled={!connected || !dirty || saving} onClick={() => void apply()}>{saving ? <RefreshCw className="spin" size={15} /> : <ShieldCheck size={15} />}{saving ? "正在迁移并重启" : "应用设置"}</button></div>
+      <div className="security-actions"><span>{dirty ? "应用后会校验迁移结果并短暂重启 airlockd" : preset === "standard" ? "标准模式启动时不会读取 macOS Keychain" : "已与当前运行设置一致"}</span><button className="primary-button" disabled={!dirty || saving || (!connected && draft.secretStore !== securitySettings.secretStore)} onClick={() => void apply()}>{saving ? <RefreshCw className="spin" size={15} /> : <ShieldCheck size={15} />}{saving ? "正在迁移并重启" : "应用设置"}</button></div>
     </div></section>
-    <section className="settings-section"><div><h2>网络与出口</h2><p>{activeNetwork === "lan" ? "数据入口已对局域网开放" : "数据入口仅本机可访问"}</p></div><div className="settings-controls"><ReadOnlyField label="HTTP 入口" value={activeNetwork === "lan" ? "0.0.0.0:4768 · 请使用本机局域网 IP" : "127.0.0.1:4768"} tone={activeNetwork === "lan" ? "warning" : undefined} /><ReadOnlyField label="SSH 入口" value={sshReady ? activeNetwork === "lan" ? "0.0.0.0:4770 · 局域网" : "127.0.0.1:4770 · 已就绪" : "等待 airlockd"} tone={sshReady && activeNetwork !== "lan" ? "success" : "warning"} /><ReadOnlyField label="控制通道" value={connected ? "Unix Socket · 仅当前用户" : "等待 airlockd"} tone={connected ? "success" : "warning"} /><div className="proxy-setting"><div><span>Clash / SOCKS5 出口</span><strong className={proxyConfigured ? "setting-value success" : "setting-value"}>{proxyConfigured ? `${securitySettings.secretStore === "keychain" ? "Keychain" : "0600 文件"} · 已配置` : "未配置"}</strong></div><div className="inline-actions">{proxyConfigured && <button className="secondary-button compact" onClick={onTestProxy} disabled={!connected || proxyTesting}>{proxyTesting ? <LoaderCircle className="spin" size={14} /> : <HeartPulse size={14} />}{proxyTesting ? "检测中" : "检测连接"}</button>}<button className="secondary-button compact" onClick={onConfigureProxy} disabled={!connected}><Network size={14} />{proxyConfigured ? "更换" : "配置"}</button>{proxyConfigured && <button className="row-icon-button danger visible" onClick={onClearProxy} aria-label="清除代理出口" title="清除代理出口"><Trash2 size={14} /></button>}</div></div></div></section>
+    <section className="settings-section"><div><h2>网络与出口</h2><p>{activeNetwork === "lan" ? "数据入口已对局域网开放" : "数据入口仅本机可访问"}</p></div><div className="settings-controls"><ReadOnlyField label="HTTP 入口" value={`${activeNetwork === "lan" ? "0.0.0.0" : "127.0.0.1"}:${securitySettings.httpPort}${activeNetwork === "lan" ? " · 请使用本机局域网 IP" : ""}`} tone={activeNetwork === "lan" ? "warning" : undefined} /><ReadOnlyField label="SSH 入口" value={sshReady ? `${activeNetwork === "lan" ? "0.0.0.0" : "127.0.0.1"}:${securitySettings.sshPort}${activeNetwork === "lan" ? " · 局域网" : " · 已就绪"}` : "等待 airlockd"} tone={sshReady && activeNetwork !== "lan" ? "success" : "warning"} /><div className="listener-port-setting"><div><span>{translate("本地监听端口")}</span><strong className="setting-value">HTTP {securitySettings.httpPort} · SSH {securitySettings.sshPort}</strong><small>{translate("端口被占用时，可切换到其他非特权端口，或结束当前用户的占用进程。")}</small></div><button className="secondary-button compact" onClick={onManagePorts}><Cable size={14} />{translate("管理端口")}</button></div><ReadOnlyField label="控制通道" value={connected ? "Unix Socket · 仅当前用户" : "等待 airlockd"} tone={connected ? "success" : "warning"} /><div className="proxy-setting"><div><span>Clash / SOCKS5 出口</span><strong className={proxyConfigured ? "setting-value success" : "setting-value"}>{proxyConfigured ? `${securitySettings.secretStore === "keychain" ? "Keychain" : "0600 文件"} · 已配置` : "未配置"}</strong></div><div className="inline-actions">{proxyConfigured && <button className="secondary-button compact" onClick={onTestProxy} disabled={!connected || proxyTesting}>{proxyTesting ? <LoaderCircle className="spin" size={14} /> : <HeartPulse size={14} />}{proxyTesting ? "检测中" : "检测连接"}</button>}<button className="secondary-button compact" onClick={onConfigureProxy} disabled={!connected}><Network size={14} />{proxyConfigured ? "更换" : "配置"}</button>{proxyConfigured && <button className="row-icon-button danger visible" onClick={onClearProxy} aria-label="清除代理出口" title="清除代理出口"><Trash2 size={14} /></button>}</div></div></div></section>
     <section className="settings-section"><div><h2>不变的安全边界</h2><p>便捷模式也不会放开控制面</p></div><div className="settings-controls"><ReadOnlyField label="路由元数据" value="0600 · 不包含明文本地密码" tone="success" /><ReadOnlyField label="SSH 安全核心" value={sshReady ? "双会话隔离 · Shell/PTY 默认拒绝" : "等待本地核心"} tone={sshReady ? "success" : "warning"} /><ReadOnlyField label="敏感录入" value="SSH 内嵌录入 · 仅发送到本机核心" tone="success" /></div></section>
     <DeveloperCard />
   </>;
+}
+
+function PortManager({ securitySettings, onClose, onSave, onTerminate }: { securitySettings: SecuritySettings; onClose: () => void; onSave: (settings: SecuritySettings) => Promise<void>; onTerminate: (owner: PortOwner) => Promise<void> }) {
+  const [httpPort, setHttpPort] = useState(String(securitySettings.httpPort));
+  const [sshPort, setSshPort] = useState(String(securitySettings.sshPort));
+  const [owners, setOwners] = useState<PortOwner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [terminating, setTerminating] = useState(false);
+  const [pendingOwner, setPendingOwner] = useState<PortOwner>();
+  const [error, setError] = useState<string>();
+  const parsedHTTPPort = Number(httpPort);
+  const parsedSSHPort = Number(sshPort);
+  const validPorts = Number.isInteger(parsedHTTPPort) && Number.isInteger(parsedSSHPort) && parsedHTTPPort >= 1024 && parsedHTTPPort <= 65535 && parsedSSHPort >= 1024 && parsedSSHPort <= 65535 && parsedHTTPPort !== parsedSSHPort;
+  const changed = parsedHTTPPort !== securitySettings.httpPort || parsedSSHPort !== securitySettings.sshPort;
+
+  const inspect = async () => {
+    setLoading(true);
+    setError(undefined);
+    try {
+      if (!isTauri) {
+        setOwners([]);
+        return;
+      }
+      const [httpOwners, sshOwners] = await Promise.all([
+        invoke<PortOwner[]>("list_listener_port_owners", { port: securitySettings.httpPort }),
+        invoke<PortOwner[]>("list_listener_port_owners", { port: securitySettings.sshPort }),
+      ]);
+      setOwners([...httpOwners, ...sshOwners]);
+    } catch (reason) {
+      setOwners([]);
+      setError(String(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setHttpPort(String(securitySettings.httpPort));
+    setSshPort(String(securitySettings.sshPort));
+    void inspect();
+  }, [securitySettings.httpPort, securitySettings.sshPort]);
+
+  const save = async () => {
+    if (!validPorts || saving) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      await onSave({ ...securitySettings, httpPort: parsedHTTPPort, sshPort: parsedSSHPort });
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const terminate = async () => {
+    if (!pendingOwner || terminating) return;
+    setTerminating(true);
+    setError(undefined);
+    try {
+      await onTerminate(pendingOwner);
+      setPendingOwner(undefined);
+      await inspect();
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setTerminating(false);
+    }
+  };
+
+  return <Modal title={translate("本地端口管理")} className="modal-wide port-manager-modal" onClose={saving || terminating ? () => undefined : onClose}>
+    <div className="port-manager-lead"><Cable size={19} /><div><strong>{translate("端口冲突处置")}</strong><p>{translate("只管理 Airlock 的 HTTP 与 SSH 监听端口。结束进程前会再次核对它仍在监听对应端口，且仅允许结束当前 macOS 用户的进程。")}</p></div></div>
+    <section className="port-manager-section"><div className="port-manager-heading"><div><strong>{translate("监听端口")}</strong><span>{translate("使用 1024-65535 的不同端口；保存后本地核心会重启，失败时自动恢复原设置。")}</span></div><button className="icon-button small" onClick={() => void inspect()} disabled={loading || saving || terminating} aria-label={translate("检查端口占用")} title={translate("检查端口占用")}>{loading ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}</button></div>
+      <div className="port-input-grid"><label className={`form-field ${httpPort && (!Number.isInteger(parsedHTTPPort) || parsedHTTPPort < 1024 || parsedHTTPPort > 65535) ? "invalid" : ""}`}><span>HTTP</span><input type="text" inputMode="numeric" value={httpPort} onChange={(event) => setHttpPort(event.target.value.replace(/\D/g, "").slice(0, 5))} maxLength={5} aria-invalid={!validPorts} /><small>{translate("固定 URL 与 LLM 路由")}</small></label><label className={`form-field ${sshPort && (!Number.isInteger(parsedSSHPort) || parsedSSHPort < 1024 || parsedSSHPort > 65535) ? "invalid" : ""}`}><span>SSH</span><input type="text" inputMode="numeric" value={sshPort} onChange={(event) => setSshPort(event.target.value.replace(/\D/g, "").slice(0, 5))} maxLength={5} aria-invalid={!validPorts} /><small>{translate("SSH 用户名映射")}</small></label></div>
+      {!validPorts && <div className="inline-error"><TriangleAlert size={16} /><span>{translate("请输入两个不同的 1024-65535 端口。")}</span></div>}
+      <div className="port-save-row"><span>{changed ? translate("保存会重启本地核心；已有路由和受保护凭据不会改变。") : translate("当前端口设置已生效。")}</span><button className="primary-button" onClick={() => void save()} disabled={!changed || !validPorts || saving || terminating}>{saving ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{saving ? translate("正在应用") : translate("保存端口")}</button></div>
+    </section>
+    <section className="port-manager-section port-owner-section"><div className="port-manager-heading"><div><strong>{translate("占用当前端口的进程")}</strong><span>{translate("只显示当前用户的监听进程；Airlock 自己的本地核心不会出现在列表中。")}</span></div></div>
+      {loading ? <div className="port-owner-empty"><LoaderCircle className="spin" size={16} />{translate("正在检查端口占用")}</div> : owners.length === 0 ? <div className="port-owner-empty"><CircleCheck size={16} />{translate("没有发现可结束的占用进程")}</div> : <div className="port-owner-list">{owners.map((owner) => <div className="port-owner" key={`${owner.port}-${owner.pid}`}><span className="port-owner-port">:{owner.port}</span><div><strong>{owner.command}</strong><small>PID {owner.pid}</small></div><button className="secondary-button compact danger-outline" onClick={() => setPendingOwner(owner)} disabled={saving || terminating}><CircleStop size={14} />{translate("结束")}</button></div>)}</div>}
+      {pendingOwner && <div className="port-termination-confirm"><TriangleAlert size={17} /><div><strong>{translate("确认结束该进程？")}</strong><p>{translate("将向")} <code>{pendingOwner.command} · PID {pendingOwner.pid}</code> {translate("发送正常结束请求。Airlock 不会使用强制终止。")}</p></div><div className="inline-actions"><button className="secondary-button compact" onClick={() => setPendingOwner(undefined)} disabled={terminating}>{translate("取消")}</button><button className="danger-button compact" onClick={() => void terminate()} disabled={terminating}>{terminating ? <LoaderCircle className="spin" size={14} /> : <CircleStop size={14} />}{terminating ? translate("正在结束") : translate("确认结束")}</button></div></div>}
+    </section>
+    {error && <div className="inline-error port-manager-error"><TriangleAlert size={16} /><span>{error}</span></div>}
+  </Modal>;
 }
 
 function SecurityProfile({ title, subtitle, icon: Icon, description, store, ingress, selected, recommended, risk, onSelect }: { title: string; subtitle: string; icon: typeof Monitor; description: string; store: string; ingress: string; selected: boolean; recommended: boolean; risk: boolean; onSelect: () => void }) {

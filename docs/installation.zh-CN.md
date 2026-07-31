@@ -4,21 +4,21 @@
 
 ## 系统要求
 
-Airlock v0.1.2 支持运行 macOS 12 Monterey 或更高版本的 Apple Silicon Mac。
+Airlock v0.1.3 支持运行 macOS 12 Monterey 或更高版本的 Apple Silicon Mac。
 首版暂不提供 Intel、Windows 或 Linux 安装包。
 
 ## 核验下载
 
-从 [v0.1.2 Release](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.2) 下载：
+从 [v0.1.3 Release](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.3) 下载：
 
-- `Airlock_0.1.2_aarch64.dmg`：常规安装包
-- `Airlock_0.1.2_aarch64.app.zip`：便携压缩包
-- `SHA256SUMS-v0.1.2.txt`：完整性校验值
+- `Airlock_0.1.3_aarch64.dmg`：常规安装包
+- `Airlock_0.1.3_aarch64.app.zip`：便携压缩包
+- `SHA256SUMS-v0.1.3.txt`：完整性校验值
 
 在下载目录执行：
 
 ```bash
-shasum -a 256 -c SHA256SUMS-v0.1.2.txt
+shasum -a 256 -c SHA256SUMS-v0.1.3.txt
 ```
 
 三个文件位于同一目录时，该命令会同时核验 DMG 和 ZIP。
@@ -38,7 +38,7 @@ npm install -g airlock-relay && airlock-installer install --open
 
 ### 手动安装
 
-1. 打开 `Airlock_0.1.2_aarch64.dmg`。
+1. 打开 `Airlock_0.1.3_aarch64.dmg`。
 2. 将 **Airlock** 拖入 **Applications（应用程序）**。
 3. 推出 Airlock 磁盘映像。
 4. 在 Finder 的应用程序目录中按住 Control 点击 **Airlock**，选择**打开**。
@@ -46,7 +46,7 @@ npm install -g airlock-relay && airlock-installer install --open
 
 ### 为什么 macOS 会警告
 
-v0.1.2 已进行 ad-hoc 签名，可检查应用包结构完整性，但没有 Apple Developer
+v0.1.3 已进行 ad-hoc 签名，可检查应用包结构完整性，但没有 Apple Developer
 ID 签名，也没有经过 Apple 公证。因此 macOS 无法验证开发者身份。这个限制并不
 意味着可以直接忽略安全警告；请先确认文件来自官方 GitHub Release，并核对
 SHA-256。

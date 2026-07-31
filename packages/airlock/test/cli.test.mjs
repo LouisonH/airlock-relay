@@ -55,7 +55,7 @@ test("prints the official release URL", () => {
     encoding: "utf8",
   });
   assert.equal(output.trim(), RELEASE_URL);
-  assert.match(RELEASE_URL, /releases\/tag\/v0\.1\.2$/);
+  assert.match(RELEASE_URL, /releases\/tag\/v0\.1\.3$/);
 });
 
 test("runs through the symlink shape created for npm bins", async () => {

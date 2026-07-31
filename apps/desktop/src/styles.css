@@ -201,6 +201,7 @@ h3 { margin-bottom: 18px; font-size: 17px; line-height: 23px; font-weight: 700; 
 .listener-status span { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px; color: var(--text-secondary); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; font-size: 10px; font-weight: 650; }
 .listener-status svg { color: var(--accent); }
 .listener-status b { color: var(--success); font-size: 9px; }
+.core-recovery-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; margin-left: auto; }
 .core-retry { flex: 0 0 auto; }
 .metric-strip { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-soft); overflow: hidden; transition: background-color 220ms ease, border-color 220ms ease; }
 .metric { min-width: 0; padding: 15px 18px; border-right: 1px solid var(--border); transition: background-color 150ms ease, transform 150ms ease; }
@@ -432,6 +433,10 @@ tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transfor
 .theme-control button { min-width: 74px; }
 .proxy-setting { display: flex; align-items: center; justify-content: space-between; min-height: 55px; padding: 7px 10px 7px 14px; border-bottom: 1px solid var(--border); }
 .proxy-setting > div:first-child { display: grid; gap: 4px; color: var(--text-secondary); font-size: 11px; }
+.listener-port-setting { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 62px; padding: 9px 12px 9px 15px; border-bottom: 1px solid var(--border); }
+.listener-port-setting > div { display: grid; min-width: 0; gap: 3px; }
+.listener-port-setting > div > span { color: var(--text-secondary); font-size: 11px; }
+.listener-port-setting small { color: var(--text-muted); font-size: 9px; line-height: 14px; }
 .inline-actions { display: flex; align-items: center; gap: 6px; }
 .secondary-button.compact { min-height: 31px; padding: 0 10px; font-size: 10px; }
 .accent-control { display: flex; align-items: center; gap: 5px; }
@@ -473,6 +478,37 @@ tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transfor
 .modal { width: 440px; padding: 20px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); animation: modal-enter 240ms cubic-bezier(.2, .82, .2, 1) both; }
 .modal-wide { width: min(620px, calc(100vw - 40px)); max-height: calc(100vh - 32px); overflow: auto; }
 .ssh-manager-modal { width: min(760px, calc(100vw - 32px)); padding: 18px; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.port-manager-modal { width: min(650px, calc(100vw - 32px)); padding: 18px; overscroll-behavior: contain; }
+.port-manager-lead { display: flex; align-items: flex-start; gap: 10px; margin: -2px 0 14px; padding: 12px; color: var(--accent); background: var(--surface-selected); border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)); border-radius: 7px; }
+.port-manager-lead > div { min-width: 0; }
+.port-manager-lead strong { color: var(--text); font-size: 12px; }
+.port-manager-lead p { margin-top: 3px; color: var(--text-secondary); font-size: 10px; line-height: 16px; }
+.port-manager-section { margin-top: 12px; overflow: hidden; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 7px; }
+.port-manager-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; min-height: 52px; padding: 11px 12px; border-bottom: 1px solid var(--border); }
+.port-manager-heading > div { display: grid; gap: 3px; min-width: 0; }
+.port-manager-heading strong { color: var(--text); font-size: 11px; }
+.port-manager-heading span { color: var(--text-muted); font-size: 9px; line-height: 14px; }
+.port-input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+.port-input-grid .form-field input { font-variant-numeric: tabular-nums; }
+.port-save-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 53px; padding: 8px 12px; border-top: 1px solid var(--border); }
+.port-save-row > span { max-width: 370px; color: var(--text-muted); font-size: 9px; line-height: 14px; }
+.port-owner-empty { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 76px; padding: 12px; color: var(--text-muted); font-size: 10px; }
+.port-owner-empty svg { color: var(--success); }
+.port-owner-list { display: grid; }
+.port-owner { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 56px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.port-owner:last-child { border-bottom: 0; }
+.port-owner-port { color: var(--accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 720; }
+.port-owner > div { display: grid; min-width: 0; gap: 3px; }
+.port-owner strong { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.port-owner small { color: var(--text-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.danger-outline { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 38%, var(--border)); }
+.danger-outline:hover { color: #fff; background: var(--danger-solid); border-color: var(--danger-solid); }
+.port-termination-confirm { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 9px; margin: 10px; padding: 10px; color: var(--danger); background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border)); border-radius: 7px; animation: advanced-enter 180ms ease-out both; }
+.port-termination-confirm > div:nth-child(2) { min-width: 0; }
+.port-termination-confirm strong { color: var(--text); font-size: 10px; }
+.port-termination-confirm p { margin-top: 3px; color: var(--text-secondary); font-size: 9px; line-height: 14px; }
+.port-termination-confirm code { color: var(--text); font-size: 9px; }
+.port-manager-error { margin: 12px 0 0; }
 .ssh-manager { display: grid; gap: 12px; }
 .ssh-manager .policy-identity { padding-bottom: 12px; }
 .ssh-manager-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
@@ -695,6 +731,7 @@ tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transfor
 
 @media (max-width: 720px), (max-height: 680px) {
   .ssh-manager-modal { max-height: calc(100vh - 20px); padding: 15px; }
+  .port-manager-modal { max-height: calc(100vh - 20px); padding: 15px; }
   .ssh-manager-section { padding: 12px; }
   .ssh-manager-section .identity-grid,
   .ssh-manager-section .ssh-upstream-grid,
@@ -702,6 +739,9 @@ tr:hover .row-icon-button, .row-icon-button:focus-visible { opacity: 1; transfor
   .ssh-manager-heading { align-items: flex-start; }
   .ssh-manager-heading .policy-segmented { min-height: 32px; }
   .route-filter-panel .filter-bar, .update-summary { flex-wrap: wrap; }
+  .core-recovery-actions, .listener-port-setting, .port-save-row { flex-wrap: wrap; }
+  .port-termination-confirm { grid-template-columns: 18px minmax(0, 1fr); }
+  .port-termination-confirm .inline-actions { grid-column: 2; }
   .search-field { width: 100%; }
   .clear-filter { margin-left: 0; }
   .route-filter-controls, .guide-grid { grid-template-columns: 1fr; }

@@ -26,6 +26,9 @@ const CONTROL_STATUS_TIMEOUT: Duration = Duration::from_millis(800);
 const CONTROL_STARTUP_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
 const SIDECAR_STARTUP_LOG_MAX_BYTES: u64 = 8 << 10;
 const SECURITY_SETTINGS_VERSION: u8 = 1;
+const DEFAULT_HTTP_PORT: u16 = 4768;
+const DEFAULT_SSH_PORT: u16 = 4770;
+const MIN_UNPRIVILEGED_PORT: u16 = 1024;
 const DEVELOPER_WEBSITE_URL: &str = "https://0o0.site";
 const DEVELOPER_GITHUB_URL: &str = "https://github.com/LouisonH";
 static UI_LOCALE: AtomicU8 = AtomicU8::new(0);
@@ -183,6 +186,13 @@ impl DaemonProcess {
             .ok()
             .and_then(|guard| guard.as_ref().map(|daemon| daemon.startup_log.clone()))
     }
+
+    fn managed_pid(&self) -> Option<u32> {
+        self.0
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|daemon| daemon.child.id()))
+    }
 }
 
 #[derive(Clone, Default)]
@@ -220,6 +230,10 @@ struct SecuritySettings {
     version: u8,
     network_scope: String,
     secret_store: String,
+    #[serde(default = "default_http_port")]
+    http_port: u16,
+    #[serde(default = "default_ssh_port")]
+    ssh_port: u16,
 }
 
 impl Default for SecuritySettings {
@@ -228,8 +242,18 @@ impl Default for SecuritySettings {
             version: SECURITY_SETTINGS_VERSION,
             network_scope: "loopback".to_string(),
             secret_store: "local_file".to_string(),
+            http_port: default_http_port(),
+            ssh_port: default_ssh_port(),
         }
     }
+}
+
+fn default_http_port() -> u16 {
+    DEFAULT_HTTP_PORT
+}
+
+fn default_ssh_port() -> u16 {
+    DEFAULT_SSH_PORT
 }
 
 fn allowed_external_url(url: &str) -> Option<&'static str> {
@@ -2311,10 +2335,37 @@ fn validate_security_settings(settings: &SecuritySettings) -> Result<(), String>
     if settings.version != SECURITY_SETTINGS_VERSION
         || (settings.network_scope != "loopback" && settings.network_scope != "lan")
         || (settings.secret_store != "keychain" && settings.secret_store != "local_file")
+        || settings.http_port < MIN_UNPRIVILEGED_PORT
+        || settings.ssh_port < MIN_UNPRIVILEGED_PORT
+        || settings.http_port == settings.ssh_port
     {
         return Err("安全设置无效".to_string());
     }
     Ok(())
+}
+
+fn listener_host(settings: &SecuritySettings) -> &'static str {
+    if settings.network_scope == "lan" {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    }
+}
+
+fn listener_address(settings: &SecuritySettings, port: u16) -> String {
+    format!("{}:{port}", listener_host(settings))
+}
+
+fn configured_listener_description(settings: &SecuritySettings) -> String {
+    format!(
+        "{} 或 {}",
+        listener_address(settings, settings.http_port),
+        listener_address(settings, settings.ssh_port)
+    )
+}
+
+fn is_configured_listener_port(settings: &SecuritySettings, port: u16) -> bool {
+    port == settings.http_port || port == settings.ssh_port
 }
 
 fn load_security_settings(path: &PathBuf) -> Result<SecuritySettings, String> {
@@ -2538,7 +2589,7 @@ fn create_sidecar_startup_log(app: &tauri::AppHandle) -> Result<(PathBuf, File),
     Ok((path, file))
 }
 
-fn sidecar_start_failure(log_path: Option<&Path>) -> String {
+fn sidecar_start_failure(log_path: Option<&Path>, settings: &SecuritySettings) -> String {
     let log = log_path
         .and_then(|path| File::open(path).ok())
         .and_then(|file| {
@@ -2552,12 +2603,18 @@ fn sidecar_start_failure(log_path: Option<&Path>) -> String {
         .unwrap_or_default()
         .to_ascii_lowercase();
     if log.contains("address already in use") {
-        "本地核心未能启动：127.0.0.1:4768 或 127.0.0.1:4770 已被其他程序占用。请退出其他 Airlock 副本或释放该端口后重试。".to_string()
+        format!(
+            "本地核心未能启动：{} 已被其他程序占用。请释放端口、改用其他端口，或退出其他 Airlock 副本后重试。",
+            configured_listener_description(settings)
+        )
     } else if log.contains("control socket") || log.contains("control channel") {
         "本地核心未能启动：当前用户的受保护控制通道不可用。请退出其他 Airlock 副本后重试。"
             .to_string()
     } else {
-        "本地核心未能在 4 秒内准备就绪。请重试；若问题持续，请退出其他 Airlock 副本并检查端口 4768 与 4770。".to_string()
+        format!(
+            "本地核心未能在 4 秒内准备就绪。请重试；若问题持续，请检查 {}。",
+            configured_listener_description(settings)
+        )
     }
 }
 
@@ -2568,9 +2625,13 @@ fn spawn_sidecar(
 ) -> Result<(Child, PathBuf), String> {
     let binary = locate_sidecar(app)?;
     let (startup_log, stderr) = create_sidecar_startup_log(app)?;
+    let http_address = listener_address(settings, settings.http_port);
+    let ssh_address = listener_address(settings, settings.ssh_port);
     let mut command = Command::new(binary);
     command
         .arg("--control-token-stdin")
+        .args(["--listen", &http_address])
+        .args(["--ssh-listen", &ssh_address])
         .args(["--network-scope", &settings.network_scope])
         .args(["--secret-store", &settings.secret_store])
         .stderr(Stdio::from(stderr));
@@ -2616,7 +2677,7 @@ fn start_configured_sidecar(
         startup.clear();
         return Ok(());
     }
-    let error = sidecar_start_failure(process.startup_log().as_deref());
+    let error = sidecar_start_failure(process.startup_log().as_deref(), settings);
     process.stop();
     startup.set(error.clone());
     Err(error)
@@ -2626,13 +2687,14 @@ fn monitor_initial_sidecar(
     client: ControlClient,
     process: DaemonProcess,
     startup: CoreStartupState,
+    settings: SecuritySettings,
 ) {
     std::thread::spawn(move || {
         if wait_for_control(&client) {
             startup.clear();
             return;
         }
-        let error = sidecar_start_failure(process.startup_log().as_deref());
+        let error = sidecar_start_failure(process.startup_log().as_deref(), &settings);
         process.stop();
         startup.set(error);
     });
@@ -2646,11 +2708,15 @@ fn apply_security_settings_blocking(
     startup: CoreStartupState,
     network_scope: String,
     secret_store: String,
+    http_port: u16,
+    ssh_port: u16,
 ) -> Result<SecurityUpdate, String> {
     let next = SecuritySettings {
         version: SECURITY_SETTINGS_VERSION,
         network_scope,
         secret_store,
+        http_port,
+        ssh_port,
     };
     validate_security_settings(&next)?;
     let current = security
@@ -2735,6 +2801,8 @@ async fn apply_security_settings(
     startup: tauri::State<'_, CoreStartupState>,
     network_scope: String,
     secret_store: String,
+    http_port: u16,
+    ssh_port: u16,
 ) -> Result<SecurityUpdate, String> {
     let client = client.inner().clone();
     let process = process.inner().clone();
@@ -2749,6 +2817,8 @@ async fn apply_security_settings(
             startup,
             network_scope,
             secret_store,
+            http_port,
+            ssh_port,
         )
     })
     .await
@@ -2791,6 +2861,162 @@ async fn restart_local_core(
     .map_err(|_| "本地核心重启意外终止".to_string())?
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PortOwner {
+    port: u16,
+    pid: u32,
+    command: String,
+}
+
+#[derive(Default)]
+struct RawPortOwner {
+    pid: Option<u32>,
+    command: String,
+    uid: Option<u32>,
+}
+
+fn append_port_owner(
+    owners: &mut Vec<PortOwner>,
+    raw: &RawPortOwner,
+    port: u16,
+    current_uid: u32,
+    managed_pid: Option<u32>,
+) {
+    let Some(pid) = raw.pid else {
+        return;
+    };
+    if raw.uid != Some(current_uid) || Some(pid) == managed_pid {
+        return;
+    }
+    let command = raw
+        .command
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(96)
+        .collect::<String>();
+    owners.push(PortOwner {
+        port,
+        pid,
+        command: if command.is_empty() {
+            "unknown".to_string()
+        } else {
+            command
+        },
+    });
+}
+
+fn listening_port_owners(port: u16, managed_pid: Option<u32>) -> Result<Vec<PortOwner>, String> {
+    let selection = format!("-iTCP:{port}");
+    let output = Command::new("/usr/sbin/lsof")
+        .args(["-nP", "-l", "-a", &selection, "-sTCP:LISTEN", "-Fpcu"])
+        .output()
+        .map_err(|_| "无法读取端口占用情况".to_string())?;
+    if output.stdout.len() > 32 << 10 {
+        return Err("端口占用信息异常".to_string());
+    }
+    if !output.status.success() && output.stdout.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let current_uid = unsafe { libc::geteuid() } as u32;
+    let mut owners = Vec::new();
+    let mut raw = RawPortOwner::default();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let Some((field, value)) = line.split_at_checked(1) else {
+            continue;
+        };
+        match field {
+            "p" => {
+                append_port_owner(&mut owners, &raw, port, current_uid, managed_pid);
+                raw = RawPortOwner {
+                    pid: value.parse::<u32>().ok(),
+                    ..RawPortOwner::default()
+                };
+            }
+            "c" => raw.command = value.to_string(),
+            "u" => raw.uid = value.parse::<u32>().ok(),
+            _ => {}
+        }
+    }
+    append_port_owner(&mut owners, &raw, port, current_uid, managed_pid);
+    owners.sort_by_key(|owner| owner.pid);
+    owners.dedup_by_key(|owner| owner.pid);
+    Ok(owners)
+}
+
+fn validate_listener_port_request(settings: &SecuritySettings, port: u16) -> Result<(), String> {
+    validate_security_settings(settings)?;
+    if !is_configured_listener_port(settings, port) {
+        return Err("只能管理当前 Airlock 配置的 HTTP 或 SSH 端口".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_listener_port_owners(
+    port: u16,
+    process: tauri::State<'_, DaemonProcess>,
+    security: tauri::State<'_, SecurityConfiguration>,
+) -> Result<Vec<PortOwner>, String> {
+    let settings = security
+        .settings
+        .lock()
+        .map_err(|_| "无法读取本地核心设置".to_string())?
+        .clone();
+    let managed_pid = process.managed_pid();
+    tauri::async_runtime::spawn_blocking(move || {
+        validate_listener_port_request(&settings, port)?;
+        listening_port_owners(port, managed_pid)
+    })
+    .await
+    .map_err(|_| "端口占用检查意外终止".to_string())?
+}
+
+#[tauri::command]
+async fn terminate_listener_port_owner(
+    port: u16,
+    pid: u32,
+    process: tauri::State<'_, DaemonProcess>,
+    security: tauri::State<'_, SecurityConfiguration>,
+) -> Result<String, String> {
+    let settings = security
+        .settings
+        .lock()
+        .map_err(|_| "无法读取本地核心设置".to_string())?
+        .clone();
+    let managed_pid = process.managed_pid();
+    tauri::async_runtime::spawn_blocking(move || {
+        validate_listener_port_request(&settings, port)?;
+        if managed_pid == Some(pid) {
+            return Err("不能结束当前 Airlock 本地核心".to_string());
+        }
+        let owners = listening_port_owners(port, managed_pid)?;
+        if !owners.iter().any(|owner| owner.pid == pid) {
+            return Err("该进程不再监听所选端口，未执行结束操作".to_string());
+        }
+        let status = Command::new("/bin/kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()
+            .map_err(|_| "无法向该进程发送结束请求".to_string())?;
+        if !status.success() {
+            return Err("系统拒绝结束该进程".to_string());
+        }
+        for _ in 0..20 {
+            if !listening_port_owners(port, managed_pid)?
+                .iter()
+                .any(|owner| owner.pid == pid)
+            {
+                return Ok(format!("已结束占用端口 {port} 的进程（PID {pid}）"));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Err("已发送结束请求，但该进程仍在监听端口；请在系统活动监视器中处理".to_string())
+    })
+    .await
+    .map_err(|_| "结束端口进程意外终止".to_string())?
+}
+
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -2817,7 +3043,12 @@ pub fn run() {
             match spawn_sidecar(app.handle(), client.token.as_ref(), &security_settings) {
                 Ok((child, startup_log)) => {
                     process.replace(child, startup_log);
-                    monitor_initial_sidecar(client.clone(), process.clone(), startup.clone());
+                    monitor_initial_sidecar(
+                        client.clone(),
+                        process.clone(),
+                        startup.clone(),
+                        security_settings.clone(),
+                    );
                 }
                 Err(error) => startup.set(error),
             }
@@ -2887,6 +3118,8 @@ pub fn run() {
             clear_proxy,
             apply_security_settings,
             restart_local_core,
+            list_listener_port_owners,
+            terminate_listener_port_owner,
             open_external_url,
             set_ui_locale
         ])
@@ -2944,6 +3177,8 @@ mod tests {
         let valid = SecuritySettings::default();
         assert_eq!(valid.network_scope, "loopback");
         assert_eq!(valid.secret_store, "local_file");
+        assert_eq!(valid.http_port, DEFAULT_HTTP_PORT);
+        assert_eq!(valid.ssh_port, DEFAULT_SSH_PORT);
         assert!(validate_security_settings(&valid).is_ok());
 
         for invalid in [
@@ -2957,6 +3192,14 @@ mod tests {
             },
             SecuritySettings {
                 secret_store: "plaintext".to_string(),
+                ..valid.clone()
+            },
+            SecuritySettings {
+                http_port: MIN_UNPRIVILEGED_PORT - 1,
+                ..valid.clone()
+            },
+            SecuritySettings {
+                ssh_port: valid.http_port,
                 ..valid.clone()
             },
         ] {
@@ -3021,7 +3264,7 @@ mod tests {
             "time=... level=ERROR msg=\"airlockd stopped\" error=\"listen tcp 127.0.0.1:4770: bind: address already in use\"",
         )
         .expect("test startup log should be written");
-        let message = sidecar_start_failure(Some(&path));
+        let message = sidecar_start_failure(Some(&path), &SecuritySettings::default());
         assert!(message.contains("127.0.0.1:4768"));
         assert!(message.contains("占用"));
         assert!(!message.contains("level=ERROR"));
@@ -3029,7 +3272,7 @@ mod tests {
 
     #[test]
     fn sidecar_startup_diagnostic_falls_back_to_a_safe_generic_message() {
-        let message = sidecar_start_failure(None);
+        let message = sidecar_start_failure(None, &SecuritySettings::default());
         assert!(message.contains("4 秒"));
         assert!(!message.contains("airlockd-startup.log"));
     }
@@ -3134,6 +3377,8 @@ mod tests {
             version: SECURITY_SETTINGS_VERSION,
             network_scope: "lan".to_string(),
             secret_store: "local_file".to_string(),
+            http_port: 8484,
+            ssh_port: 8585,
         };
 
         save_security_settings(&path, &settings).expect("settings should be saved");
@@ -3157,5 +3402,63 @@ mod tests {
             load_security_settings(&path).expect("settings should load"),
             settings
         );
+    }
+
+    #[test]
+    fn older_security_settings_receive_default_listener_ports() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("security-settings.json");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"networkScope":"loopback","secretStore":"local_file"}"#,
+        )
+        .expect("legacy settings should be written");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .expect("legacy settings should be protected");
+        let settings = load_security_settings(&path).expect("legacy settings should load");
+        assert_eq!(settings.http_port, DEFAULT_HTTP_PORT);
+        assert_eq!(settings.ssh_port, DEFAULT_SSH_PORT);
+    }
+
+    #[test]
+    fn port_owner_filter_keeps_only_external_current_user_processes() {
+        let current_uid = unsafe { libc::geteuid() } as u32;
+        let mut owners = Vec::new();
+        append_port_owner(
+            &mut owners,
+            &RawPortOwner {
+                pid: Some(100),
+                command: "listener\nname".to_string(),
+                uid: Some(current_uid),
+            },
+            DEFAULT_HTTP_PORT,
+            current_uid,
+            None,
+        );
+        append_port_owner(
+            &mut owners,
+            &RawPortOwner {
+                pid: Some(101),
+                command: "other-user".to_string(),
+                uid: Some(current_uid.saturating_add(1)),
+            },
+            DEFAULT_HTTP_PORT,
+            current_uid,
+            None,
+        );
+        append_port_owner(
+            &mut owners,
+            &RawPortOwner {
+                pid: Some(102),
+                command: "managed-airlockd".to_string(),
+                uid: Some(current_uid),
+            },
+            DEFAULT_HTTP_PORT,
+            current_uid,
+            Some(102),
+        );
+        assert_eq!(owners.len(), 1);
+        assert_eq!(owners[0].pid, 100);
+        assert_eq!(owners[0].command, "listenername");
     }
 }

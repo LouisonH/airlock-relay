@@ -11,7 +11,7 @@
     <a href="website/en/index.html">スタティックサイト</a>
   </p>
   <p>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.2"><img src="https://img.shields.io/badge/release-v0.1.2%20technical%20preview-b26b25" alt="v0.1.2 テクニカルプレビュー" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.3"><img src="https://img.shields.io/badge/release-v0.1.3%20technical%20preview-b26b25" alt="v0.1.3 テクニカルプレビュー" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 デスクトップ" />
     <img src="https://img.shields.io/badge/core-Go%201.24%2B-267d5f" alt="Go 1.24 以上" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -19,7 +19,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.2 はテクニカルプレビューです。ルートメタデータ、認証情報、プロキシ設定は保護ストアに保存されますが、独立した本番セキュリティ監査はまだ完了していません。
+> Airlock v0.1.3 はテクニカルプレビューです。ルートメタデータ、認証情報、プロキシ設定は保護ストアに保存されますが、独立した本番セキュリティ監査はまだ完了していません。
 
 ## Airlock が必要な理由
 

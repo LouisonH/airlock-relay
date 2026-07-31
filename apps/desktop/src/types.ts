@@ -8,6 +8,14 @@ export interface SecuritySettings {
   version: number;
   networkScope: NetworkScope;
   secretStore: SecretStoreMode;
+  httpPort: number;
+  sshPort: number;
+}
+
+export interface PortOwner {
+  port: number;
+  pid: number;
+  command: string;
 }
 
 // Persistent route summaries intentionally have no target or secret fields.

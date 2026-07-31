@@ -4,6 +4,7 @@
 
 ## English
 
+- [v0.1.3 port recovery release](releases/v0.1.3.md)
 - [Installation and removal](installation.md)
 - [Server core deployment and operations CLI](server-deployment.md)
 - [CI verification and release boundaries](ci.md)
@@ -17,6 +18,7 @@
 
 ## 简体中文
 
+- [v0.1.3 端口恢复版本说明](releases/v0.1.3.zh-CN.md)
 - [安装、升级与卸载](installation.zh-CN.md)
 - [Server Core 部署与命令行运维](server-deployment.zh-CN.md)
 - [CI 核验与发布边界](ci.zh-CN.md)
@@ -30,6 +32,7 @@
 
 ## 日本語
 
+- [v0.1.3 ポート復旧リリースノート](releases/v0.1.3.ja.md)
 - [クロスプラットフォーム対応計画](cross-platform.ja.md)
 - [Server Core 導入と CLI](server-deployment.ja.md)
 - [CI 検証とリリース境界](ci.ja.md)

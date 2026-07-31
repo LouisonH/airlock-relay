@@ -4,6 +4,20 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
+## [0.1.3] - 2026-07-31
+
+### Added
+
+- Native desktop listener-port management for HTTP and SSH, including
+  current-user process discovery and confirmed graceful termination.
+- Custom unprivileged listener ports with offline recovery, automatic restart,
+  and rollback on startup failure.
+
+### Changed
+
+- Legacy security settings now receive the default `4768` and `4770` listener
+  ports when those fields are absent.
+
 ## [0.1.2] - 2026-07-31
 
 ### Fixed
@@ -67,3 +81,4 @@ technical previews whose interfaces may still change.
 [0.1.0]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0
 [0.1.1]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1
 [0.1.2]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.2
+[0.1.3]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.3
