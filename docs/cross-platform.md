@@ -1,6 +1,6 @@
 # Cross-Platform Adaptation Plan
 
-Airlock v0.1.3 currently ships only for Apple Silicon Macs. The entries below
+Airlock v0.1.4 currently ships only for Apple Silicon Macs. The entries below
 are implementation contracts, not claims that installers already exist.
 
 | Target | Bundle | Local control transport | Protected store | Status |

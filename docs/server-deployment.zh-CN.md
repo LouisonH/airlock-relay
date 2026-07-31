@@ -26,7 +26,7 @@ airlock CLI               v
 
 ## 构建与准备
 
-需要 Go 1.24 或更新版本。以下示例使用专用的非登录账户 `airlock`；不要用 root 运行守护进程。
+需要 Go 1.25 或更新版本。以下示例使用专用的非登录账户 `airlock`；不要用 root 运行守护进程。
 
 ```bash
 go build -trimpath -o /usr/local/bin/airlockd ./cmd/airlockd

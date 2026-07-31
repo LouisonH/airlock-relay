@@ -12,7 +12,11 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const authenticatedRouteExtension = "airlock-route"
+const (
+	authenticatedRouteExtension = "airlock-route"
+	defaultMaxConnections       = 128
+	defaultMaxSessions          = 256
+)
 
 var (
 	ErrAuthentication    = errors.New("SSH authentication failed")
@@ -34,6 +38,8 @@ type Server struct {
 	config           *ssh.ServerConfig
 	handshakeTimeout time.Duration
 	allowLAN         bool
+	connections      chan struct{}
+	sessions         chan struct{}
 }
 
 type ServerOption func(*Server)
@@ -50,6 +56,20 @@ func WithLANAccess() ServerOption {
 	return func(server *Server) { server.allowLAN = true }
 }
 
+// WithResourceLimits bounds authenticated and unauthenticated SSH work so a
+// reachable listener cannot consume an unbounded number of goroutines or file
+// descriptors. Values below one keep the secure defaults.
+func WithResourceLimits(maxConnections, maxSessions int) ServerOption {
+	return func(server *Server) {
+		if maxConnections > 0 {
+			server.connections = make(chan struct{}, maxConnections)
+		}
+		if maxSessions > 0 {
+			server.sessions = make(chan struct{}, maxSessions)
+		}
+	}
+}
+
 func NewServer(routes RouteLookup, secretStore secrets.Store, dialer EgressDialer, hostSigner ssh.Signer, options ...ServerOption) (*Server, error) {
 	if routes == nil || secretStore == nil || dialer == nil || hostSigner == nil {
 		return nil, errors.New("invalid SSH server configuration")
@@ -59,6 +79,8 @@ func NewServer(routes RouteLookup, secretStore secrets.Store, dialer EgressDiale
 		secrets:          secretStore,
 		dialer:           dialer,
 		handshakeTimeout: 15 * time.Second,
+		connections:      make(chan struct{}, defaultMaxConnections),
+		sessions:         make(chan struct{}, defaultMaxSessions),
 	}
 	for _, option := range options {
 		if option != nil {
@@ -91,7 +113,14 @@ func (s *Server) Serve(listener net.Listener) error {
 		if err != nil {
 			return err
 		}
-		go s.serveConnection(connection)
+		if !tryAcquire(s.connections) {
+			_ = connection.Close()
+			continue
+		}
+		go func() {
+			defer release(s.connections)
+			s.serveConnection(connection)
+		}()
 	}
 }
 
@@ -125,11 +154,41 @@ func (s *Server) serveConnection(raw net.Conn) {
 			_ = channel.Reject(ssh.Prohibited, "channel type prohibited by policy")
 			continue
 		}
-		local, requests, err := channel.Accept()
-		if err != nil {
+		if !tryAcquire(s.sessions) {
+			_ = channel.Reject(ssh.ResourceShortage, "session capacity reached")
 			continue
 		}
-		go s.handleSession(connection, local, requests)
+		local, requests, err := channel.Accept()
+		if err != nil {
+			release(s.sessions)
+			continue
+		}
+		go func() {
+			defer release(s.sessions)
+			s.handleSession(connection, local, requests)
+		}()
+	}
+}
+
+func tryAcquire(slots chan struct{}) bool {
+	if slots == nil {
+		return true
+	}
+	select {
+	case slots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func release(slots chan struct{}) {
+	if slots == nil {
+		return
+	}
+	select {
+	case <-slots:
+	default:
 	}
 }
 

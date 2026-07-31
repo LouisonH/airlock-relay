@@ -4,6 +4,17 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
+## [0.1.4] - 2026-07-31
+
+### Security
+
+- Upgrade `golang.org/x/crypto` to `v0.52.0` to remediate reachable SSH
+  vulnerabilities identified by the production-readiness audit.
+- Add bounded SSH connection/session and gateway request capacities to reduce
+  listener and stream resource-exhaustion risk.
+- Publish the maintainer-run production-readiness security audit and its
+  remaining operating boundaries.
+
 ## [0.1.3] - 2026-07-31
 
 ### Added
@@ -79,6 +90,7 @@ technical previews whose interfaces may still change.
   production security audit.
 
 [0.1.0]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0
+[0.1.4]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4
 [0.1.1]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1
 [0.1.2]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.2
 [0.1.3]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.3

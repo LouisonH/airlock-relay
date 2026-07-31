@@ -13,7 +13,7 @@ Airlock はオープンプロキシや VPN ではありません。呼び出し�
 
 ## ビルドと起動
 
-Go 1.24+ が必要です。root ではなく専用の非ログインユーザーで動かします。
+Go 1.25+ が必要です。root ではなく専用の非ログインユーザーで動かします。
 
 ```bash
 go build -trimpath -o /usr/local/bin/airlockd ./cmd/airlockd

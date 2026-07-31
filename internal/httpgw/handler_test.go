@@ -222,6 +222,17 @@ func TestLLMRouteEnforcesConcurrencyAndRateLimits(t *testing.T) {
 	}
 }
 
+func TestHandlerGlobalCapacityRejectsWithoutBlocking(t *testing.T) {
+	handler := &Handler{requests: make(chan struct{}, 1)}
+	if !tryAcquireRequest(handler.requests) || tryAcquireRequest(handler.requests) {
+		t.Fatal("global request capacity did not reject the second slot")
+	}
+	releaseRequest(handler.requests)
+	if !tryAcquireRequest(handler.requests) {
+		t.Fatal("global request capacity did not recover after release")
+	}
+}
+
 func TestHandlerForwardsWithoutExposingUpstreamCredentials(t *testing.T) {
 	const upstreamSecret = "upstream-secret-sentinel"
 	var hits atomic.Int32

@@ -11,15 +11,15 @@
     <a href="website/index.html">静态说明网页</a>
   </p>
   <p>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.3"><img src="https://img.shields.io/badge/release-v0.1.3%20technical%20preview-b26b25" alt="v0.1.3 技术预览版" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4"><img src="https://img.shields.io/badge/release-v0.1.4%20technical%20preview-b26b25" alt="v0.1.4 技术预览版" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 桌面端" />
-    <img src="https://img.shields.io/badge/core-Go%201.24%2B-267d5f" alt="Go 1.24 或更高版本" />
+    <img src="https://img.shields.io/badge/core-Go%201.25%2B-267d5f" alt="Go 1.25 或更高版本" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
   </p>
 </div>
 
 > [!WARNING]
-> Airlock v0.1.3 是技术预览版。路由元数据、凭据与代理配置已使用受保护存储，但本版尚未完成独立的生产安全审计。
+> Airlock v0.1.4 是技术预览版，已完成维护者执行的生产就绪安全审计；它尚未完成独立第三方审计、Developer ID 签名或 Apple 公证。生产使用前请阅读[审计记录](docs/security-audit-2026-07-31.md)。
 
 ## 为什么需要 Airlock？
 
@@ -104,20 +104,20 @@ flowchart LR
 
 ## 安装技术预览版
 
-v0.1.3 下载包支持运行 macOS 12 或更高版本的 Apple Silicon Mac。可用以下命令把已核验的
+v0.1.4 下载包支持运行 macOS 12 或更高版本的 Apple Silicon Mac。可用以下命令把已核验的
 应用安装到 `~/Applications`：
 
 ```bash
 npm install -g airlock-relay && airlock-installer install --open
 ```
 
-也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.3)
+也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4)
 下载 DMG 和校验文件，再按照[安装指南](docs/installation.zh-CN.md)操作。安装包已进行
 ad-hoc 签名，但没有 Developer ID 签名与 Apple 公证，请先阅读 Gatekeeper 说明。
 
 ## 开发环境快速开始
 
-需要 Go 1.24+、Node.js 20+、Rust/Cargo 和 Tauri 2 平台依赖。
+需要 Go 1.25+、Node.js 20+、Rust/Cargo 和 Tauri 2 平台依赖。
 
 ```bash
 git clone https://github.com/LouisonH/airlock-relay.git
@@ -200,7 +200,7 @@ deploy/systemd     服务端 systemd 示例
 
 ## 文档
 
-可从[文档索引](docs/README.md)、[v0.1.3 启动热修复说明](docs/releases/v0.1.3.zh-CN.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
+可从[文档索引](docs/README.md)、[v0.1.4 安全审计版本说明](docs/releases/v0.1.4.zh-CN.md)、[审计记录](docs/security-audit-2026-07-31.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
 
 ## 开发者
 

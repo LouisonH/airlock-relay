@@ -67,8 +67,10 @@ malicious upstream returning secrets in its own response.
   Do not expose ports `4768` or `4770` to the public Internet.
 - Rate limits, concurrency counters, and LLM usage totals are in-memory state
   and reset when the sidecar restarts.
-- v0.1.0 is not Developer ID signed or notarized and has not completed an
-  independent production security audit.
+- v0.1.4 completed a maintainer-run production-readiness security audit on
+  2026-07-31. It is not Developer ID signed or notarized and has not completed
+  an independent third-party audit. See
+  [the audit record](docs/security-audit-2026-07-31.md).
 
 ## 简体中文
 
@@ -123,4 +125,6 @@ Airlock 不是操作系统沙箱、杀毒软件、VPN 或开放代理。它无�
   边界时应使用 Keychain 严格模式、正式签名构建和专用低权限上游账户。
 - 局域网模式会使数据入口对本地网络可达，不得把 `4768` 或 `4770` 映射到公网。
 - 速率限制、并发计数与 LLM Usage 总量是内存状态，sidecar 重启后会清零。
-- v0.1.0 没有 Developer ID 签名与 Apple 公证，也尚未完成独立的生产安全审计。
+- v0.1.4 已于 2026-07-31 完成维护者执行的生产就绪安全审计；它仍未完成
+  Developer ID 签名、Apple 公证或独立第三方审计。请阅读
+  [审计记录](docs/security-audit-2026-07-31.md)。

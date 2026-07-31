@@ -55,7 +55,7 @@ test("prints the official release URL", () => {
     encoding: "utf8",
   });
   assert.equal(output.trim(), RELEASE_URL);
-  assert.match(RELEASE_URL, /releases\/tag\/v0\.1\.3$/);
+  assert.equal(RELEASE_URL, `https://github.com/LouisonH/airlock-relay/releases/tag/v${VERSION}`);
 });
 
 test("runs through the symlink shape created for npm bins", async () => {

@@ -22,6 +22,8 @@ import (
 
 const routePrefix = "/r/"
 
+const defaultMaxInFlightRequests = 128
+
 var safeRequestHeaders = map[string]struct{}{
 	"Accept":            {},
 	"Accept-Encoding":   {},
@@ -69,6 +71,7 @@ type Handler struct {
 	activity  activity.Recorder
 	limitsMu  sync.Mutex
 	limits    map[string]*llmLimitState
+	requests  chan struct{}
 }
 
 type llmLimitState struct {
@@ -82,6 +85,16 @@ type llmLimitState struct {
 
 type HandlerOption func(*Handler)
 
+// WithMaxInFlightRequests bounds upstream response streams across all HTTP
+// routes. LLM routes still apply their stricter per-route limits.
+func WithMaxInFlightRequests(limit int) HandlerOption {
+	return func(handler *Handler) {
+		if limit > 0 {
+			handler.requests = make(chan struct{}, limit)
+		}
+	}
+}
+
 func WithActivityRecorder(recorder activity.Recorder) HandlerOption {
 	return func(handler *Handler) {
 		handler.activity = recorder
@@ -92,7 +105,7 @@ func NewHandler(registry RouteLookup, secretStore secrets.Store, transport Route
 	if transport == nil {
 		transport = egress.NewManager(nil)
 	}
-	handler := &Handler{routes: registry, secrets: secretStore, transport: transport, limits: make(map[string]*llmLimitState)}
+	handler := &Handler{routes: registry, secrets: secretStore, transport: transport, limits: make(map[string]*llmLimitState), requests: make(chan struct{}, defaultMaxInFlightRequests)}
 	for _, option := range options {
 		option(handler)
 	}
@@ -148,6 +161,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		writeRouteError(w, route, http.StatusNotFound, "endpoint_not_allowed", "endpoint not allowed")
 		return
 	}
+	if !tryAcquireRequest(h.requests) {
+		activityResult = "blocked"
+		w.Header().Set("Retry-After", "1")
+		writeRouteError(w, route, http.StatusServiceUnavailable, "capacity_limit", "gateway capacity reached")
+		return
+	}
+	defer releaseRequest(h.requests)
 	release, limitError := h.acquireLLMRequest(route)
 	if limitError != nil {
 		activityResult = "blocked"
@@ -238,6 +258,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 			}
 			capture.Clear()
 		}
+	}
+}
+
+func tryAcquireRequest(slots chan struct{}) bool {
+	if slots == nil {
+		return true
+	}
+	select {
+	case slots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func releaseRequest(slots chan struct{}) {
+	if slots == nil {
+		return
+	}
+	select {
+	case <-slots:
+	default:
 	}
 }
 

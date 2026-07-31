@@ -26,7 +26,7 @@ Optional Web UI (:4769, loopback only + separate bearer token)
 
 ## Build and Prepare
 
-Go 1.24 or newer is required. Run the daemon as a dedicated non-login user rather than root.
+Go 1.25 or newer is required. Run the daemon as a dedicated non-login user rather than root.
 
 ```bash
 go build -trimpath -o /usr/local/bin/airlockd ./cmd/airlockd

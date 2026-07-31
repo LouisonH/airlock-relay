@@ -21,7 +21,7 @@ const releasedMacArtifact = resolveReleasedArtifact("darwin", "arm64");
 export const ASSET_NAME = releasedMacArtifact.artifactName;
 export const ASSET_SHA256 = releasedMacArtifact.sha256;
 export const RELEASE_URL =
-  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.3";
+  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const bundledAssetPath = resolve(scriptDirectory, "../dist", ASSET_NAME);
@@ -56,7 +56,7 @@ Options:
   --json    Emit machine-readable status or platform data.
   --help    Show this help.
 
-Airlock v0.1.3 supports Apple Silicon Macs running macOS 12 or newer.
+Airlock v0.1.4 supports Apple Silicon Macs running macOS 12 or newer.
 The app is ad-hoc signed and is not Apple-notarized. Read the release notes:
 ${RELEASE_URL}
 `;

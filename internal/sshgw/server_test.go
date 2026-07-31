@@ -95,6 +95,35 @@ func TestGatewayPasswordIsolationAndRestrictedExec(t *testing.T) {
 	}
 }
 
+func TestServerResourceLimitsRejectCapacityWithoutBlocking(t *testing.T) {
+	registry, err := NewRegistry(testSSHRoute(NewPolicy([]string{"uptime"}, nil, false), egress.Direct))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewServer(
+		registry,
+		secrets.NewMemoryStore(),
+		egress.NewManager(nil),
+		generateSigner(t),
+		WithResourceLimits(1, 1),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tryAcquire(server.connections) || tryAcquire(server.connections) {
+		t.Fatal("connection capacity did not reject the second slot")
+	}
+	release(server.connections)
+	if !tryAcquire(server.connections) {
+		t.Fatal("connection capacity did not recover after release")
+	}
+	release(server.connections)
+	if !tryAcquire(server.sessions) || tryAcquire(server.sessions) {
+		t.Fatal("session capacity did not reject the second slot")
+	}
+	release(server.sessions)
+}
+
 func TestGatewayRoutesSharedPasswordByLocalUsername(t *testing.T) {
 	firstUpstream := startUpstream(t, upstreamAuth{username: "first-upstream", password: "first-password"})
 	secondUpstream := startUpstream(t, upstreamAuth{username: "second-upstream", password: "second-password"})
