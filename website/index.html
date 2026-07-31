@@ -31,6 +31,7 @@
           <a href="#quickstart" data-i18n="navQuickstart">快速使用</a>
           <a href="#architecture" data-i18n="navArchitecture">架构</a>
           <a href="#faq" data-i18n="navFaq">常见问题</a>
+          <a href="./docs.html" data-i18n="navDocs">文档</a>
         </nav>
 
         <div class="header-actions">
@@ -59,20 +60,31 @@
           <div class="scene-node target target-c"><span>Protected URL</span><small>target hidden</small></div>
           <i class="signal signal-a"></i><i class="signal signal-b"></i><i class="signal signal-c"></i>
         </div>
+        <div class="hero-code-stream" aria-hidden="true">
+          <div class="code-column code-column-a"><span>route/releases</span><span>capability: verified</span><span>GET /artifact</span><span>upstream: protected</span><span>egress: auto</span><span>policy: allow</span><span>activity: sanitized</span><span>route/releases</span><span>capability: verified</span><span>GET /artifact</span><span>upstream: protected</span><span>egress: auto</span></div>
+          <div class="code-column code-column-b"><span>ssh.build</span><span>host key: pinned</span><span>command: exact</span><span>session: isolated</span><span>local user: mapped</span><span>auth: scoped</span><span>audit: enabled</span><span>ssh.build</span><span>host key: pinned</span><span>command: exact</span><span>session: isolated</span><span>local user: mapped</span></div>
+          <div class="code-column code-column-c"><span>llm/coding</span><span>model: allowed</span><span>token: local only</span><span>usage: numeric</span><span>upstream key: sealed</span><span>rate: bounded</span><span>relay: local</span><span>llm/coding</span><span>model: allowed</span><span>token: local only</span><span>usage: numeric</span><span>upstream key: sealed</span></div>
+        </div>
 
         <div class="hero-inner">
           <div class="hero-copy reveal">
             <p class="eyebrow" data-i18n="heroEyebrow">LOCAL CREDENTIAL BOUNDARY</p>
-            <h1>Airlock</h1>
-            <p class="hero-lead" data-i18n="heroLead">把能力交给 Agent，把凭据留在本机。</p>
+            <h1 class="hero-wordmark" aria-label="Airlock"><span aria-hidden="true" style="--letter-index:0">A</span><span aria-hidden="true" style="--letter-index:1">i</span><span aria-hidden="true" style="--letter-index:2">r</span><span aria-hidden="true" style="--letter-index:3">l</span><span aria-hidden="true" style="--letter-index:4">o</span><span aria-hidden="true" style="--letter-index:5">c</span><span aria-hidden="true" style="--letter-index:6">k</span></h1>
+            <p class="hero-lead" data-i18n="heroLead" data-character-reveal>把能力交给 Agent，把凭据留在本机。</p>
             <p class="hero-detail" data-i18n="heroDetail">Airlock 使用固定本地路由、可撤销凭据与最小权限策略，为 HTTP、SSH 和 LLM 请求隔离真实上游地址、密码与 API Key。</p>
             <div class="hero-actions">
               <a class="primary-action" href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0" target="_blank" rel="noreferrer"><span data-i18n="releaseCta">下载 v0.1.0</span><span aria-hidden="true">↗</span></a>
               <a class="secondary-action" href="#quickstart" data-i18n="quickStartCta">查看快速用法</a>
             </div>
+            <div class="install-command" aria-label="Install Airlock">
+              <span data-i18n="installLabel">ONE-LINE INSTALL</span>
+              <code id="code-install">npx airlock-relay@latest install --open</code>
+              <button class="copy-button" type="button" data-copy="install" data-i18n-aria="copyCommand" aria-label="复制命令" title="Copy command">⧉</button>
+            </div>
             <div class="protocol-list" aria-label="Supported protocols">
               <span>HTTP / Wget</span><span>SSH</span><span>LLM API</span>
             </div>
+            <p class="hero-runtime" aria-label="Local relay status"><i></i><span>LOCAL RELAY</span><code>127.0.0.1</code></p>
           </div>
         </div>
       </section>

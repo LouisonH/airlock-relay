@@ -1,0 +1,31 @@
+[Unit]
+Description=Airlock fixed-route relay core
+Documentation=https://github.com/LouisonH/airlock-relay/blob/main/docs/server-deployment.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=airlock
+Group=airlock
+UMask=0077
+ExecStart=/usr/local/bin/airlockd --mode server --data-dir /var/lib/airlock --control-token-file /etc/airlock/control.token --listen 127.0.0.1:4768 --ssh-listen 127.0.0.1:4770 --web-listen 127.0.0.1:4769 --web-token-file /etc/airlock/web.token
+Restart=on-failure
+RestartSec=3s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/airlock
+ReadOnlyPaths=/etc/airlock
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

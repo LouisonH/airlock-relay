@@ -1,0 +1,64 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Go core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+      - name: Format check
+        run: test -z "$(gofmt -l cmd internal)"
+      - name: Test
+        run: go test ./...
+
+  desktop:
+    name: Desktop frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Build
+        working-directory: apps/desktop
+        run: |
+          npm ci
+          npm run build
+
+  package-and-site:
+    name: Installer and documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/airlock/package-lock.json
+      - name: Test installer package
+        working-directory: packages/airlock
+        run: |
+          npm ci
+          npm test
+          npm pack --dry-run --ignore-scripts
+      - name: Check static site scripts
+        run: |
+          node --check website/assets/site.js
+          node --check website/assets/docs-guides.js
+          node --check website/assets/docs.js

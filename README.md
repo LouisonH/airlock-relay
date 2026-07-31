@@ -6,6 +6,7 @@
   <p>
     <a href="README.md">English</a> |
     <a href="README.zh-CN.md">简体中文</a> |
+    <a href="README.ja.md">日本語</a> |
     <a href="docs/README.md">Documentation</a> |
     <a href="website/en/index.html">Static website</a>
   </p>
@@ -50,7 +51,9 @@ Airlock is a fixed-route relay, not an open proxy, VPN, or general provider-mana
 - Local random capability, custom password, or public-key authentication.
 - Protected upstream password or encrypted private-key authentication with strict host-key pinning.
 - A user-defined exact command by default; unrestricted non-interactive `exec`
-  requires native high-risk confirmation.
+  requires explicit high-risk acknowledgement inside Airlock.
+- Multiple routes may share one upstream address; distinct local usernames select
+  independent upstream accounts and protected credentials.
 - Shell, PTY, SFTP, agent/X11 forwarding, and port forwarding remain denied.
 - Optional per-route command audit stored in a user-only `0600` rolling file.
 
@@ -66,12 +69,21 @@ Airlock is a fixed-route relay, not an open proxy, VPN, or general provider-mana
 ### Native Desktop
 
 - Tauri 2 + React desktop console with a Go `airlockd` sidecar.
-- Native protected prompts keep target URLs and credentials outside the WebView.
+- SSH credentials, Host Key verification, and one-time local access details stay
+  in the Airlock wizard and are sent once over local Tauri IPC to `airlockd`.
+- HTTP, LLM, and proxy secrets continue to use protected native prompts.
 - System/light/dark themes, three accents, density, refresh cadence, and motion preferences.
 - Loopback by default, with explicit native confirmation before private-LAN exposure.
 - A password-prompt-free local `0600` file store by default; macOS Keychain is
   available as the stricter, opt-in protection mode.
 - Clash-compatible HTTP CONNECT and SOCKS5/SOCKS5H proxy egress.
+
+### Server Core and Operations
+
+- `airlockd --mode server` runs the fixed-route core without Tauri or a desktop session.
+- The `airlock` Unix-socket CLI administers fixed routes, SSH mappings, health checks, and protected proxy egress without placing upstream secrets in command arguments.
+- An optional separately authenticated, loopback-only Web UI exposes sanitized status and safe route operations; use an SSH tunnel for remote administration.
+- See the [server deployment and CLI guide](docs/server-deployment.md) for service accounts, systemd, protected JSON specifications, Wget, SSH, LLM, and Clash examples.
 
 ## How It Works
 
@@ -164,12 +176,14 @@ See the [security policy](SECURITY.md), [implementation and threat-model plan](.
 ```text
 apps/desktop       Tauri 2 + React native desktop app
 cmd/airlockd       Go daemon entry point
+cmd/airlock        Server operations CLI entry point
 internal/control   Protected local control protocol
 internal/httpgw    HTTP/Wget and LLM gateway
 internal/sshgw     Dual-session SSH gateway
 internal/routes    Route policy and metadata
 internal/secrets   Keychain and local SecretStore backends
 website            Bilingual static documentation website
+deploy/systemd     Server service examples
 ```
 
 ## Current Roadmap
@@ -179,6 +193,7 @@ website            Bilingual static documentation website
 - SSH/HTTP capability rotation and per-connection approval.
 - Sanitized HTTP/LLM activity events and persistent quota/cost reporting.
 - Windows and Linux SecretStore and service integration.
+- [Cross-platform artifact and security adaptation](docs/cross-platform.md).
 - Release signing, CI secret scanning, and a complete security review.
 
 ## Documentation

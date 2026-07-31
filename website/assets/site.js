@@ -9,6 +9,7 @@ const translations = {
     navQuickstart: "快速使用",
     navArchitecture: "架构",
     navFaq: "常见问题",
+    navDocs: "文档",
     sourceCode: "源代码",
     menuLabel: "打开导航",
     heroEyebrow: "LOCAL CREDENTIAL BOUNDARY",
@@ -17,6 +18,7 @@ const translations = {
     seeHow: "了解工作方式",
     releaseCta: "下载 v0.1.0",
     quickStartCta: "查看快速用法",
+    installLabel: "一行安装",
     principleTarget: "固定目标",
     principleTargetDetail: "不接受任意上游 URL",
     principleSecret: "凭据隔离",
@@ -135,6 +137,7 @@ const translations = {
     navQuickstart: "Quick start",
     navArchitecture: "Architecture",
     navFaq: "FAQ",
+    navDocs: "Documentation",
     sourceCode: "Source",
     menuLabel: "Open navigation",
     heroEyebrow: "LOCAL CREDENTIAL BOUNDARY",
@@ -143,6 +146,7 @@ const translations = {
     seeHow: "See how it works",
     releaseCta: "Download v0.1.0",
     quickStartCta: "View quick start",
+    installLabel: "ONE-LINE INSTALL",
     principleTarget: "Fixed targets",
     principleTargetDetail: "Never accepts arbitrary upstream URLs",
     principleSecret: "Credential isolation",
@@ -317,7 +321,28 @@ function applyLanguage(language) {
     const key = element.dataset.i18nAria;
     if (dictionary[key]) element.title = dictionary[key];
   });
+  refreshCharacterReveals();
   storageSet(languageStorageKey, language);
+}
+
+function refreshCharacterReveals() {
+  document.querySelectorAll("[data-character-reveal]").forEach((element) => {
+    const value = element.textContent.trim();
+    element.replaceChildren();
+    element.setAttribute("aria-label", value);
+    Array.from(value).forEach((character, index) => {
+      if (/\s/.test(character)) {
+        element.append(document.createTextNode(character));
+        return;
+      }
+      const letter = document.createElement("span");
+      letter.className = "character-reveal";
+      letter.style.setProperty("--character-delay", `${Math.min(index * 24, 720)}ms`);
+      letter.setAttribute("aria-hidden", "true");
+      letter.textContent = character;
+      element.append(letter);
+    });
+  });
 }
 
 function currentTheme() {

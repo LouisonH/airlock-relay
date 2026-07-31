@@ -6,6 +6,7 @@
   <p>
     <a href="README.md">English</a> |
     <a href="README.zh-CN.md">简体中文</a> |
+    <a href="README.ja.md">日本語</a> |
     <a href="docs/README.md">文档索引</a> |
     <a href="website/index.html">静态说明网页</a>
   </p>
@@ -49,7 +50,8 @@ Airlock 是固定路由转发器，不是开放代理、VPN 或通用供应商�
 - 分别终止本地和上游 SSH 会话，实现身份与凭据隔离。
 - 本地随机 Capability、自定义密码或公钥认证。
 - 受保护的上游密码或加密私钥认证，并严格固定 Host Key。
-- 默认只允许用户自定义的一条精确命令；所有非交互 `exec` 需要原生高风险确认。
+- 默认只允许用户自定义的一条精确命令；所有非交互 `exec` 需要在 Airlock 内明确确认高风险。
+- 多条路由可以指向同一个上游地址；不同本地用户名选择彼此独立的上游账号与受保护凭据。
 - 仍拒绝 Shell、PTY、SFTP、Agent/X11 Forwarding 与端口转发。
 - 可选的每路由命令审计，保存在当前用户专属的 `0600` 滚动文件中。
 
@@ -65,11 +67,20 @@ Airlock 是固定路由转发器，不是开放代理、VPN 或通用供应商�
 ### 原生桌面端
 
 - Tauri 2 + React 桌面控制台与 Go `airlockd` sidecar。
-- 原生受保护输入窗口，目标 URL 与凭据不进入 WebView。
+- SSH 凭据、Host Key 核对和一次性本地访问信息集成在 Airlock 向导内，并通过本机
+  Tauri IPC 单次发送给 `airlockd`。
+- HTTP、LLM 与代理 Secret 仍使用受保护的原生输入窗口。
 - 系统/浅色/深色主题、三种配色、密度、刷新频率与动效偏好。
 - 默认仅 loopback，开放私有局域网前需要原生确认。
 - 默认使用无需启动密码弹窗的本地 `0600` 文件；macOS Keychain 作为更严格的可选保护模式。
 - 兼容 Clash 的 HTTP CONNECT 和 SOCKS5/SOCKS5H 代理出口。
+
+### Server Core 与运维
+
+- `airlockd --mode server` 不需要 Tauri 或桌面会话，即可运行固定路由核心。
+- `airlock` Unix Socket CLI 可管理固定路由、SSH 映射、健康检查与受保护代理出口，不会把上游 Secret 放进命令行参数。
+- 可选 Web UI 使用独立令牌且只监听 loopback；它只展示脱敏状态与安全路由操作，远程运维请通过 SSH 隧道。
+- 完整的服务账户、systemd、受保护 JSON、Wget、SSH、LLM 与 Clash 示例见 [Server Core 部署与命令行](docs/server-deployment.zh-CN.md)。
 
 ## 工作方式
 
@@ -161,12 +172,14 @@ Airlock 通过固定目标、最小权限、凭据替换与脱敏错误减少 Se
 ```text
 apps/desktop       Tauri 2 + React 原生桌面应用
 cmd/airlockd       Go 守护进程入口
+cmd/airlock        Server 运维 CLI 入口
 internal/control   受保护本地控制协议
 internal/httpgw    HTTP/Wget 与 LLM 网关
 internal/sshgw     双会话 SSH 网关
 internal/routes    路由策略与元数据
 internal/secrets   Keychain 与本地 SecretStore 后端
 website            双语静态说明网站
+deploy/systemd     服务端 systemd 示例
 ```
 
 ## 当前路线图
@@ -176,6 +189,7 @@ website            双语静态说明网站
 - SSH/HTTP Capability 轮换与每次连接确认。
 - 脱敏 HTTP/LLM 活动事件与可持久额度/费用统计。
 - Windows 和 Linux SecretStore 与服务集成。
+- [跨平台产物与安全适配方案](docs/cross-platform.zh-CN.md)。
 - 发布签名、CI Secret 扫描与完整安全审查。
 
 ## 文档

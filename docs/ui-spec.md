@@ -13,9 +13,9 @@ The default window is 1120x720 with a minimum size of 960x640. Navigation uses a
 
 ## Security Rules
 
-- Frontend IPC types must not contain target URLs, hosts, upstream usernames, credentials, cookies, or injected headers.
-- Protected values are represented only by a state such as `configured`, `missing`, or `replace_required`.
-- Secret entry uses a native secure flow. The WebView receives only completion status.
+- Persistent frontend control-state types must not contain target URLs, hosts, upstream usernames, credentials, cookies, or injected headers.
+- SSH creation uses an in-window form and a one-shot Tauri command. The frontend clears its password state after success; subsequent IPC responses expose only safe route summaries.
+- HTTP, LLM, and proxy secrets continue to use native secure entry. Their WebView state is represented only as `configured`, `missing`, or `replace_required`.
 - A newly created capability is displayed once. Closing the dialog makes it unrecoverable; rotation is required.
 - Sanitized events contain route alias, caller label, decision, latency, egress, and an opaque event ID.
 - Proxy URLs and credentials are entered only in a native protected prompt; the WebView receives only configured/unconfigured state.
@@ -41,7 +41,7 @@ The default window is 1120x720 with a minimum size of 960x640. Navigation uses a
 
 ## Route Creation
 
-The in-window editor has three compact steps: local identity and non-secret policy, native protected entry, then one-time local access details. LLM routes expose provider preset, model allowlist, output limit, request rate, concurrency, and the optional usage-statistics switch in the WebView; native prompts collect the base URL and upstream API key, then require an explicit choice between a recommended random 256-bit local API key and a custom key entered twice. SSH routes expose one editable, exact-match `exec` command by default and allow it to be changed later from the policy editor; the UI warns against embedding secrets in command arguments. Existing LLM routes support policy editing, in-memory usage reset, and local API key rotation. Existing secrets are replace-only. Enabling broad SSH command access requires an explicit high-risk acknowledgement.
+The in-window editor has three compact steps: local identity and policy, protected entry, then one-time local access details. LLM routes expose provider preset, model allowlist, output limit, request rate, concurrency, and the optional usage-statistics switch in the WebView; native prompts collect the base URL and upstream API key, then require an explicit choice between a recommended random 256-bit local API key and a custom key entered twice. SSH routes collect the upstream address, account, password, isolated local password or generated capability, and Host Key acknowledgement inside Airlock. Multiple SSH mappings may share one upstream address, while local usernames remain unique. Existing LLM routes support policy editing, in-memory usage reset, and local API key rotation. Existing secrets are replace-only. Enabling broad SSH command access requires an explicit in-window high-risk acknowledgement.
 
 Route enablement uses a switch. Whole-service startup and emergency stop remain explicit commands. At medium widths the route table first hides recent-use metadata and tightens spacing; at widths up to 1050px route and activity tables hide additional secondary columns through table-specific selectors.
 
