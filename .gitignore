@@ -5,6 +5,8 @@
 
 # Go
 bin/
+!packages/airlock/bin/
+!packages/airlock/bin/**
 .cache/
 *.test
 coverage.out

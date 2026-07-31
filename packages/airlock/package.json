@@ -44,6 +44,7 @@
   "scripts": {
     "prepare:artifact": "node scripts/prepare-artifact.mjs",
     "test": "node --test test/*.test.mjs",
+    "test:source": "AIRLOCK_SOURCE_TEST=1 node --test test/*.test.mjs",
     "prepack": "npm run prepare:artifact && npm test"
   },
   "engines": {

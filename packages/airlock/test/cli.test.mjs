@@ -10,6 +10,7 @@ import {
   ASSET_NAME,
   ASSET_SHA256,
   PACKAGE_NAME,
+  RELEASE_URL,
   VERSION,
   parseArguments,
   sha256,
@@ -25,6 +26,7 @@ const packageDirectory = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const cliPath = resolve(packageDirectory, "bin/airlock.js");
 const assetPath = resolve(packageDirectory, "dist", ASSET_NAME);
 const logoPath = resolve(packageDirectory, "assets", "airlock-logo.svg");
+const sourceOnly = process.env.AIRLOCK_SOURCE_TEST === "1";
 
 test("parses install options", () => {
   assert.deepEqual(parseArguments(["install", "--output", "/tmp/airlock", "--open"]), {
@@ -47,6 +49,14 @@ test("prints the package version", () => {
   assert.equal(output.trim(), `${PACKAGE_NAME} v${VERSION}`);
 });
 
+test("prints the official release URL", () => {
+  const output = execFileSync(process.execPath, [cliPath, "release"], {
+    encoding: "utf8",
+  });
+  assert.equal(output.trim(), RELEASE_URL);
+  assert.match(RELEASE_URL, /releases\/tag\/v0\.1\.1$/);
+});
+
 test("runs through the symlink shape created for npm bins", async () => {
   const temporaryDirectory = await mkdtemp(
     resolve(tmpdir(), "airlock-npm-bin-test-"),
@@ -61,7 +71,7 @@ test("runs through the symlink shape created for npm bins", async () => {
   }
 });
 
-test("ships the verified release artifact", async () => {
+test("ships the verified release artifact", { skip: sourceOnly }, async () => {
   assert.equal(await sha256(assetPath), ASSET_SHA256);
 });
 
@@ -91,14 +101,16 @@ test("reports platform contracts without claiming planned targets are released",
   assert.equal(report.targets.find((target) => target.platform === "win32" && target.arch === "x64").status, "planned");
 });
 
-test("reports a local installer status without opening the application", () => {
+test("reports the current platform contract without opening the application", () => {
   const output = execFileSync(process.execPath, [cliPath, "status", "--json"], { encoding: "utf8" });
   const report = JSON.parse(output);
   assert.equal(report.package, PACKAGE_NAME);
-  assert.equal(report.currentTarget.artifactName, ASSET_NAME);
+  assert.equal(report.currentTarget.platform, process.platform);
+  assert.equal(report.currentTarget.arch, process.arch);
+  assert.equal(report.installerReleased, process.platform === "darwin" && process.arch === "arm64");
 });
 
-test("installs and verifies the DMG without opening it", async () => {
+test("installs and verifies the DMG without opening it", { skip: sourceOnly }, async () => {
   const outputDirectory = await mkdtemp(resolve(tmpdir(), "airlock-npm-test-"));
   try {
     const output = execFileSync(

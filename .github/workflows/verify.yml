@@ -15,8 +15,8 @@ jobs:
     name: Go core
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.24.x"
           cache: true
@@ -29,8 +29,8 @@ jobs:
     name: Desktop frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -42,21 +42,17 @@ jobs:
           npm run build
 
   package-and-site:
-    name: Installer and documentation
+    name: Installer source and documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: packages/airlock/package-lock.json
-      - name: Test installer package
+      - name: Test installer source
         working-directory: packages/airlock
         run: |
-          npm ci
-          npm test
-          npm pack --dry-run --ignore-scripts
+          npm run test:source
       - name: Check static site scripts
         run: |
           node --check website/assets/site.js
