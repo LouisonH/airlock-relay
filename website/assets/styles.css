@@ -313,6 +313,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .copy-toast.visible { opacity: 1; transform: translateY(0); }
 .reveal { opacity: 0; transform: translateY(15px); transition: opacity 520ms ease, transform 520ms cubic-bezier(.2, .75, .2, 1); }
 .reveal.visible { opacity: 1; transform: translateY(0); }
+/* Keep the above-the-fold message available while the observer initializes. */
+.hero-copy.reveal { opacity: 1; transform: none; }
 
 @keyframes signal-travel {
   0%, 10% { opacity: 0; transform: translateX(0); }
@@ -365,6 +367,16 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 @keyframes preview-lift {
   from { opacity: 0; transform: translateY(16px) scale(.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .reveal, .reveal.visible { opacity: 1; transform: none; }
 }
 
 @media (max-width: 1040px) {
