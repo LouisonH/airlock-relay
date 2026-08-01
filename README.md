@@ -54,7 +54,7 @@ Airlock is a fixed-route relay, not an open proxy, VPN, or general provider-mana
   requires explicit high-risk acknowledgement inside Airlock.
 - Multiple routes may share one upstream address; distinct local usernames select
   independent upstream accounts and protected credentials.
-- Shell, PTY, agent/X11 forwarding, and port forwarding remain denied. SFTP is disabled by default and can be explicitly enabled per route for modern `scp`/SFTP clients; it remains a separate high-risk file access permission.
+- Interactive shells, agent/X11 forwarding, and port forwarding remain denied. PTY requests are acknowledged only for Windows/OpenSSH client compatibility and are never forwarded upstream. SFTP is disabled by default and can be explicitly enabled per route for modern `scp`/SFTP clients; it remains a separate high-risk file access permission.
 - Optional per-route command audit stored in a user-only `0600` rolling file.
 
 ### LLM API
@@ -118,6 +118,13 @@ Alternatively, get the DMG and checksum from [GitHub Releases](https://github.co
 then follow the [installation guide](docs/installation.md). The package is
 ad-hoc signed but is not Developer ID signed or notarized, so read the
 Gatekeeper instructions before opening it.
+
+The npm diagnostic CLI also installs without side effects on Windows x64/x86/ARM64
+and Linux x64/ARM64. Run `airlock-installer status --json` or
+`airlock-installer platform --json` to inspect the current contract. Those
+targets are CI previews, not verified public installers: `install` fails closed
+and never downloads an unverified CI artifact. Linux ARMv7 and macOS x64 remain
+planned.
 
 ## Development Quick Start
 

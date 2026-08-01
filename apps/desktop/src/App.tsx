@@ -231,6 +231,14 @@ export default function App() {
     }
   };
 
+  const checkHealthAndEnableRoute = async (alias: string) => {
+    const healthy = await runHealthCheck(alias);
+    if (!healthy) return false;
+    await toggleRoute(alias, true);
+    setNotice("健康检查通过，路由已开启");
+    return true;
+  };
+
   const deleteRoute = async () => {
     if (!pendingDelete) return;
     try {
@@ -265,11 +273,11 @@ export default function App() {
     }
   };
 
-  const updateSSHPolicy = async (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, recordCommands: boolean, allowSftp: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"], keywordReplacements: KeywordReplacement[]) => {
+  const updateSSHPolicy = async (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, allowAllConfirmed: boolean, recordCommands: boolean, allowSftp: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"], keywordReplacements: KeywordReplacement[]) => {
     if (!policyRoute) return;
     try {
       const routes = isTauri
-        ? await invoke<RouteSummary[]>("set_ssh_policy", { alias: policyRoute.alias, name, localUsername, allowedCommand, allowAllCommands, recordCommands, allowSftp, authenticationTimeoutSeconds, egress }).then(() => invoke<RouteSummary[]>("set_ssh_keyword_replacements", { alias: policyRoute.alias, replacements: keywordReplacements }))
+        ? await invoke<RouteSummary[]>("set_ssh_policy", { alias: policyRoute.alias, name, localUsername, allowedCommand, allowAllCommands, allowAllConfirmed, recordCommands, allowSftp, authenticationTimeoutSeconds, egress }).then(() => invoke<RouteSummary[]>("set_ssh_keyword_replacements", { alias: policyRoute.alias, replacements: keywordReplacements }))
         : control.routes.map((route) => route.alias === policyRoute.alias ? {
           ...route,
           name,
@@ -489,7 +497,7 @@ export default function App() {
 	  {pendingDelete && <Modal title="删除路由" onClose={() => setPendingDelete(undefined)}><div className="danger-panel"><Trash2 size={19} /><div><strong>{pendingDelete.name}</strong><p>本地入口、Capability 和当前 SecretStore 中的受保护目标都会被永久删除。</p></div></div><div className="modal-actions"><button className="secondary-button" onClick={() => setPendingDelete(undefined)}>取消</button><button className="danger-button" onClick={() => void deleteRoute()}><Trash2 size={16} />删除路由</button></div></Modal>}
       {policyRoute?.kind === "SSH" && <SSHPolicyEditor route={policyRoute} platform={platform} testing={testingAliases.has(policyRoute.alias)} onClose={() => setPolicyRoute(undefined)} onSave={updateSSHPolicy} onUpdateHost={updateSSHHost} onRotateCredential={rotateSSHCredential} onTest={() => runHealthCheck(policyRoute.alias)} onAddHost={() => { setPolicyRoute(undefined); openEditor("SSH"); }} onDelete={() => { setPendingDelete(policyRoute); setPolicyRoute(undefined); }} />}
       {policyRoute?.kind === "LLM" && <LLMPolicyEditor route={policyRoute} onClose={() => setPolicyRoute(undefined)} onSave={updateLLMPolicy} onRotate={rotateLLMKey} onResetUsage={resetLLMUsage} />}
-      {editorOpen && <RouteEditor initialKind={editorKind} routes={control.routes} connected={control.connected} proxyConfigured={control.proxyConfigured} sshReady={control.sshReady} onClose={() => setEditorOpen(false)} onCreated={(route) => setControl((current) => ({ ...current, routes: [...current.routes.filter((item) => item.id !== route.id), route] }))} onError={setNotice} />}
+      {editorOpen && <RouteEditor initialKind={editorKind} routes={control.routes} connected={control.connected} proxyConfigured={control.proxyConfigured} sshReady={control.sshReady} onClose={() => setEditorOpen(false)} onCreated={(route) => setControl((current) => ({ ...current, routes: [...current.routes.filter((item) => item.id !== route.id), route] }))} onActivate={checkHealthAndEnableRoute} onError={setNotice} />}
     </div>
   );
 }
@@ -521,11 +529,8 @@ function platformFileStoreExplain(platform: PlatformInfo): string {
 }
 
 function platformNativeConfirmText(platform: PlatformInfo): string {
-  return platform.os === "windows"
-    ? "该模式接近远程命令执行权限。保存时还会出现一次 Windows 原生风险确认。"
-    : platform.os === "linux"
-      ? "该模式接近远程命令执行权限。保存时还会出现一次系统原生风险确认。"
-      : "该模式接近远程命令执行权限。保存时还会出现一次 macOS 原生风险确认。";
+  void platform;
+  return "该模式接近远程命令执行权限。请在 Airlock 内确认后保存；不会额外打开系统确认窗口。";
 }
 
 function platformOsLabel(platform: PlatformInfo): string {
@@ -840,11 +845,12 @@ function SecurityChoice<T extends NetworkScope | SecretStoreMode>({ label, detai
 function PreferenceRow({ label, detail, children }: { label: string; detail: string; children: React.ReactNode }) { return <div className="preference-row"><div><strong>{label}</strong><small>{detail}</small></div>{children}</div>; }
 function PreferenceSegment<T extends string | number>({ value, options, onChange }: { value: T; options: Array<{ value: T; label: string }>; onChange: (value: T) => void }) { return <div className="preference-segment" role="group">{options.map((option) => <button key={String(option.value)} className={value === option.value ? "selected" : ""} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; }
 
-function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHost, onRotateCredential, onTest, onAddHost, onDelete }: { route: RouteSummary; platform: PlatformInfo; testing: boolean; onClose: () => void; onSave: (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, recordCommands: boolean, allowSftp: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"], keywordReplacements: KeywordReplacement[]) => Promise<void>; onUpdateHost: (input: SSHHostUpdateInput) => Promise<void>; onRotateCredential: (localPassword: string) => Promise<SSHRouteCreationResult>; onTest: () => Promise<boolean>; onAddHost: () => void; onDelete: () => void }) {
+function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHost, onRotateCredential, onTest, onAddHost, onDelete }: { route: RouteSummary; platform: PlatformInfo; testing: boolean; onClose: () => void; onSave: (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, allowAllConfirmed: boolean, recordCommands: boolean, allowSftp: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"], keywordReplacements: KeywordReplacement[]) => Promise<void>; onUpdateHost: (input: SSHHostUpdateInput) => Promise<void>; onRotateCredential: (localPassword: string) => Promise<SSHRouteCreationResult>; onTest: () => Promise<boolean>; onAddHost: () => void; onDelete: () => void }) {
   const [name, setName] = useState(route.name);
   const [localUsername, setLocalUsername] = useState(route.localUsername || route.alias);
   const [egress, setEgress] = useState(route.egress);
   const [allowAll, setAllowAll] = useState(route.allowAllCommands);
+  const [allowAllConfirmed, setAllowAllConfirmed] = useState(route.allowAllCommands);
   const [allowedCommand, setAllowedCommand] = useState(route.allowedCommand || "printf airlock-ok");
   const [recordCommands, setRecordCommands] = useState(route.recordCommands);
   const [allowSftp, setAllowSftp] = useState(route.allowSftp);
@@ -887,7 +893,7 @@ function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHo
   const save = async () => {
     setBusy("save");
     setError(undefined);
-    try { await onSave(name.trim(), localUsername, allowedCommand, allowAll, recordCommands, allowSftp, authenticationTimeoutSeconds, egress, keywordReplacements); }
+    try { await onSave(name.trim(), localUsername, allowedCommand, allowAll, allowAllConfirmed, recordCommands, allowSftp, authenticationTimeoutSeconds, egress, keywordReplacements); }
     catch (caught) { setError(translate(String(caught))); }
     finally { setBusy(undefined); }
   };
@@ -931,11 +937,11 @@ function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHo
       <section className="ssh-manager-section"><div className="ssh-manager-heading"><div><strong>映射身份与出口</strong><span>一个本地用户名对应一个受保护 SSH 宿主关系</span></div></div><div className="identity-grid"><label className="form-field"><span>映射名称</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} /></label><label className="form-field"><span>本地 SSH 用户名</span><input value={localUsername} onChange={(event) => setLocalUsername(event.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""))} maxLength={64} spellCheck={false} placeholder="builder" /><small>修改后旧用户名立即失效。</small></label></div><div className="identity-grid ssh-budget-grid"><label className={`form-field ${authenticationTimeoutValid ? "" : "invalid"}`}><span>认证预算（秒）</span><input type="number" min={3} max={120} step={1} value={authenticationTimeoutSeconds} onChange={(event) => setAuthenticationTimeoutSeconds(Number(event.target.value))} /><small>默认 20 秒，仅用于手动上游认证检查。</small></label></div><div className="egress-field"><span>出口策略</span><div className="egress-control" role="group">{(["Direct", "Proxy", "Auto"] as const).map((value) => <button key={value} className={egress === value ? "selected" : ""} onClick={() => { setEgress(value); setHostProbe(undefined); setHostKeyAccepted(false); }}>{value}</button>)}</div></div></section>
       <section className="ssh-manager-section"><div className="ssh-manager-heading"><div><strong>命令权限与记录</strong><span>停用路由的连接尝试始终进入脱敏活动；命令正文记录由下方开关控制</span></div></div>
       <div className="policy-options" role="radiogroup" aria-label="SSH 命令范围">
-        <button className={!allowAll ? "selected" : ""} role="radio" aria-checked={!allowAll} onClick={() => setAllowAll(false)}><ShieldCheck size={17} /><span><strong>指定命令</strong><small>只开放一个完整 exec 命令</small></span></button>
-        <button className={allowAll ? "selected risk" : "risk"} role="radio" aria-checked={allowAll} onClick={() => setAllowAll(true)}><AlertTriangle size={17} /><span><strong>所有命令</strong><small>任意 exec，仍拒绝 Shell 与 PTY</small></span></button>
+        <button className={!allowAll ? "selected" : ""} role="radio" aria-checked={!allowAll} onClick={() => { setAllowAll(false); setAllowAllConfirmed(false); }}><ShieldCheck size={17} /><span><strong>指定命令</strong><small>只开放一个完整 exec 命令</small></span></button>
+        <button className={allowAll ? "selected risk" : "risk"} role="radio" aria-checked={allowAll} onClick={() => { setAllowAll(true); setAllowAllConfirmed(route.allowAllCommands); }}><AlertTriangle size={17} /><span><strong>所有命令</strong><small>任意 exec，仍拒绝交互式 Shell</small></span></button>
       </div>
       {!allowAll && <label className="form-field ssh-command-field"><span>唯一允许命令 <small>{allowedCommand.length}/4096</small></span><input value={allowedCommand} onChange={(event) => setAllowedCommand(event.target.value)} maxLength={4096} spellCheck={false} placeholder="例如：uptime" /><small>按完整字符串匹配，不要在命令参数中填写密码或 Token。</small></label>}
-      {allowAll && <div className="inline-warning policy-warning"><TriangleAlert size={16} /><span>{translate(platformNativeConfirmText(platform))}</span></div>}
+      {allowAll && <label className="risk-consent"><input type="checkbox" checked={allowAllConfirmed} onChange={(event) => setAllowAllConfirmed(event.target.checked)} /><TriangleAlert size={16} /><span><strong>确认开放所有非交互 exec 命令</strong><small>{translate(platformNativeConfirmText(platform))}</small></span></label>}
       <label className="audit-toggle"><input type="checkbox" checked={recordCommands} onChange={(event) => setRecordCommands(event.target.checked)} /><span><strong>{translate("记录执行命令")}</strong><small>{translate("完整命令保存在本机受保护审计文件，参数可能包含敏感内容。")}</small></span></label>
       <label className={`audit-toggle sftp-toggle ${allowSftp ? "enabled" : ""}`}><input type="checkbox" checked={allowSftp} onChange={(event) => setAllowSftp(event.target.checked)} /><span><strong>{translate("允许 SFTP 文件传输（高风险）")}</strong><small>{translate("允许列出、读取、写入、重命名和删除上游账号可访问的文件。请使用专用低权限账号；Shell、PTY、端口转发及其他子系统仍拒绝。")}</small></span></label>
       </section>
@@ -947,7 +953,7 @@ function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHo
       <section className="ssh-manager-section"><div className="ssh-manager-heading"><div><strong>本地登录凭据</strong><span>轮换后旧密码或随机凭据立即失效</span></div><div className="policy-segmented"><button className={credentialMode === "generated" ? "selected" : ""} onClick={() => { setCredentialMode("generated"); setLocalPassword(""); setLocalPasswordConfirmation(""); }}><KeyRound size={13} />随机生成</button><button className={credentialMode === "custom" ? "selected" : ""} onClick={() => setCredentialMode("custom")}><ShieldCheck size={13} />自定义密码</button></div></div>{credentialMode === "custom" && <div className="local-password-grid"><SecretField label="新的本地密码" value={localPassword} visible={localPasswordVisible} onVisible={() => setLocalPasswordVisible((current) => !current)} onChange={setLocalPassword} placeholder="至少 12 个字节" detail={`${localPasswordBytes}/1024 bytes`} /><SecretField label="确认新密码" value={localPasswordConfirmation} visible={localPasswordVisible} onVisible={() => setLocalPasswordVisible((current) => !current)} onChange={setLocalPasswordConfirmation} placeholder="再次输入" detail={localPasswordConfirmation && localPassword !== localPasswordConfirmation ? "两次输入不一致" : "只保存摘要"} invalid={Boolean(localPasswordConfirmation && localPassword !== localPasswordConfirmation)} /></div>}<button className="secondary-button rotate-ssh-credential" onClick={() => void rotateCredential()} disabled={!localPasswordValid || Boolean(busy)}>{busy === "rotate" ? <LoaderCircle className="spin" size={14} /> : <RotateCcw size={14} />}{busy === "rotate" ? "正在轮换" : "轮换本地凭据"}</button>{rotatedCredential && <div className="one-time-credential"><span>新的本地凭据，仅显示一次</span><code data-i18n="off">{rotatedCredential}</code></div>}</section>
       {error && <div className="inline-error"><TriangleAlert size={15} />{error}</div>}
     </div>
-    <div className="modal-actions"><button className="secondary-button" onClick={onClose} disabled={Boolean(busy)}>关闭</button><button className={allowAll ? "danger-button" : "primary-button"} onClick={() => void save()} disabled={Boolean(busy) || replacementsLoading || !nameValid || !usernameValid || !commandValid || !authenticationTimeoutValid || !replacementsValid}>{busy === "save" ? <RefreshCw className="spin" size={16} /> : <ShieldCheck size={16} />}{busy === "save" ? "正在保存" : "保存映射设置"}</button></div>
+    <div className="modal-actions"><button className="secondary-button" onClick={onClose} disabled={Boolean(busy)}>关闭</button><button className={allowAll ? "danger-button" : "primary-button"} onClick={() => void save()} disabled={Boolean(busy) || replacementsLoading || !nameValid || !usernameValid || !commandValid || (allowAll && !allowAllConfirmed) || !authenticationTimeoutValid || !replacementsValid}>{busy === "save" ? <RefreshCw className="spin" size={16} /> : <ShieldCheck size={16} />}{busy === "save" ? "正在保存" : "保存映射设置"}</button></div>
   </Modal>;
 }
 
@@ -986,7 +992,7 @@ function LLMPolicyEditor({ route, onClose, onSave, onRotate, onResetUsage }: { r
 
 function UsageMetric({ label, value }: { label: string; value: number }) { return <div><span>{label}</span><strong>{formatUsage(value)}</strong></div>; }
 
-function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady, onClose, onCreated, onError }: { initialKind: RouteKind; routes: RouteSummary[]; connected: boolean; proxyConfigured: boolean; sshReady: boolean; onClose: () => void; onCreated: (route: RouteSummary) => void; onError: (message: string) => void }) {
+function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady, onClose, onCreated, onActivate, onError }: { initialKind: RouteKind; routes: RouteSummary[]; connected: boolean; proxyConfigured: boolean; sshReady: boolean; onClose: () => void; onCreated: (route: RouteSummary) => void; onActivate: (alias: string) => Promise<boolean>; onError: (message: string) => void }) {
   const [step, setStep] = useState(1);
   const [kind, setKind] = useState<RouteKind>(initialKind);
   const [name, setName] = useState("");
@@ -1009,6 +1015,7 @@ function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady
   const [sshBusy, setSSHBusy] = useState<"probe" | "create">();
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<RouteSummary>();
+  const [activating, setActivating] = useState(false);
   const [egress, setEgress] = useState<RouteSummary["egress"]>("Direct");
   const [allowAllCommands, setAllowAllCommands] = useState(false);
   const [allowedCommand, setAllowedCommand] = useState("printf airlock-ok");
@@ -1141,6 +1148,16 @@ function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady
     }
   };
 
+  const activateCreatedRoute = async () => {
+    if (!created) return;
+    setActivating(true);
+    try {
+      if (await onActivate(created.alias)) onClose();
+    } finally {
+      setActivating(false);
+    }
+  };
+
   return <div className="editor-overlay" role="dialog" aria-modal="true" aria-label="新增路由"><div className="editor-panel">
     <header className="editor-header"><div><span className="editor-kicker">SECURE ROUTE</span><h2>{translate(`新增 ${kind} 路由`)}</h2><p>{kind === "SSH" ? "目标与认证在 Airlock 内完成，仅发送到本机核心" : "敏感信息仅发送到本机核心并受隔离存储保护"}</p></div><button className="icon-button" onClick={onClose} disabled={saving} aria-label="关闭"><X size={18} /></button></header>
     <ol className="step-list">{["本地身份", "安全录入", "完成"].map((label, index) => <li key={label} className={step === index + 1 ? "current" : step > index + 1 ? "done" : ""}><span>{step > index + 1 ? <Check size={14} /> : index + 1}</span>{label}</li>)}</ol>
@@ -1178,7 +1195,7 @@ function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady
           <div className="secure-entry-actions"><span>{sshProbe ? "Host Key 已读取；确认后安全保存，稍后可在路由页检查连接" : "先检测 Host Key，再保存凭据和路由"}</span><button className="primary-button" onClick={() => void secureCreate()} disabled={!canCreateSSH}>{sshBusy === "create" ? <RefreshCw className="spin" size={16} /> : <ShieldCheck size={16} />}{sshBusy === "create" ? "正在安全保存" : "信任并保存路由"}</button></div>
         </div>}
 	  {step === 2 && kind !== "SSH" && <><h3>完成受保护配置</h3><div className="protected-box"><span className="protected-icon">{kind === "LLM" ? <Sparkles size={21} /> : <KeyRound size={21} />}</span><div><strong>系统安全引导</strong><p>{kind === "LLM" ? "录入上游 Base URL 与 API Key，然后自定义或随机生成完全隔离的本地 API Key。" : "完整 URL 与 Authorization 按当前凭据保护方式存储。"}</p></div><button className="primary-button" onClick={() => void secureCreate()} disabled={!connected || saving}>{saving ? <><RefreshCw className="spin" size={16} />等待系统窗口</> : <><KeyRound size={16} />开始安全设置</>}</button></div>{!connected && <div className="inline-error"><TriangleAlert size={16} />airlockd 未连接，暂时无法保存。</div>}</>}
-	  {step === 3 && created && <div className="success-state"><CircleCheck size={32} /><h3>{kind === "SSH" ? "路由已安全保存" : "路由已启用"}</h3><p>{kind === "SSH" ? sshCreation?.generatedCredential ? "本地凭据只显示这一次。请先在路由页检查上游认证，再手动启用该路由。" : "请在路由页检查上游认证，确认后再手动启用；Airlock 不会回显本地密码。" : kind === "LLM" ? "Base URL 与本地 API Key 已在安全窗口中确认。" : "本地访问入口已创建。"}</p><code data-i18n="off">{created.localEndpoint}</code>{kind === "SSH" && sshCreation?.generatedCredential && <div className="one-time-credential"><span>一次性本地凭据</span><code data-i18n="off">{sshCreation.localCredential}</code><small>关闭此页面后无法再次查看。</small></div>}</div>}
+	  {step === 3 && created && <div className="success-state"><CircleCheck size={32} /><h3>{kind === "SSH" ? "路由已安全保存，等待连通性检查" : "路由已启用"}</h3><p>{kind === "SSH" ? sshCreation?.generatedCredential ? "本地凭据只显示这一次。确认保存后先检查上游认证，健康通过才会开启路由。" : "请检查上游认证；健康通过后即可开启路由。Airlock 不会回显本地密码。" : kind === "LLM" ? "Base URL 与本地 API Key 已在安全窗口中确认。" : "本地访问入口已创建。"}</p><code data-i18n="off">{created.localEndpoint}</code>{kind === "SSH" && sshCreation?.generatedCredential && <div className="one-time-credential"><span>一次性本地凭据</span><code data-i18n="off">{sshCreation.localCredential}</code><small>关闭此页面后无法再次查看。</small></div>}{kind === "SSH" && <button className="primary-button activate-route-button" onClick={() => void activateCreatedRoute()} disabled={activating}>{activating ? <RefreshCw className="spin" size={16} /> : <HeartPulse size={16} />}{activating ? "正在检查上游" : "检查健康并开启路由"}</button>}</div>}
     </div>
     <footer className="editor-footer"><button className="secondary-button" onClick={step === 1 || step === 3 ? onClose : () => setStep(1)} disabled={saving}>{step === 2 && <ChevronLeft size={16} />}{step === 3 ? "完成" : step === 1 ? "取消" : "上一步"}</button>{step === 1 && <button className="primary-button" onClick={() => setStep(2)} disabled={!validIdentity}>继续<ChevronRight size={16} /></button>}</footer>
   </div></div>;

@@ -229,9 +229,13 @@ pub fn present_text(title: &str, message: &str, text: &str) -> Result<(), String
 }
 
 fn run_script(script: &str, payload: &Value) -> Result<String, String> {
+    use std::os::windows::process::CommandExt;
+
     let mut payload_bytes = payload.to_string().into_bytes();
     payload_bytes.push(b'\n');
-    let mut child = Command::new(POWERSHELL)
+    let mut command = Command::new(POWERSHELL);
+    command.creation_flags(0x08000000); // CREATE_NO_WINDOW; WinForms remains visible.
+    let mut child = command
         .args([
             "-NoProfile",
             "-Sta",

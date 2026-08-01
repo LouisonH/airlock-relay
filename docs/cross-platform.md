@@ -1,21 +1,23 @@
 # Cross-Platform Core Bootstrap
 
-Airlock v0.1.4 releases an Apple Silicon macOS desktop preview only. This
-branch adds a **Core/CLI compilation baseline** for Windows and Linux. It does
-not publish a Windows or Linux desktop application, installer, auto-updater,
-or signed artifact. The desktop GUI, local control transport, and native
-prompt flows are now ported at the code level for Windows and Linux; they still
-require real-device runtime acceptance before any release is published.
+Airlock v0.1.4 publishes a verified Apple Silicon macOS desktop preview only.
+The npm package can be installed without side effects on recognized Windows and
+Linux targets to report a platform contract. Windows x64/x86/arm64 and Linux
+x64/arm64 are CI preview targets: their desktop artifacts are not public,
+checksummed installers, so `airlock-installer install` fails closed and never
+downloads a CI artifact. The desktop GUI, local control transport, and native
+prompt flows are ported at the code level, but still require real-device runtime
+acceptance before release.
 
 | Target | Core / CLI build | Local control transport | Platform secret backend | Desktop bundle | Status |
 | --- | --- | --- | --- | --- | --- |
 | macOS arm64 | Native | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Released preview |
 | macOS x64 | Target build | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Installer planned |
-| Windows x64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop port coded · not released |
-| Windows x86 (i686) | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop port coded · not released |
-| Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop port coded · not released |
-| Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop port coded · not released |
-| Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop port coded · not released |
+| Windows x64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | CI preview · no public verified installer |
+| Windows x86 (i686) | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | CI preview · no public verified installer |
+| Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | CI preview · no public verified installer |
+| Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | CI preview · no public verified installer |
+| Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | CI preview · no public verified installer |
 | Linux ARMv7 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Raspberry Pi baseline |
 
 “Cross-compiled” means CI and the target-aware build script compile both
@@ -56,16 +58,20 @@ and installer checklist below is completed.
   security-setting confirmation. Linux port-ownership management reads
   `/proc` directly and needs no external `lsof`; desktop bundles still expect
   one prompt backend. Headless servers use the CLI instead.
-- CI runs Rust `cargo check` for the Windows x64, Windows x86, Windows arm64, and Linux x64
-  desktop targets on every push, so the ported control client is re-verified
-  on real target toolchains before runtime acceptance.
+- CI runs Rust `cargo check` for the Windows x64, Windows x86, Windows arm64, Linux x64,
+  and Linux arm64 desktop targets on every push, so the ported control client is
+  re-verified on real target toolchains before runtime acceptance.
 - A separate `desktop-windows` workflow builds the NSIS/MSI installers for
   Windows x64, x86 (i686), and arm64 on GitHub-hosted Windows runners and publishes them as
-  downloadable artifacts. The artifacts are unsigned until release signing is
-  configured, so SmartScreen may warn on first run.
+  downloadable artifacts. Its x64 smoke test starts `airlockd` without a
+  console, then uses the compiled `airlock` CLI to verify an authenticated
+  named-pipe status exchange. The artifacts are unsigned until release signing
+  is configured, so SmartScreen may warn on first run.
 - A `desktop-linux` workflow builds `deb` and AppImage installers for Linux x64
-  on an x64 runner and Linux arm64 on a native ARM runner. Packages do not
-  bundle `zenity`/`kdialog`; see the runtime note above.
+  on an x64 runner and Linux arm64 on a native ARM runner. Its smoke tests start
+  `airlockd`, then use the compiled `airlock` CLI to verify an authenticated
+  Unix-socket status exchange. Packages do not bundle `zenity`/`kdialog`; see
+  the runtime note above.
 - Build targets are explicit and isolated. A target build creates both
   `airlockd` and `airlock`; it does not create a Tauri bundle or alter the
   released npm installer contract.
@@ -121,9 +127,10 @@ these checks on each supported architecture and distribution:
 5. Produce architecture-specific installers, sign them, publish fixed
    checksums, and test install/update/uninstall independently.
 
-Until those checks pass, `airlock-installer` intentionally reports Windows and
-Linux as `planned` and refuses to install a nonexistent artifact. This avoids
-mistaking a compilable core for a supported desktop product.
+Until those checks pass, `airlock-installer status --json` reports recognized
+Windows/Linux targets as `preview` and `installerAvailable: false`; it still
+refuses `install`. Planned targets such as Linux ARMv7 are reported as
+`planned`. This avoids mistaking a CI candidate for a supported desktop product.
 
 ## Security Invariants
 

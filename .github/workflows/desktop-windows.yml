@@ -52,20 +52,34 @@ jobs:
           node scripts/build-sidecar.mjs windows-amd64
           node scripts/build-sidecar.mjs windows-arm64
           node scripts/build-sidecar.mjs windows-386
-      - name: Smoke test initial Windows core startup
+      - name: Smoke test Windows sidecar startup and named-pipe control
         if: matrix.target == 'windows-amd64'
         shell: pwsh
         run: |
           $sidecar = (Resolve-Path "apps/desktop/src-tauri/binaries/airlockd-x86_64-pc-windows-msvc.exe").Path
+          $cli = (Resolve-Path "apps/desktop/src-tauri/binaries/airlock-x86_64-pc-windows-msvc.exe").Path
           $controlDirectory = Join-Path $env:RUNNER_TEMP "airlock-core-smoke"
-          $token = "airlock_control_windows_smoke_token_0123456789abcdef"
+          $tokenPath = Join-Path $controlDirectory "control.token"
+          New-Item -ItemType Directory -Force -Path $controlDirectory | Out-Null
+          & $cli token generate --output $tokenPath
+          if ($LASTEXITCODE -ne 0) { throw "airlock CLI could not create a protected control token" }
+          $token = (Get-Content -Raw -LiteralPath $tokenPath).Trim()
+          if ($token.Length -lt 32) { throw "generated control token was unexpectedly short" }
+          function Get-FreeTcpPort {
+            $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+            $listener.Start()
+            try { return ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port }
+            finally { $listener.Stop() }
+          }
+          $httpPort = Get-FreeTcpPort
+          $sshPort = Get-FreeTcpPort
           $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
           $startInfo.FileName = $sidecar
           $startInfo.UseShellExecute = $false
           $startInfo.CreateNoWindow = $true
           $startInfo.RedirectStandardInput = $true
           $startInfo.RedirectStandardError = $true
-          foreach ($argument in @("--control-token-stdin", "--control-dir", $controlDirectory, "--listen", "127.0.0.1:4768", "--ssh-listen", "127.0.0.1:4770", "--secret-store", "local_file")) {
+          foreach ($argument in @("--control-token-stdin", "--control-dir", $controlDirectory, "--listen", "127.0.0.1:$httpPort", "--ssh-listen", "127.0.0.1:$sshPort", "--secret-store", "local_file")) {
             [void]$startInfo.ArgumentList.Add($argument)
           }
           $process = [System.Diagnostics.Process]::Start($startInfo)
@@ -77,19 +91,32 @@ jobs:
                 $stderr = $process.StandardError.ReadToEnd()
                 throw "airlockd exited during initial startup: $stderr"
               }
-              if (Test-NetConnection -ComputerName "127.0.0.1" -Port 4768 -InformationLevel Quiet) {
+              if (Test-NetConnection -ComputerName "127.0.0.1" -Port $httpPort -InformationLevel Quiet) {
                 break
               }
               Start-Sleep -Milliseconds 100
             }
-            if (-not (Test-NetConnection -ComputerName "127.0.0.1" -Port 4768 -InformationLevel Quiet)) {
+            if (-not (Test-NetConnection -ComputerName "127.0.0.1" -Port $httpPort -InformationLevel Quiet)) {
               throw "airlockd did not open the HTTP listener"
+            }
+            $statusOutput = $null
+            for ($attempt = 0; $attempt -lt 20; $attempt++) {
+              $statusOutput = & $cli --data-dir $controlDirectory --token-file $tokenPath --timeout 2s status 2>&1
+              if ($LASTEXITCODE -eq 0) { break }
+              Start-Sleep -Milliseconds 100
+            }
+            if ($LASTEXITCODE -ne 0) {
+              throw "airlock CLI could not reach the Windows named-pipe control channel: $statusOutput"
+            }
+            if (($statusOutput -join "`n") -notmatch '"running"\s*:\s*true') {
+              throw "airlock control status was not running: $statusOutput"
             }
           } finally {
             if (-not $process.HasExited) {
               $process.Kill($true)
               $process.WaitForExit()
             }
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $controlDirectory
           }
       - name: Build desktop installer
         working-directory: apps/desktop

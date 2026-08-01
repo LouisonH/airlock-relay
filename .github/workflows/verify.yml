@@ -126,8 +126,16 @@ jobs:
         run: cargo check --target ${{ matrix.triple }}
 
   desktop-rust-linux:
-    name: Desktop Rust check (Linux x64)
-    runs-on: ubuntu-latest
+    name: Desktop Rust check (Linux ${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-latest
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -141,7 +149,7 @@ jobs:
         shell: bash
         env:
           AIRLOCK_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/src-tauri/binaries
-        run: node scripts/build-sidecar.mjs linux-amd64
+        run: node scripts/build-sidecar.mjs ${{ matrix.target }}
       - name: Cargo check
         working-directory: apps/desktop/src-tauri
         run: cargo check

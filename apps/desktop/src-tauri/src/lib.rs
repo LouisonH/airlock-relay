@@ -299,6 +299,12 @@ fn external_open_command(target: &str) -> Command {
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut command = Command::new("xdg-open");
     command.arg(target);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
     command
 }
 
@@ -881,24 +887,34 @@ fn delete_route(
 }
 
 #[tauri::command]
-fn get_ssh_keyword_replacements(
+async fn get_ssh_keyword_replacements(
     client: tauri::State<'_, ControlClient>,
     alias: String,
 ) -> Result<Vec<KeywordReplacement>, String> {
-    client
-        .request_ssh_keyword_replacements("get_ssh_replacements", &alias, None)
-        .map(|response| response.keyword_replacements)
+    let client = client.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        client
+            .request_ssh_keyword_replacements("get_ssh_replacements", &alias, None)
+            .map(|response| response.keyword_replacements)
+    })
+    .await
+    .map_err(|_| "SSH 出口替换读取意外终止".to_string())?
 }
 
 #[tauri::command]
-fn set_ssh_keyword_replacements(
+async fn set_ssh_keyword_replacements(
     client: tauri::State<'_, ControlClient>,
     alias: String,
     replacements: Vec<KeywordReplacement>,
 ) -> Result<Vec<RouteSummary>, String> {
-    client
-        .request_ssh_keyword_replacements("set_ssh_replacements", &alias, Some(&replacements))
-        .map(|response| response.routes)
+    let client = client.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        client
+            .request_ssh_keyword_replacements("set_ssh_replacements", &alias, Some(&replacements))
+            .map(|response| response.routes)
+    })
+    .await
+    .map_err(|_| "SSH 出口替换保存意外终止".to_string())?
 }
 
 #[tauri::command]
@@ -1523,6 +1539,7 @@ async fn set_ssh_policy(
     local_username: String,
     allowed_command: String,
     allow_all_commands: bool,
+    allow_all_confirmed: bool,
     record_commands: bool,
     allow_sftp: bool,
     authentication_timeout_seconds: u32,
@@ -1537,6 +1554,7 @@ async fn set_ssh_policy(
             local_username,
             allowed_command,
             allow_all_commands,
+            allow_all_confirmed,
             record_commands,
             allow_sftp,
             authentication_timeout_seconds,
@@ -1555,6 +1573,7 @@ fn set_ssh_policy_blocking(
     local_username: String,
     allowed_command: String,
     allow_all_commands: bool,
+    allow_all_confirmed: bool,
     record_commands: bool,
     allow_sftp: bool,
     authentication_timeout_seconds: u32,
@@ -1567,8 +1586,10 @@ fn set_ssh_policy_blocking(
     validate_ssh_command(&allowed_command, allow_all_commands)?;
     validate_ssh_authentication_timeout(authentication_timeout_seconds)?;
     validate_egress(&egress)?;
+    if allow_all_commands && !allow_all_confirmed {
+        return Err("请在 Airlock 中确认所有 SSH exec 命令的高风险权限".to_string());
+    }
     let mut command = if allow_all_commands {
-        confirm_allow_all_commands(&alias)?;
         String::new()
     } else {
         allowed_command
@@ -2308,70 +2329,6 @@ fn choose_llm_local_api_key_mode() -> Result<bool, String> {
 #[cfg(not(any(target_os = "macos", windows)))]
 fn prompt_llm_local_api_key() -> Result<(String, bool), String> {
     native_linux::prompt_llm_local_api_key()
-}
-
-#[cfg(target_os = "macos")]
-fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
-    const SCRIPT: &str = r#"
-ObjC.import('Foundation');
-const input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
-const raw = $.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding).js;
-const payload = JSON.parse(raw);
-const app = Application.currentApplication();
-app.includeStandardAdditions = true;
-app.displayDialog(payload.message.replace('{alias}', payload.alias), {
-  withTitle: payload.title,
-  buttons: [payload.cancel, payload.allow], defaultButton: payload.cancel, cancelButton: payload.cancel,
-  withIcon: 'caution'
-});
-true;
-"#;
-    let (message, title, allow) = match ui_locale() {
-        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, and port forwarding remain denied; SFTP follows its separate route setting. Commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
-        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、ポート転送は引き続き拒否され、SFTP は独立したルート設定に従います。コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
-        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY 与端口转发仍会被拒绝，SFTP 由独立路由开关控制。上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
-    };
-    let mut payload = serde_json::to_vec(&serde_json::json!({ "alias": alias, "message": message, "title": title, "cancel": native_text("取消"), "allow": allow })).map_err(|_| "无法编码 SSH 风险确认".to_string())?;
-    let mut child = Command::new("/usr/bin/osascript")
-        .args(["-l", "JavaScript", "-e", SCRIPT])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .spawn()
-        .map_err(|_| "无法打开 SSH 风险确认窗口".to_string())?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&payload)
-            .map_err(|_| "无法展示 SSH 风险确认".to_string())?;
-    }
-    payload.fill(0);
-    if !child
-        .wait()
-        .map_err(|_| "SSH 风险确认窗口意外终止".to_string())?
-        .success()
-    {
-        return Err("已取消允许所有 SSH 命令".to_string());
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
-    let (message, title, _allow) = match ui_locale() {
-        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, and port forwarding remain denied; SFTP follows its separate route setting. Commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
-        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、ポート転送は引き続き拒否され、SFTP は独立したルート設定に従います。コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
-        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY 与端口转发仍会被拒绝，SFTP 由独立路由开关控制。上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
-    };
-    native_windows::confirm_yes_no(title, &message.replace("{alias}", alias))
-}
-
-#[cfg(all(not(target_os = "macos"), not(windows)))]
-fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
-    let (message, title, _allow) = match ui_locale() {
-        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, and port forwarding remain denied; SFTP follows its separate route setting. Commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
-        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、ポート転送は引き続き拒否され、SFTP は独立したルート設定に従います。コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
-        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY 与端口转发仍会被拒绝，SFTP 由独立路由开关控制。上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
-    };
-    native_linux::confirm_yes_no(title, &message.replace("{alias}", alias))
 }
 
 #[cfg(target_os = "macos")]
@@ -3475,7 +3432,14 @@ $owners = foreach ($row in $rows) {
 }
 $owners | Sort-Object pid -Unique | ConvertTo-Json -Compress
 "#;
-    let output = Command::new("powershell.exe")
+    let mut command = Command::new("powershell.exe");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = command
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .env("AIRLOCK_PORT", port.to_string())
         .output()
@@ -3553,9 +3517,11 @@ async fn terminate_listener_port_owner(
             }
             #[cfg(windows)]
             {
-                Command::new("taskkill")
-                    .args(["/PID", &pid.to_string()])
-                    .status()
+                use std::os::windows::process::CommandExt;
+
+                let mut command = Command::new("taskkill");
+                command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+                command.args(["/PID", &pid.to_string()]).status()
             }
         }
         .map_err(|_| "无法向该进程发送结束请求".to_string())?;

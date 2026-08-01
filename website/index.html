@@ -12,8 +12,8 @@
     <meta name="twitter:card" content="summary" />
     <title>Airlock - 本地凭据隔离转发器</title>
     <link rel="icon" href="./assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./assets/styles.css?v=20260731-audit" />
-    <script src="./assets/site.js?v=20260731-audit" defer></script>
+    <link rel="stylesheet" href="./assets/styles.css?v=20260801-cross" />
+    <script src="./assets/site.js?v=20260801-cross" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main" data-i18n="skipLink">跳到主要内容</a>
@@ -30,6 +30,7 @@
           <a href="#routes" data-i18n="navRoutes">路由类型</a>
           <a href="#quickstart" data-i18n="navQuickstart">快速使用</a>
           <a href="#release" data-i18n="navRelease">发布状态</a>
+          <a href="#platform" data-i18n="navPlatform">跨平台</a>
           <a href="#architecture" data-i18n="navArchitecture">架构</a>
           <a href="#faq" data-i18n="navFaq">常见问题</a>
           <a href="./docs.html" data-i18n="navDocs">文档</a>
@@ -79,7 +80,7 @@
             </div>
             <div class="install-command" aria-label="Install Airlock">
               <span data-i18n="installLabel">NPM INSTALL</span>
-              <code id="code-install">npm install -g airlock-relay && airlock-installer install --open</code>
+              <code id="code-install">npm install -g airlock-relay && airlock-installer status --json</code>
               <button class="copy-button" type="button" data-copy="install" data-i18n-aria="copyCommand" aria-label="复制命令" title="Copy command">⧉</button>
             </div>
             <div class="protocol-list" aria-label="Supported protocols">
@@ -231,6 +232,35 @@ export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
         <div class="release-links reveal">
           <a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/security-audit-2026-07-31.md" target="_blank" rel="noreferrer" data-i18n="releaseReadAudit">查看完整审计记录</a>
           <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4" target="_blank" rel="noreferrer" data-i18n="releaseReadNotes">查看 v0.1.4 发布说明</a>
+        </div>
+      </section>
+
+      <section class="section platform-section" id="platform">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="platformEyebrow">PLATFORM CONTRACT</p>
+          <h2 data-i18n="platformTitle">先识别系统，再选择受验证的安装路径</h2>
+          <p data-i18n="platformIntro">同一个 npm 包会识别当前操作系统与 CPU；安装器只会在公开工件及 SHA-256 已固定时执行。</p>
+        </div>
+        <div class="release-audit-grid platform-matrix reveal">
+          <article>
+            <span data-i18n="platformMacLabel">RELEASED PREVIEW</span>
+            <h3 data-i18n="platformMacTitle">macOS / Apple Silicon</h3>
+            <p data-i18n="platformMacDetail">已发布 DMG 与校验和。使用状态检查后，可显式执行 `airlock-installer install --open`。</p>
+          </article>
+          <article>
+            <span data-i18n="platformWindowsLabel">CI PREVIEW</span>
+            <h3 data-i18n="platformWindowsTitle">Windows / x64 · x86 · ARM64</h3>
+            <p data-i18n="platformWindowsDetail">npm 可识别平台并安全返回状态；CI 构建产物尚未作为校验后的公开安装包发布。</p>
+          </article>
+          <article>
+            <span data-i18n="platformLinuxLabel">CI PREVIEW</span>
+            <h3 data-i18n="platformLinuxTitle">Linux / x64 · ARM64</h3>
+            <p data-i18n="platformLinuxDetail">CLI/Core 有跨架构构建基线；npm 不下载 CI 工件，也不会在未发布目标上执行安装。</p>
+          </article>
+        </div>
+        <div class="release-links reveal">
+          <a href="./docs.html#zh-platform" data-i18n="platformReadDocs">阅读跨平台测试与发布边界</a>
+          <a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/cross-platform.zh-CN.md" target="_blank" rel="noreferrer" data-i18n="platformReadContract">查看平台契约</a>
         </div>
       </section>
 

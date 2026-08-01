@@ -52,7 +52,7 @@ Airlock は固定ルートリレーであり、オープンプロキシ、VPN、
 - 保護された上流パスワードまたは暗号化秘密鍵と厳密な Host Key 固定。
 - デフォルトはユーザー定義の 1 つの完全一致コマンド。無制限の非対話 `exec` には Airlock 内で明示的な高リスク確認が必要。
 - 複数のルートで同じ上流アドレスを使用可能。異なるローカルユーザー名で、独立した上流アカウントと保護認証情報を選択。
-- Shell、PTY、SFTP、Agent/X11 Forwarding、ポート転送は引き続き拒否。
+- 対話 Shell、Agent/X11 Forwarding、ポート転送は引き続き拒否。PTY request は Windows/OpenSSH client 互換のためだけに受理し、上流へは転送しません。SFTP は default で無効で、modern `scp`/SFTP client 向けに route ごとに明示的に有効化できる別の high-risk file access permission です。
 - ルートごとのオプションコマンド監査は、現在のユーザー専用の `0600` ローリングファイルに保存。
 
 ### LLM API
@@ -81,6 +81,20 @@ Airlock は固定ルートリレーであり、オープンプロキシ、VPN、
 - `airlock` Unix Socket CLI は、上流 Secret を引数に置かずに route、SSH mapping、health、proxy egress を管理します。
 - 任意の Web UI は別 token と loopback 専用 listener を使い、サニタイズ済み status と安全な route 操作だけを公開します。リモート運用では SSH tunnel を使ってください。
 - service account、systemd、保護 JSON、Wget、SSH、LLM、Clash の例は [Server Core 導入と CLI](docs/server-deployment.ja.md) を参照してください。
+
+## npm とプラットフォーム状態
+
+Apple Silicon macOS では、検証済み Desktop preview を次で導入できます。
+
+```bash
+npm install -g airlock-relay && airlock-installer install --open
+```
+
+Windows x64/x86/ARM64 と Linux x64/ARM64 でも npm 診断 CLI は副作用なく導入できます。
+`airlock-installer status --json` または `airlock-installer platform --json` で現在の契約を
+確認してください。これらは CI preview であり public verified installer ではありません。
+`install` は fail-closed し、未検証の CI artifact を download しません。Linux ARMv7 と macOS
+x64 は planned です。
 
 ## 開発環境での起動
 

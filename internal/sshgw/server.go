@@ -22,6 +22,7 @@ const (
 
 var (
 	ErrAuthentication    = errors.New("SSH authentication failed")
+	ErrRouteDisabled     = errors.New("route disabled: access denied")
 	ErrNonLoopbackListen = errors.New("SSH listener must use a loopback IP")
 )
 
@@ -98,12 +99,27 @@ func NewServer(routes RouteLookup, secretStore secrets.Store, dialer EgressDiale
 		},
 		PublicKeyAuthAlgorithms: algorithms.PublicKeyAuths,
 		MaxAuthTries:            3,
+		BannerCallback:          server.authenticationBanner,
 		PasswordCallback:        server.authenticatePassword,
 		PublicKeyCallback:       server.authenticatePublicKey,
 		ServerVersion:           "SSH-2.0-Airlock",
 	}
 	server.config.AddHostKey(hostSigner)
 	return server, nil
+}
+
+// authenticationBanner gives a disabled local identity an actionable client
+// message while keeping the SSH protocol's required authentication failure.
+// The actual upstream target and credential state are never included.
+func (s *Server) authenticationBanner(metadata ssh.ConnMetadata) string {
+	if metadata == nil {
+		return ""
+	}
+	route, err := s.routes.GetByUsername(metadata.User())
+	if err == nil && !route.Enabled {
+		return "Airlock: 路由未开启：access denied\n"
+	}
+	return ""
 }
 
 func (s *Server) Serve(listener net.Listener) error {
@@ -199,6 +215,9 @@ func (s *Server) authenticatePassword(metadata ssh.ConnMetadata, password []byte
 	if err != nil {
 		s.recordDisabledAuthentication(metadata)
 		_ = capability.Verify(string(password), capability.Digest{})
+		if disabledRoute, lookupErr := s.routes.GetByUsername(metadata.User()); lookupErr == nil && !disabledRoute.Enabled {
+			return nil, ErrRouteDisabled
+		}
 		return nil, ErrAuthentication
 	}
 	if err := capability.Verify(string(password), route.CapabilityDigest); err != nil {
@@ -211,6 +230,9 @@ func (s *Server) authenticatePublicKey(metadata ssh.ConnMetadata, key ssh.Public
 	route, err := s.routes.LookupByUsername(metadata.User())
 	if err != nil {
 		s.recordDisabledAuthentication(metadata)
+		if disabledRoute, lookupErr := s.routes.GetByUsername(metadata.User()); lookupErr == nil && !disabledRoute.Enabled {
+			return nil, ErrRouteDisabled
+		}
 		return nil, ErrAuthentication
 	}
 	fingerprint := ssh.FingerprintSHA256(key)
@@ -272,6 +294,14 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 	}
 
 	var done <-chan struct{}
+	startCommand := func(request *ssh.Request, route Route, command string) {
+		executionDone := make(chan struct{})
+		done = executionDone
+		go func() {
+			defer close(executionDone)
+			s.execute(local, request, route, command)
+		}()
+	}
 	for {
 		select {
 		case <-done:
@@ -299,6 +329,14 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 			}
 
 			switch request.Type {
+			case "pty-req", "window-change":
+				// Windows OpenSSH requests a PTY before an exec command. Airlock
+				// remains non-interactive and does not forward a terminal, but
+				// acknowledging these metadata requests lets `ssh -t host command`
+				// reach the normal command policy instead of failing at allocation.
+				if request.WantReply {
+					_ = request.Reply(true, nil)
+				}
 			case "exec":
 				var payload struct{ Command string }
 				if ssh.Unmarshal(request.Payload, &payload) != nil || !route.Policy.AllowsCommand(payload.Command) {
@@ -313,12 +351,24 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 					return
 				}
 
-				executionDone := make(chan struct{})
-				done = executionDone
-				go func() {
-					defer close(executionDone)
-					s.execute(local, request, route, payload.Command)
-				}()
+				startCommand(request, route, payload.Command)
+			case "shell":
+				// A plain `ssh user@airlock` asks for an interactive shell. Do
+				// not create one; for the common single-command route, run its
+				// configured exact command and close the session cleanly.
+				if route.Policy.AllowAllCommands || len(route.Policy.AllowedCommands) != 1 {
+					if request.WantReply {
+						_ = request.Reply(false, nil)
+					}
+					_ = sendExitStatus(local, 126)
+					_ = local.Close()
+					return
+				}
+				var command string
+				for allowed := range route.Policy.AllowedCommands {
+					command = allowed
+				}
+				startCommand(request, route, command)
 			case "subsystem":
 				var payload struct{ Name string }
 				if ssh.Unmarshal(request.Payload, &payload) != nil || payload.Name != "sftp" {

@@ -1,20 +1,21 @@
 # クロスプラットフォーム Core 移植ベースライン
 
-Airlock v0.1.4 で公開済みなのは Apple Silicon macOS 向け Desktop preview だけです。
-この branch で追加するのは Windows と Linux の **Core/CLI コンパイルベースライン**であり、
-Windows/Linux Desktop、インストーラー、auto-update、署名済み成果物の公開を意味しません。
-Desktop GUI、local control transport、native prompt フローはコードレベルで Windows/Linux
-へ移植済みですが、実機での runtime acceptance を完了するまで公開しません。
+Airlock v0.1.4 で公開済みなのは検証済み Apple Silicon macOS 向け Desktop preview だけです。
+npm package は認識済み Windows/Linux target に副作用なく導入でき、platform contract を表示します。
+Windows x64/x86/arm64 と Linux x64/arm64 は CI preview target です。Desktop artifact は公開済みの
+checksum 付き installer ではないため、`airlock-installer install` は fail-closed し、CI artifact
+を download しません。Desktop GUI、local control transport、native prompt フローはコードレベルで
+移植済みですが、実機 runtime acceptance を完了するまで release しません。
 
 | 対象 | Core / CLI build | local control transport | platform secret backend | Desktop bundle | 状態 |
 | --- | --- | --- | --- | --- | --- |
 | macOS arm64 | native | user-only Unix Socket | Keychain / protected file | DMG / `.app` | preview 公開済み |
 | macOS x64 | target build | user-only Unix Socket | Keychain / protected file | DMG / `.app` | installer は予定 |
-| Windows x64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop 移植済み（コード）· 未公開 |
-| Windows x86 (i686) | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop 移植済み（コード）· 未公開 |
-| Windows arm64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop 移植済み（コード）· 未公開 |
-| Linux x64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop 移植済み（コード）· 未公開 |
-| Linux arm64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop 移植済み（コード）· 未公開 |
+| Windows x64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | CI preview · public verified installer なし |
+| Windows x86 (i686) | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | CI preview · public verified installer なし |
+| Windows arm64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | CI preview · public verified installer なし |
+| Linux x64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | CI preview · public verified installer なし |
+| Linux arm64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | CI preview · public verified installer なし |
 | Linux ARMv7 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Raspberry Pi baseline |
 
 `cross-compiled` は CI と target-aware build script が `CGO_ENABLED=0` で
@@ -49,16 +50,18 @@ Desktop GUI、local control transport、native prompt フローはコードレ�
   Capability の受け渡し、security setting 確認に対応します。Linux の port 所有者管理は
   `/proc` を直接読み取るため `lsof` は不要です。Desktop bundle では prompt backend のいずれかが
   必要で、headless server では CLI を使用します。
-- CI は push のたびに Windows x64、Windows x86、Windows arm64、Linux x64 の Desktop ターゲットで
-  Rust `cargo check` を実行し、移植済みの control client を実機 acceptance 前に
-  継続的に検証します。
+- CI は push のたびに Windows x64、Windows x86、Windows arm64、Linux x64、Linux arm64 の
+  Desktop ターゲットで Rust `cargo check` を実行し、移植済みの control client を実機
+  acceptance 前に継続的に検証します。
 - 別の `desktop-windows` workflow が GitHub の Windows runner 上で Windows x64/x86（i686）/arm64
   向け NSIS/MSI インストーラーをビルドし、ダウンロード可能な artifact として公開します。
-  release signing の設定が完了するまで署名なしのため、SmartScreen が初回起動時に警告する
-  場合があります。
+  x64 smoke test は console なしで `airlockd` を起動し、compile 済み `airlock` CLI により
+  認証済み Named Pipe の `status` exchange を検証します。release signing の設定が完了するまで
+  署名なしのため、SmartScreen が初回起動時に警告する場合があります。
 - `desktop-linux` workflow は Linux x64 の `deb`/AppImage を x64 runner で、Linux arm64
-  を native ARM runner でビルドします。`zenity`/`kdialog` は bundle に含まれないため、
-  上の runtime note を確認してください。
+  を native ARM runner でビルドします。smoke test は `airlockd` を起動し、compile 済み
+  `airlock` CLI で認証済み Unix Socket の `status` exchange を検証します。
+  `zenity`/`kdialog` は bundle に含まれないため、上の runtime note を確認してください。
 - Target build は明示的に分離され、`airlockd` と `airlock` の両方を生成します。Tauri bundle
   を作らず、npm installer が公開済みとする対象範囲も変更しません。
 
@@ -106,9 +109,9 @@ Windows/Linux を release target にする前に、対応 architecture と distr
 5. architecture 別 installer を作成、sign、fixed checksum を公開し、install/update/uninstall
    を個別に試験する。
 
-それまでは `airlock-installer` は Windows/Linux を `planned` と表示し、存在しない artifact
-の install を拒否します。コンパイル可能な Core を supported Desktop product と誤認させない
-ためです。
+それまでは `airlock-installer status --json` は認識済み Windows/Linux target を `preview` と
+`installerAvailable: false` で表示し、`install` を拒否します。Linux ARMv7 などの target は
+`planned` と表示されます。CI candidate を supported Desktop product と誤認させないためです。
 
 ## 変わらない Security Semantics
 

@@ -52,7 +52,7 @@ Airlock 是固定路由转发器，不是开放代理、VPN 或通用供应商�
 - 受保护的上游密码或加密私钥认证，并严格固定 Host Key。
 - 默认只允许用户自定义的一条精确命令；所有非交互 `exec` 需要在 Airlock 内明确确认高风险。
 - 多条路由可以指向同一个上游地址；不同本地用户名选择彼此独立的上游账号与受保护凭据。
-- 仍拒绝 Shell、PTY、SFTP、Agent/X11 Forwarding 与端口转发。
+- 仍拒绝交互式 Shell、Agent/X11 Forwarding 与端口转发。PTY 请求只为兼容 Windows/OpenSSH 客户端而确认，绝不会转发给上游。SFTP 默认关闭，可为现代 `scp`/SFTP 客户端按路由显式启用，属于独立的高风险文件访问权限。
 - 可选的每路由命令审计，保存在当前用户专属的 `0600` 滚动文件中。
 
 ### LLM API
@@ -114,6 +114,11 @@ npm install -g airlock-relay && airlock-installer install --open
 也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4)
 下载 DMG 和校验文件，再按照[安装指南](docs/installation.zh-CN.md)操作。安装包已进行
 ad-hoc 签名，但没有 Developer ID 签名与 Apple 公证，请先阅读 Gatekeeper 说明。
+
+npm 诊断 CLI 也可在 Windows x64/x86/ARM64 与 Linux x64/ARM64 无副作用安装。运行
+`airlock-installer status --json` 或 `airlock-installer platform --json` 查看当前平台契约。
+这些目标属于 CI 预览，不是经过公开校验的安装器：`install` 会失败关闭，绝不会下载未验证
+CI 产物。Linux ARMv7 与 macOS x64 仍处于计划阶段。
 
 ## 开发环境快速开始
 

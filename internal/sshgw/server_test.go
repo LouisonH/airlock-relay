@@ -95,6 +95,38 @@ func TestGatewayPasswordIsolationAndRestrictedExec(t *testing.T) {
 	}
 }
 
+func TestGatewayAcknowledgesPTYAndMapsSingleCommandShell(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	route := testSSHRoute(NewPolicy([]string{"build --release"}, nil, false), egress.Direct)
+	target := secrets.SSHTarget{
+		Address: upstream.address(), Username: upstreamUser, Password: []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	gateway := startGateway(t, route, target, egress.NewManager(nil))
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if err := session.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Fatalf("PTY compatibility request failed: %v", err)
+	}
+	var output bytes.Buffer
+	session.Stdout = &output
+	if err := session.Shell(); err != nil {
+		t.Fatalf("single-command shell request failed: %v", err)
+	}
+	if err := session.Wait(); err != nil {
+		t.Fatalf("single-command shell wait failed: %v", err)
+	}
+	if !bytes.Contains(output.Bytes(), []byte("ran:build --release")) {
+		t.Fatalf("shell output = %q", output.String())
+	}
+}
+
 func TestGatewayAppliesKeywordReplacementsOnlyAfterCommandPolicyCheck(t *testing.T) {
 	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
 	route := testSSHRoute(NewPolicy([]string{"deploy --credential input.user.passwd"}, nil, false), egress.Direct)
@@ -291,9 +323,18 @@ func TestDisabledRouteConnectionAttemptIsRecorded(t *testing.T) {
 	route.Enabled = false
 	recorder := activity.NewMemoryRecorder()
 	gateway := startGatewayRoutesWithOptions(t, []Route{route}, nil, egress.NewManager(nil), WithActivityRecorder(recorder))
-	if client, err := ssh.Dial("tcp", gateway.address, gateway.clientConfig(ssh.Password(localCapability))); err == nil {
+	var banner string
+	config := gateway.clientConfig(ssh.Password(localCapability))
+	config.BannerCallback = func(message string) error {
+		banner += message
+		return nil
+	}
+	if client, err := ssh.Dial("tcp", gateway.address, config); err == nil {
 		_ = client.Close()
 		t.Fatal("disabled route authenticated")
+	}
+	if banner != "Airlock: 路由未开启：access denied\n" {
+		t.Fatalf("disabled route banner = %q", banner)
 	}
 	events := recorder.List(10)
 	if len(events) != 1 || events[0].RouteAlias != route.Alias || events[0].Category != "SSH" || events[0].EventType != "request" || events[0].Result != "blocked" || events[0].Action != "SSH connection to disabled route" || events[0].Caller != "build@loopback" {
@@ -526,11 +567,8 @@ func assertRestrictedRequests(t *testing.T, client *ssh.Client) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := session.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err == nil {
-		t.Error("PTY request succeeded")
-	}
-	if err := session.Shell(); err == nil {
-		t.Error("shell request succeeded")
+	if err := session.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Errorf("PTY compatibility request failed: %v", err)
 	}
 	_ = session.Close()
 

@@ -1,19 +1,20 @@
 # 跨平台核心移植基线
 
-Airlock v0.1.4 目前仅发布 Apple Silicon macOS 桌面测试版。本分支新增的是 Windows 和
-Linux 的**核心/CLI 编译基线**，并不表示已经发布 Windows/Linux 桌面应用、安装器、自动更新
-或签名产物。桌面 GUI、本地控制通道与原生提示流程现在已在代码层面完成 Windows/Linux 移植，
-但仍需在真实设备上完成运行验收后才会发布。
+Airlock v0.1.4 目前只发布经过校验的 Apple Silicon macOS 桌面测试版。npm 包可在已识别的
+Windows/Linux 目标上无副作用安装，用于输出平台契约。Windows x64/x86/arm64 与 Linux
+x64/arm64 属于 CI 预览目标：其桌面构建产物不是公开、带固定校验和的安装器，因此
+`airlock-installer install` 会失败关闭，绝不会下载 CI 工件。桌面 GUI、本地控制通道与原生
+提示流程已在代码层面完成移植，但仍需真实设备运行验收后才会发布。
 
 | 目标 | Core / CLI 构建 | 本地控制通道 | 平台凭据后端 | 桌面安装包 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | macOS arm64 | 原生 | 当前用户 Unix Socket | Keychain / 受保护文件 | DMG / `.app` | 已发布测试版 |
 | macOS x64 | 目标构建 | 当前用户 Unix Socket | Keychain / 受保护文件 | DMG / `.app` | 安装包计划中 |
-| Windows x64 | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | 桌面端代码已移植 · 未发布 |
-| Windows x86（i686） | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | 桌面端代码已移植 · 未发布 |
-| Windows arm64 | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | 桌面端代码已移植 · 未发布 |
-| Linux x64 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | 桌面端代码已移植 · 未发布 |
-| Linux arm64 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | 桌面端代码已移植 · 未发布 |
+| Windows x64 | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | CI 预览 · 无公开校验安装器 |
+| Windows x86（i686） | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | CI 预览 · 无公开校验安装器 |
+| Windows arm64 | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | CI 预览 · 无公开校验安装器 |
+| Linux x64 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | CI 预览 · 无公开校验安装器 |
+| Linux arm64 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | CI 预览 · 无公开校验安装器 |
 | Linux ARMv7 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | 树莓派基线 |
 
 “交叉编译”仅表示 CI 和目标构建脚本可用 `CGO_ENABLED=0` 编译 `airlockd` 与 `airlock`。
@@ -40,13 +41,17 @@ Linux 的**核心/CLI 编译基线**，并不表示已经发布 Windows/Linux �
 - Linux 原生弹窗使用 `zenity`（GNOME）或 `kdialog`（KDE），按会话探测后端，覆盖安全录入、
   LLM Key 选择、高风险 SSH 确认、Capability 交接与安全设置确认；桌面包运行时依赖二者之一，
   Linux 端口占用管理直接读取 `/proc`，不需要额外的 `lsof`。无桌面环境的服务器请使用 CLI。
-- CI 会在每次推送时对 Windows x64、Windows x86、Windows arm64 与 Linux x64 桌面目标运行 Rust
-  `cargo check`，在真实目标工具链上持续复核已移植的控制客户端，直到进入运行验收阶段。
+- CI 会在每次推送时对 Windows x64、Windows x86、Windows arm64、Linux x64 与 Linux arm64
+  桌面目标运行 Rust `cargo check`，在真实目标工具链上持续复核已移植的控制客户端，直到进入
+  运行验收阶段。
 - 独立的 `desktop-windows` 工作流会在 GitHub 官方 Windows runner 上构建 Windows x64、
   x86（i686）与 arm64 的 NSIS/MSI 安装包，并以可下载产物形式发布。正式签名配置完成前产物不签名，
-  SmartScreen 首次运行时可能提示。
+  SmartScreen 首次运行时可能提示。x64 冒烟测试会无控制台启动 `airlockd`，再使用编译后的
+  `airlock` CLI 验证已认证的命名管道 `status` 交换。
 - `desktop-linux` 工作流在 x64 runner 上构建 Linux x64 的 `deb`/AppImage 安装包，并在
-  原生 ARM runner 上构建 Linux arm64 安装包；包内不附带 `zenity`/`kdialog`，见上方运行时说明。
+  原生 ARM runner 上构建 Linux arm64 安装包；冒烟测试会启动 `airlockd`，再用编译后的
+  `airlock` CLI 验证已认证的 Unix Socket `status` 交换。包内不附带 `zenity`/`kdialog`，
+  见上方运行时说明。
 - 构建目标显式隔离。每次目标构建都会产出 `airlockd` 与 `airlock`，不会生成 Tauri 包，也
   不会改变 npm 安装器的已发布平台范围。
 
@@ -89,8 +94,9 @@ Windows/Linux 成为正式发布目标前，维护者必须在每一种受支持
    SSH Host Key 固定与失败关闭。
 5. 构建架构专用安装器、独立签名和固定校验和，并分别测试安装、更新与卸载。
 
-在这些检查通过前，`airlock-installer` 会继续把 Windows 和 Linux 显示为 `planned`，并拒绝
-安装不存在的产物，避免把“能够编译”误表述为“已支持的桌面产品”。
+在这些检查通过前，`airlock-installer status --json` 会把已识别的 Windows/Linux 目标显示为
+`preview` 和 `installerAvailable: false`，同时拒绝 `install`；Linux ARMv7 等计划目标显示为
+`planned`。这避免把 CI 候选构建误表述为已支持的桌面产品。
 
 ## 不变的安全语义
 
