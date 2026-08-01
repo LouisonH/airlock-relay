@@ -1,6 +1,6 @@
 [package]
 name = "airlock-desktop"
-version = "0.1.5-0328"
+version = "0.1.5+0328"
 description = "Native control plane for the Airlock local relay"
 authors = ["LouisonH"]
 license = "Apache-2.0"
