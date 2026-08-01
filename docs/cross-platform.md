@@ -124,7 +124,13 @@ these checks on each supported architecture and distribution:
 4. Test service installation, clean removal, upgrades, recovery after a stale
    process, `Direct`/`Proxy`/`Auto` egress, SSH host-key pinning, and failure
    closure on target hardware.
-5. Produce architecture-specific installers, sign them, publish fixed
+5. On Windows and Linux, verify the SSH interactive-shell switch
+   (`allow_interactive_shell: true` with `allow_all_commands: true`) from
+   both PuTTY and OpenSSH clients: the client enters the upstream shell while
+   Airlock injects stored credentials, PTY resize/signals reach the upstream
+   session, and routes without the switch still refuse shell requests with
+   guidance. Re-check SFTP and keyword egress rewrites on the same build.
+6. Produce architecture-specific installers, sign them, publish fixed
    checksums, and test install/update/uninstall independently.
 
 Until those checks pass, `airlock-installer status --json` reports recognized
