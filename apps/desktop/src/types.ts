@@ -54,11 +54,18 @@ export interface RouteSummary {
   inputTokens?: number;
   outputTokens?: number;
   authenticationTimeoutSeconds?: number;
+  keywordReplacementCount?: number;
 }
 
 export interface SSHHostKeyProbe {
   hostKey: string;
   fingerprint: string;
+}
+
+export interface KeywordReplacement {
+  from: string;
+  to: string;
+  enabled: boolean;
 }
 
 // The generated local credential is returned once for the Airlock completion

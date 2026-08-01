@@ -382,7 +382,8 @@ func (s *Server) execute(local ssh.Channel, request *ssh.Request, route Route, c
 	}
 	session.Stdout = local
 	session.Stderr = local.Stderr()
-	if err := session.Start(command); err != nil {
+	upstreamCommand := ApplyKeywordReplacements(command, route.KeywordReplacements)
+	if err := session.Start(upstreamCommand); err != nil {
 		_ = request.Reply(false, nil)
 		return
 	}

@@ -204,13 +204,17 @@ impl DaemonProcess {
     }
 
     fn has_exited(&self) -> bool {
+        self.exit_status().is_some()
+    }
+
+    fn exit_status(&self) -> Option<std::process::ExitStatus> {
         let Ok(mut guard) = self.0.lock() else {
-            return false;
+            return None;
         };
         let Some(daemon) = guard.as_mut() else {
-            return true;
+            return None;
         };
-        matches!(daemon.child.try_wait(), Ok(Some(_)))
+        daemon.child.try_wait().ok().flatten()
     }
 }
 
@@ -356,6 +360,16 @@ struct RouteSummary {
     output_tokens: u64,
     #[serde(default)]
     authentication_timeout_seconds: u32,
+    #[serde(default)]
+    keyword_replacement_count: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeywordReplacement {
+    from: String,
+    to: String,
+    enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -473,6 +487,18 @@ struct ControlResponse {
     health_check: Option<HealthCheckSummary>,
     #[serde(default)]
     activity: Vec<ActivityEvent>,
+    #[serde(default)]
+    keyword_replacements: Vec<KeywordReplacement>,
+}
+
+#[derive(Serialize)]
+struct SSHKeywordReplacementRequest<'a> {
+    version: u8,
+    token: &'a str,
+    action: &'a str,
+    alias: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keyword_replacements: Option<&'a [KeywordReplacement]>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -663,6 +689,27 @@ impl ControlClient {
         }
         Ok(response)
     }
+
+    fn request_ssh_keyword_replacements(
+        &self,
+        action: &str,
+        alias: &str,
+        replacements: Option<&[KeywordReplacement]>,
+    ) -> Result<ControlResponse, String> {
+        let request = SSHKeywordReplacementRequest {
+            version: CONTROL_PROTOCOL_VERSION,
+            token: &self.token.0,
+            action,
+            alias,
+            keyword_replacements: replacements,
+        };
+        let mut payload =
+            serde_json::to_vec(&request).map_err(|_| "无法编码 SSH 出口替换请求".to_string())?;
+        payload.push(b'\n');
+        let result = self.exchange(&payload, CONTROL_EXCHANGE_TIMEOUT);
+        payload.fill(0);
+        result
+    }
 }
 
 #[tauri::command]
@@ -831,6 +878,27 @@ fn delete_route(
             Some("路由已删除，但旧凭据副本清理需要检查".to_string())
         },
     })
+}
+
+#[tauri::command]
+fn get_ssh_keyword_replacements(
+    client: tauri::State<'_, ControlClient>,
+    alias: String,
+) -> Result<Vec<KeywordReplacement>, String> {
+    client
+        .request_ssh_keyword_replacements("get_ssh_replacements", &alias, None)
+        .map(|response| response.keyword_replacements)
+}
+
+#[tauri::command]
+fn set_ssh_keyword_replacements(
+    client: tauri::State<'_, ControlClient>,
+    alias: String,
+    replacements: Vec<KeywordReplacement>,
+) -> Result<Vec<RouteSummary>, String> {
+    client
+        .request_ssh_keyword_replacements("set_ssh_replacements", &alias, Some(&replacements))
+        .map(|response| response.routes)
 }
 
 #[tauri::command]
@@ -2878,7 +2946,11 @@ fn create_sidecar_startup_log(app: &tauri::AppHandle) -> Result<(PathBuf, File),
     Ok((path, file))
 }
 
-fn sidecar_start_failure(log_path: Option<&Path>, settings: &SecuritySettings) -> String {
+fn sidecar_start_failure(
+    log_path: Option<&Path>,
+    settings: &SecuritySettings,
+    exit_status: Option<std::process::ExitStatus>,
+) -> String {
     let log = log_path
         .and_then(|path| File::open(path).ok())
         .and_then(|file| {
@@ -2903,12 +2975,24 @@ fn sidecar_start_failure(log_path: Option<&Path>, settings: &SecuritySettings) -
             "本地核心未能启动：Windows 拒绝监听 {}。请检查端口权限或安全软件拦截。",
             configured_listener_description(settings)
         )
-    } else if log.contains("control socket") || log.contains("control channel") {
+    } else if log.contains("control socket")
+        || log.contains("control channel")
+        || log.contains("control directory")
+    {
         "本地核心未能启动：当前用户的受保护控制通道不可用。请退出其他 Airlock 副本后重试。"
             .to_string()
     } else if log.contains("listen for local ssh") || log.contains("listen tcp") {
         format!(
             "本地核心未能启动：无法监听 {}。请检查 Windows 防火墙、端口权限或其他 Airlock 副本。",
+            configured_listener_description(settings)
+        )
+    } else if let Some(status) = exit_status {
+        let code = status
+            .code()
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        format!(
+            "本地核心启动后意外退出（退出码 {code}）。请重试；若问题持续，请检查 {}。",
             configured_listener_description(settings)
         )
     } else {
@@ -2926,6 +3010,13 @@ fn spawn_sidecar(
 ) -> Result<(Child, PathBuf), String> {
     let binary = locate_sidecar(app)?;
     let (startup_log, stderr) = create_sidecar_startup_log(app)?;
+    let control_directory = app
+        .path()
+        .app_config_dir()
+        .map_err(|_| "无法读取 Airlock 配置目录".to_string())?;
+    platform::protect_directory(&control_directory)
+        .map_err(|_| "无法创建或保护 Airlock 配置目录".to_string())?;
+    let control_directory = control_directory.to_string_lossy().into_owned();
     let http_address = listener_address(settings, settings.http_port);
     let ssh_address = listener_address(settings, settings.ssh_port);
     let mut command = Command::new(binary);
@@ -2937,6 +3028,7 @@ fn spawn_sidecar(
     }
     command
         .arg("--control-token-stdin")
+        .args(["--control-dir", &control_directory])
         .args(["--listen", &http_address])
         .args(["--ssh-listen", &ssh_address])
         .args(["--network-scope", &settings.network_scope])
@@ -2984,7 +3076,11 @@ fn start_configured_sidecar(
         startup.clear();
         return Ok(());
     }
-    let error = sidecar_start_failure(process.startup_log().as_deref(), settings);
+    let error = sidecar_start_failure(
+        process.startup_log().as_deref(),
+        settings,
+        process.exit_status(),
+    );
     process.stop();
     startup.set(error.clone());
     Err(error)
@@ -3001,7 +3097,11 @@ fn monitor_initial_sidecar(
             startup.clear();
             return;
         }
-        let error = sidecar_start_failure(process.startup_log().as_deref(), &settings);
+        let error = sidecar_start_failure(
+            process.startup_log().as_deref(),
+            &settings,
+            process.exit_status(),
+        );
         process.stop();
         startup.set(error);
     });
@@ -3571,6 +3671,8 @@ pub fn run() {
             set_llm_policy,
             rotate_llm_api_key,
             reset_llm_usage,
+            get_ssh_keyword_replacements,
+            set_ssh_keyword_replacements,
             test_route_health,
             test_proxy_health,
             set_ssh_policy,
@@ -3725,7 +3827,7 @@ mod tests {
             "time=... level=ERROR msg=\"airlockd stopped\" error=\"listen tcp 127.0.0.1:4770: bind: address already in use\"",
         )
         .expect("test startup log should be written");
-        let message = sidecar_start_failure(Some(&path), &SecuritySettings::default());
+        let message = sidecar_start_failure(Some(&path), &SecuritySettings::default(), None);
         assert!(message.contains("127.0.0.1:4768"));
         assert!(message.contains("占用"));
         assert!(!message.contains("level=ERROR"));
@@ -3733,7 +3835,7 @@ mod tests {
 
     #[test]
     fn sidecar_startup_diagnostic_falls_back_to_a_safe_generic_message() {
-        let message = sidecar_start_failure(None, &SecuritySettings::default());
+        let message = sidecar_start_failure(None, &SecuritySettings::default(), None);
         assert!(message.contains("20 秒"));
         assert!(!message.contains("airlockd-startup.log"));
     }

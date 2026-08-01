@@ -95,6 +95,43 @@ func TestGatewayPasswordIsolationAndRestrictedExec(t *testing.T) {
 	}
 }
 
+func TestGatewayAppliesKeywordReplacementsOnlyAfterCommandPolicyCheck(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	route := testSSHRoute(NewPolicy([]string{"deploy --credential input.user.passwd"}, nil, false), egress.Direct)
+	route.KeywordReplacements = []KeywordReplacement{
+		{From: "input.user", To: "service", Enabled: true},
+		{From: "service.passwd", To: "protected-value", Enabled: true},
+	}
+	target := secrets.SSHTarget{
+		Address:         upstream.address(),
+		Username:        upstreamUser,
+		Password:        []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	gateway := startGateway(t, route, target, egress.NewManager(nil))
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.CombinedOutput("deploy --credential input.user.passwd"); err != nil {
+		t.Fatalf("rewritten command failed: %v", err)
+	}
+	if got := upstream.snapshot().lastCommand; got != "deploy --credential protected-value" {
+		t.Fatalf("upstream command = %q", got)
+	}
+
+	denied, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := denied.Run("deploy --credential protected-value"); err == nil {
+		t.Fatal("transformed command bypassed the original command policy")
+	}
+}
+
 func TestGatewayForwardsOnlyEnabledSFTPSubsystem(t *testing.T) {
 	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
 	policy := NewPolicy([]string{"build --release"}, nil, false)

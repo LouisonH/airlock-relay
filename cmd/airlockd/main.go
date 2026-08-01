@@ -37,6 +37,7 @@ func main() {
 	networkScope := flag.String("network-scope", "loopback", "ingress network scope: loopback or lan")
 	secretStoreMode := flag.String("secret-store", "", "secret store: keychain or local_file (mode default applies)")
 	controlTokenStdin := flag.Bool("control-token-stdin", false, "read the ephemeral desktop control token from stdin")
+	controlDir := flag.String("control-dir", "", "absolute protected desktop control directory (desktop mode only)")
 	dataDir := flag.String("data-dir", "", "absolute protected state directory (required in server mode)")
 	controlTokenFile := flag.String("control-token-file", "", "protected 0600 control token file (required in server mode)")
 	webListen := flag.String("web-listen", "", "optional loopback Web UI listen address")
@@ -60,13 +61,13 @@ func main() {
 		}
 		config.ControlToken, err = readControlToken(os.Stdin)
 		if err == nil {
-			config.ControlPaths, err = control.DefaultPaths()
+			config.ControlPaths, err = desktopControlPaths(*controlDir)
 		}
 		if config.SecretStoreMode == "" {
 			config.SecretStoreMode = secrets.StoreModeKeychain
 		}
 	case "server":
-		if *controlTokenStdin || *dataDir == "" || *controlTokenFile == "" || !filepath.IsAbs(*dataDir) || (*webListen == "") != (*webTokenFile == "") {
+		if *controlTokenStdin || *controlDir != "" || *dataDir == "" || *controlTokenFile == "" || !filepath.IsAbs(*dataDir) || (*webListen == "") != (*webTokenFile == "") {
 			slog.Error("server mode requires absolute --data-dir and --control-token-file; --web-listen and --web-token-file must be supplied together")
 			os.Exit(2)
 		}
@@ -98,6 +99,16 @@ func main() {
 		slog.Error("airlockd stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func desktopControlPaths(directory string) (control.Paths, error) {
+	if directory == "" {
+		return control.DefaultPaths()
+	}
+	if !filepath.IsAbs(directory) {
+		return control.Paths{}, errors.New("desktop control directory must be absolute")
+	}
+	return control.PathsForDirectory(directory)
 }
 
 type runtimeConfig struct {

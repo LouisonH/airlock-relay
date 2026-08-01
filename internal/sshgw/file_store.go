@@ -30,20 +30,21 @@ type metadataDocument struct {
 }
 
 type persistedRoute struct {
-	Name                         string   `json:"name"`
-	Alias                        string   `json:"alias"`
-	LocalUsername                string   `json:"local_username,omitempty"`
-	TargetSecretRef              string   `json:"target_secret_ref"`
-	CapabilityDigest             string   `json:"capability_digest"`
-	AllowedCommands              []string `json:"allowed_commands"`
-	LocalPublicKeyFingerprints   []string `json:"local_public_key_fingerprints,omitempty"`
-	AllowStdin                   bool     `json:"allow_stdin"`
-	AllowAllCommands             bool     `json:"allow_all_commands,omitempty"`
-	RecordCommands               bool     `json:"record_commands,omitempty"`
-	AllowSFTP                    bool     `json:"allow_sftp,omitempty"`
-	Egress                       string   `json:"egress"`
-	AuthenticationTimeoutSeconds int      `json:"authentication_timeout_seconds,omitempty"`
-	Enabled                      bool     `json:"enabled"`
+	Name                         string               `json:"name"`
+	Alias                        string               `json:"alias"`
+	LocalUsername                string               `json:"local_username,omitempty"`
+	TargetSecretRef              string               `json:"target_secret_ref"`
+	CapabilityDigest             string               `json:"capability_digest"`
+	AllowedCommands              []string             `json:"allowed_commands"`
+	LocalPublicKeyFingerprints   []string             `json:"local_public_key_fingerprints,omitempty"`
+	AllowStdin                   bool                 `json:"allow_stdin"`
+	AllowAllCommands             bool                 `json:"allow_all_commands,omitempty"`
+	RecordCommands               bool                 `json:"record_commands,omitempty"`
+	AllowSFTP                    bool                 `json:"allow_sftp,omitempty"`
+	Egress                       string               `json:"egress"`
+	AuthenticationTimeoutSeconds int                  `json:"authentication_timeout_seconds,omitempty"`
+	KeywordReplacements          []KeywordReplacement `json:"keyword_replacements,omitempty"`
+	Enabled                      bool                 `json:"enabled"`
 }
 
 func NewFileStore(path string) *FileStore { return &FileStore{path: path} }
@@ -107,6 +108,7 @@ func (s *FileStore) Load() ([]Route, error) {
 			CapabilityDigest: digest,
 			Policy:           policy,
 			Egress:           stored.Egress, AuthenticationTimeoutSeconds: stored.AuthenticationTimeoutSeconds, Enabled: stored.Enabled,
+			KeywordReplacements: append([]KeywordReplacement(nil), stored.KeywordReplacements...),
 		}
 		if route.AuthenticationTimeoutSeconds == 0 {
 			route.AuthenticationTimeoutSeconds = DefaultAuthenticationTimeoutSeconds
@@ -149,6 +151,7 @@ func (s *FileStore) Save(routes []Route) error {
 			RecordCommands:               route.Policy.RecordCommands,
 			AllowSFTP:                    route.Policy.AllowSFTP,
 			AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
+			KeywordReplacements:          append([]KeywordReplacement(nil), route.KeywordReplacements...),
 		})
 	}
 	sort.Slice(document.Routes, func(i, j int) bool { return document.Routes[i].Alias < document.Routes[j].Alias })

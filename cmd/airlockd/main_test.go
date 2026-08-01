@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -48,5 +49,22 @@ func TestReadControlToken(t *testing.T) {
 	}
 	if _, err := readControlToken(strings.NewReader("too-short\n")); err == nil {
 		t.Fatal("readControlToken() accepted a short token")
+	}
+}
+
+func TestDesktopControlPathsUsesExplicitProtectedDirectory(t *testing.T) {
+	directory := t.TempDir()
+	paths, err := desktopControlPaths(directory)
+	if err != nil {
+		t.Fatalf("desktopControlPaths() error = %v", err)
+	}
+	if paths.Directory != directory {
+		t.Fatalf("control directory = %q, want %q", paths.Directory, directory)
+	}
+	if !filepath.IsAbs(paths.Socket) && !strings.HasPrefix(paths.Socket, `\\.\pipe\`) {
+		t.Fatalf("control endpoint = %q is not a platform control endpoint", paths.Socket)
+	}
+	if _, err := desktopControlPaths("relative-control-directory"); err == nil {
+		t.Fatal("desktopControlPaths() accepted a relative directory")
 	}
 }

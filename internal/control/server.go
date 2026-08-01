@@ -75,19 +75,20 @@ type routeHealthState struct {
 type SecretStoreFactory func(mode string) (secrets.MutableStore, error)
 
 type Request struct {
-	Version    int              `json:"version"`
-	Token      string           `json:"token"`
-	Action     string           `json:"action"`
-	Create     *CreateHTTPRoute `json:"create,omitempty"`
-	CreateSSH  *CreateSSHRoute  `json:"create_ssh,omitempty"`
-	ProbeSSH   *ProbeSSHHostKey `json:"probe_ssh,omitempty"`
-	SSHPolicy  *SSHPolicyUpdate `json:"ssh_policy,omitempty"`
-	Alias      string           `json:"alias,omitempty"`
-	Enabled    bool             `json:"enabled,omitempty"`
-	ProxyURL   string           `json:"proxy_url,omitempty"`
-	Capability string           `json:"capability,omitempty"`
-	Command    string           `json:"command,omitempty"`
-	SecretMode string           `json:"secret_store_mode,omitempty"`
+	Version             int                        `json:"version"`
+	Token               string                     `json:"token"`
+	Action              string                     `json:"action"`
+	Create              *CreateHTTPRoute           `json:"create,omitempty"`
+	CreateSSH           *CreateSSHRoute            `json:"create_ssh,omitempty"`
+	ProbeSSH            *ProbeSSHHostKey           `json:"probe_ssh,omitempty"`
+	SSHPolicy           *SSHPolicyUpdate           `json:"ssh_policy,omitempty"`
+	Alias               string                     `json:"alias,omitempty"`
+	Enabled             bool                       `json:"enabled,omitempty"`
+	ProxyURL            string                     `json:"proxy_url,omitempty"`
+	Capability          string                     `json:"capability,omitempty"`
+	Command             string                     `json:"command,omitempty"`
+	SecretMode          string                     `json:"secret_store_mode,omitempty"`
+	KeywordReplacements []sshgw.KeywordReplacement `json:"keyword_replacements,omitempty"`
 }
 
 type CreateHTTPRoute struct {
@@ -106,20 +107,21 @@ type CreateHTTPRoute struct {
 }
 
 type CreateSSHRoute struct {
-	Name                         string `json:"name"`
-	Alias                        string `json:"alias"`
-	LocalUsername                string `json:"local_username,omitempty"`
-	Address                      string `json:"address"`
-	Username                     string `json:"username"`
-	Password                     string `json:"password"`
-	LocalPassword                string `json:"local_password,omitempty"`
-	ExpectedHostKey              string `json:"expected_host_key"`
-	AllowedCommand               string `json:"allowed_command"`
-	AllowAllCommands             bool   `json:"allow_all_commands"`
-	RecordCommands               bool   `json:"record_commands"`
-	AllowSFTP                    bool   `json:"allow_sftp"`
-	AuthenticationTimeoutSeconds int    `json:"authentication_timeout_seconds,omitempty"`
-	Egress                       string `json:"egress,omitempty"`
+	Name                         string                     `json:"name"`
+	Alias                        string                     `json:"alias"`
+	LocalUsername                string                     `json:"local_username,omitempty"`
+	Address                      string                     `json:"address"`
+	Username                     string                     `json:"username"`
+	Password                     string                     `json:"password"`
+	LocalPassword                string                     `json:"local_password,omitempty"`
+	ExpectedHostKey              string                     `json:"expected_host_key"`
+	AllowedCommand               string                     `json:"allowed_command"`
+	AllowAllCommands             bool                       `json:"allow_all_commands"`
+	RecordCommands               bool                       `json:"record_commands"`
+	AllowSFTP                    bool                       `json:"allow_sftp"`
+	AuthenticationTimeoutSeconds int                        `json:"authentication_timeout_seconds,omitempty"`
+	Egress                       string                     `json:"egress,omitempty"`
+	KeywordReplacements          []sshgw.KeywordReplacement `json:"keyword_replacements,omitempty"`
 }
 
 type SSHPolicyUpdate struct {
@@ -151,17 +153,18 @@ type SSHConfiguration struct {
 }
 
 type Response struct {
-	OK              bool                `json:"ok"`
-	Error           string              `json:"error,omitempty"`
-	Warning         string              `json:"warning,omitempty"`
-	Running         bool                `json:"running"`
-	Routes          []RouteSummary      `json:"routes,omitempty"`
-	Created         *CreatedRoute       `json:"created,omitempty"`
-	ProxyConfigured bool                `json:"proxy_configured"`
-	SSHReady        bool                `json:"ssh_ready"`
-	SSHHostKeyProbe *SSHHostKeyProbe    `json:"ssh_host_key_probe,omitempty"`
-	HealthCheck     *HealthCheckSummary `json:"health_check,omitempty"`
-	Activity        []ActivitySummary   `json:"activity,omitempty"`
+	OK                  bool                       `json:"ok"`
+	Error               string                     `json:"error,omitempty"`
+	Warning             string                     `json:"warning,omitempty"`
+	Running             bool                       `json:"running"`
+	Routes              []RouteSummary             `json:"routes,omitempty"`
+	Created             *CreatedRoute              `json:"created,omitempty"`
+	ProxyConfigured     bool                       `json:"proxy_configured"`
+	SSHReady            bool                       `json:"ssh_ready"`
+	SSHHostKeyProbe     *SSHHostKeyProbe           `json:"ssh_host_key_probe,omitempty"`
+	HealthCheck         *HealthCheckSummary        `json:"health_check,omitempty"`
+	Activity            []ActivitySummary          `json:"activity,omitempty"`
+	KeywordReplacements []sshgw.KeywordReplacement `json:"keyword_replacements,omitempty"`
 }
 
 type SSHHostKeyProbe struct {
@@ -209,6 +212,7 @@ type RouteSummary struct {
 	InputTokens                  uint64   `json:"inputTokens,omitempty"`
 	OutputTokens                 uint64   `json:"outputTokens,omitempty"`
 	AuthenticationTimeoutSeconds int      `json:"authenticationTimeoutSeconds,omitempty"`
+	KeywordReplacementCount      int      `json:"keywordReplacementCount,omitempty"`
 }
 
 type ActivitySummary struct {
@@ -324,6 +328,10 @@ func (s *Server) dispatch(request Request) Response {
 		return s.createSSHRoute(request.CreateSSH)
 	case "set_ssh_policy":
 		return s.setSSHPolicy(request.Alias, request.SSHPolicy)
+	case "get_ssh_replacements":
+		return s.getSSHKeywordReplacements(request.Alias)
+	case "set_ssh_replacements":
+		return s.setSSHKeywordReplacements(request.Alias, request.KeywordReplacements)
 	case "update_ssh_target":
 		return s.updateSSHTarget(request.Alias, request.CreateSSH)
 	case "rotate_ssh_credential":
@@ -875,7 +883,8 @@ func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
 		TargetSecretRef:  reference,
 		CapabilityDigest: digest,
 		Policy:           sshPolicy,
-		Egress:           policy, AuthenticationTimeoutSeconds: authenticationTimeout, Enabled: false,
+		Egress:           policy, AuthenticationTimeoutSeconds: authenticationTimeout,
+		KeywordReplacements: append([]sshgw.KeywordReplacement(nil), input.KeywordReplacements...), Enabled: false,
 	}
 	if err := s.ssh.Registry.Upsert(route); err != nil {
 		_ = s.secrets.DeleteTarget(context.Background(), reference)
@@ -945,6 +954,41 @@ func (s *Server) setSSHPolicy(alias string, input *SSHPolicyUpdate) Response {
 	if err := s.ssh.Persistence.Save(s.ssh.Registry.List()); err != nil {
 		_ = s.ssh.Registry.Upsert(previous)
 		return Response{Error: "无法保存 SSH 映射策略"}
+	}
+	return s.successResponse()
+}
+
+func (s *Server) getSSHKeywordReplacements(alias string) Response {
+	if s.ssh == nil || strings.TrimSpace(alias) == "" || len(alias) > 63 {
+		return Response{Error: "SSH 出口替换不可用"}
+	}
+	route, err := s.ssh.Registry.Get(alias)
+	if err != nil {
+		return Response{Error: "未找到 SSH 路由"}
+	}
+	response := s.successResponse()
+	response.KeywordReplacements = append([]sshgw.KeywordReplacement(nil), route.KeywordReplacements...)
+	return response
+}
+
+func (s *Server) setSSHKeywordReplacements(alias string, replacements []sshgw.KeywordReplacement) Response {
+	if s.ssh == nil || strings.TrimSpace(alias) == "" || len(alias) > 63 || sshgw.ValidateKeywordReplacements(replacements) != nil {
+		return Response{Error: "SSH 出口替换规则无效"}
+	}
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	previous, err := s.ssh.Registry.Get(alias)
+	if err != nil {
+		return Response{Error: "未找到 SSH 路由"}
+	}
+	updated := previous
+	updated.KeywordReplacements = append([]sshgw.KeywordReplacement(nil), replacements...)
+	if err := s.ssh.Registry.Upsert(updated); err != nil {
+		return Response{Error: "SSH 出口替换规则无效"}
+	}
+	if err := s.ssh.Persistence.Save(s.ssh.Registry.List()); err != nil {
+		_ = s.ssh.Registry.Upsert(previous)
+		return Response{Error: "无法保存 SSH 出口替换规则"}
 	}
 	return s.successResponse()
 }
@@ -1565,6 +1609,9 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 	if route.Policy.AllowSFTP {
 		permissionSummary += " · SFTP high risk"
 	}
+	if len(route.KeywordReplacements) > 0 {
+		permissionSummary += fmt.Sprintf(" · %d rewrite rules", len(route.KeywordReplacements))
+	}
 	allowedCommands := make([]string, 0, len(route.Policy.AllowedCommands))
 	for command := range route.Policy.AllowedCommands {
 		allowedCommands = append(allowedCommands, command)
@@ -1585,6 +1632,7 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 		AllowSFTP:                    route.Policy.AllowSFTP,
 		AllowedCommand:               allowedCommand,
 		AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
+		KeywordReplacementCount:      len(route.KeywordReplacements),
 	}
 }
 

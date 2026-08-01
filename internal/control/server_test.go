@@ -365,6 +365,7 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 		ExpectedHostKey: base64.StdEncoding.EncodeToString(hostKey.Marshal()),
 		AllowedCommand:  "printf airlock-ok", RecordCommands: true, Egress: egress.Auto,
 		AuthenticationTimeoutSeconds: 37,
+		KeywordReplacements:          []sshgw.KeywordReplacement{{From: "input.secret", To: "protected-value", Enabled: true}},
 	})
 	if !response.OK || response.Created == nil || response.Created.Capability == "" {
 		t.Fatalf("create SSH response = %+v", response)
@@ -378,6 +379,9 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 	if response.Created.Route.AuthenticationTimeoutSeconds != 37 {
 		t.Fatalf("created SSH authentication timeout = %d", response.Created.Route.AuthenticationTimeoutSeconds)
 	}
+	if response.Created.Route.KeywordReplacementCount != 1 {
+		t.Fatalf("created SSH keyword replacement count = %d", response.Created.Route.KeywordReplacementCount)
+	}
 	raw, err := json.Marshal(response)
 	if err != nil {
 		t.Fatal(err)
@@ -387,13 +391,24 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 			t.Fatalf("SSH control response leaked %q: %s", protected, raw)
 		}
 	}
+	if strings.Contains(string(raw), "protected-value") {
+		t.Fatalf("SSH create response leaked a keyword replacement value: %s", raw)
+	}
+	replacements := server.getSSHKeywordReplacements("build")
+	if !replacements.OK || len(replacements.KeywordReplacements) != 1 || replacements.KeywordReplacements[0].To != "protected-value" {
+		t.Fatalf("get SSH keyword replacements = %+v", replacements)
+	}
 	target, err := store.ResolveSSHTarget(t.Context(), "ssh/build")
 	if err != nil || target.Address != "192.0.2.10:22" || target.Username != "upstream-user-sentinel" || string(target.Password) != "upstream-password-sentinel" {
 		t.Fatalf("protected SSH target = %+v, %v", target, err)
 	}
 	loaded, err := sshMetadata.Load()
-	if err != nil || len(loaded) != 1 || loaded[0].TargetSecretRef != "ssh/build" || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || loaded[0].AuthenticationTimeoutSeconds != 37 {
+	if err != nil || len(loaded) != 1 || loaded[0].TargetSecretRef != "ssh/build" || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || loaded[0].AuthenticationTimeoutSeconds != 37 || len(loaded[0].KeywordReplacements) != 1 {
 		t.Fatalf("persisted SSH routes = %+v, %v", loaded, err)
+	}
+	updatedReplacements := server.setSSHKeywordReplacements("build", []sshgw.KeywordReplacement{{From: "input.token", To: "next-protected-value", Enabled: true}})
+	if !updatedReplacements.OK {
+		t.Fatalf("set SSH keyword replacements = %+v", updatedReplacements)
 	}
 	duplicate := server.createSSHRoute(&CreateSSHRoute{
 		Name: "Duplicate", Alias: "duplicate", LocalUsername: "builder", Address: "ssh.private.invalid",
