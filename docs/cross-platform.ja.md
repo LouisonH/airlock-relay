@@ -3,15 +3,17 @@
 Airlock v0.1.4 で公開済みなのは Apple Silicon macOS 向け Desktop preview だけです。
 この branch で追加するのは Windows と Linux の **Core/CLI コンパイルベースライン**であり、
 Windows/Linux Desktop、インストーラー、auto-update、署名済み成果物の公開を意味しません。
+Desktop GUI、local control transport、native prompt フローはコードレベルで Windows/Linux
+へ移植済みですが、実機での runtime acceptance を完了するまで公開しません。
 
 | 対象 | Core / CLI build | local control transport | platform secret backend | Desktop bundle | 状態 |
 | --- | --- | --- | --- | --- | --- |
 | macOS arm64 | native | user-only Unix Socket | Keychain / protected file | DMG / `.app` | preview 公開済み |
 | macOS x64 | target build | user-only Unix Socket | Keychain / protected file | DMG / `.app` | installer は予定 |
-| Windows x64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop は予定 |
-| Windows arm64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop は予定 |
-| Linux x64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop は予定 |
-| Linux arm64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop は予定 |
+| Windows x64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop 移植済み（コード）· 未公開 |
+| Windows arm64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop 移植済み（コード）· 未公開 |
+| Linux x64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop 移植済み（コード）· 未公開 |
+| Linux arm64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop 移植済み（コード）· 未公開 |
 | Linux ARMv7 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Raspberry Pi baseline |
 
 `cross-compiled` は CI と target-aware build script が `CGO_ENABLED=0` で
@@ -29,6 +31,18 @@ Windows/Linux Desktop、インストーラー、auto-update、署名済み成果
 - Server Core の conservative default は引き続き `local_file`、explicit protected data
   directory、separate control token file です。`keychain` mode は対応 platform store が
   利用可能で正しく設定された場合だけ使用してください。
+- Rust/Tauri desktop client は platform-aware です。macOS/Linux では user-only Unix
+  Socket、Windows では SHA-256 から導出した Named Pipe と overlapped I/O で control
+  を交換します。protected file は Unix では `0600`/`0700`、Windows では user-only
+  `icacls` ACL と atomic replace を使用します。
+- 高リスク操作の native prompt は全 platform で用意しています。macOS は `osascript`、
+  Windows は PowerShell/Windows Forms で、protected input、LLM Key 選択、高リスク SSH
+  確認、Capability の受け渡し、security setting 確認に対応します。Windows の port 管理は
+  `netstat -ano` + `Win32_Process` で所有者を列挙し、現在の account に絞り込み、確認した
+  process だけを `taskkill` で終了します。
+- Frontend は platform に応じたラベルと zh/en/ja 翻訳を提供します。control transport
+  （Unix Socket / Named Pipe）、credential store（Keychain / Credential Manager /
+  Secret Service）、security profile、native risk 表記を切り替えます。
 - Target build は明示的に分離され、`airlockd` と `airlock` の両方を生成します。Tauri bundle
   を作らず、npm installer が公開済みとする対象範囲も変更しません。
 
@@ -38,16 +52,18 @@ Go 1.25 以上が必要です。repository root で次を実行すると、toolc
 cross-compile し、`bin/<target>` に配置します。
 
 ```bash
-./scripts/build-sidecar.sh windows-amd64
-./scripts/build-sidecar.sh windows-arm64
-./scripts/build-sidecar.sh linux-amd64
-./scripts/build-sidecar.sh linux-arm64
-./scripts/build-sidecar.sh linux-armv7
+node scripts/build-sidecar.mjs windows-amd64
+node scripts/build-sidecar.mjs windows-arm64
+node scripts/build-sidecar.mjs linux-amd64
+node scripts/build-sidecar.mjs linux-arm64
+node scripts/build-sidecar.mjs linux-armv7
 ```
 
-argument を省略した command は、Desktop development 用に current host の
-`bin/airlockd` と `bin/airlock` を維持します。table にない target name は binary を作成する
-前に fail します。
+`scripts/build-sidecar.sh` は同じ Node ドライバへの互換ラッパーとして残します。argument
+なしの command は Desktop development 用の sidecar を Tauri の target triple 名で
+`apps/desktop/src-tauri/binaries/` に書き出します（例: `airlockd-aarch64-apple-darwin`）。
+target を明示した場合は `bin/<target>` に `airlockd`/`airlock` の通常名で書き出します。
+table にない target name は binary を作成する前に fail します。
 
 32-bit Raspberry Pi OS または Debian `armhf` の Raspberry Pi 3/4 では、
 `bin/linux-armv7/airlockd` と `bin/linux-armv7/airlock` をコピーし、non-login service
@@ -64,8 +80,9 @@ Windows/Linux を release target にする前に、対応 architecture と distr
    create/read/rotation/delete、locked/unavailable store の fail-closed を確認する。
 2. 別 local account から Windows Named Pipe と protected state/token path にアクセス
    できないこと、Linux の `0600` Unix Socket と state protection を確認する。
-3. Rust/Tauri control client を移植し、Unix-only import、Unix stream、filesystem permission、
-   macOS-only confirmation を置き換え、高リスク操作に同等の native confirmation を用意する。
+3. 実機の Windows/Linux toolchain で Rust/Tauri control client をコンパイルし、移植済みの
+   Named Pipe/Unix control 交換、protected file ACL、Windows Forms native prompt、
+   port 管理、frontend の platform ラベルを物理デバイスで検証する。
 4. target hardware で service install、clean removal、upgrade、stale process recovery、
    `Direct`/`Proxy`/`Auto` egress、SSH Host Key pinning、failure closure を試験する。
 5. architecture 別 installer を作成、sign、fixed checksum を公開し、install/update/uninstall

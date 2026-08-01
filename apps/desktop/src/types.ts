@@ -12,6 +12,14 @@ export interface SecuritySettings {
   sshPort: number;
 }
 
+export interface PlatformInfo {
+  os: "macos" | "windows" | "linux" | "other";
+  arch: string;
+  controlTransport: "unix-socket" | "named-pipe";
+  secretStore: "keychain" | "credential-manager" | "secret-service";
+  desktopRelease: boolean;
+}
+
 export interface PortOwner {
   port: number;
   pid: number;

@@ -37,9 +37,7 @@
     "copyright": "Copyright © 2026 LouisonH",
     "shortDescription": "Local credential-isolation relay for HTTP, SSH, and LLM traffic",
     "targets": "all",
-    "resources": {
-      "../../../bin/airlockd": "airlockd"
-    },
+    "externalBin": ["binaries/airlockd"],
     "macOS": {
       "minimumSystemVersion": "12.0",
       "signingIdentity": "-"

@@ -51,7 +51,7 @@ import {
 import { applyTheme, getAccentTheme, getDensityPreference, getMotionPreference, getRefreshInterval, getThemePreference, saveAccentTheme, saveDensityPreference, saveMotionPreference, saveRefreshInterval, saveThemePreference, watchSystemTheme, type AccentTheme, type DensityPreference, type MotionPreference, type RefreshInterval, type ThemePreference } from "./theme";
 import { getLocalePreference, getResolvedLocale, saveLocalePreference, translate, watchSystemLocale, type LocalePreference } from "./i18n";
 import { APP_VERSION, checkForUpdates, type UpdateCheckResult } from "./version";
-import type { ActivityEvent, ControlState, ControlUpdate, NetworkScope, PortOwner, RouteEgressFilter, RouteHealthFilter, RouteKind, RouteStatusFilter, RouteSummary, SecretStoreMode, SecuritySettings, SecurityUpdate, SSHHostKeyProbe, SSHRouteCreationResult } from "./types";
+import type { ActivityEvent, ControlState, ControlUpdate, NetworkScope, PlatformInfo, PortOwner, RouteEgressFilter, RouteHealthFilter, RouteKind, RouteStatusFilter, RouteSummary, SecretStoreMode, SecuritySettings, SecurityUpdate, SSHHostKeyProbe, SSHRouteCreationResult } from "./types";
 
 type Page = "overview" | "routes" | "activity" | "guide" | "settings";
 type RouteFilter = "All" | RouteKind;
@@ -108,6 +108,13 @@ const emptyControl: ControlState = {
 export default function App() {
   const [page, setPage] = useState<Page>("overview");
   const [control, setControl] = useState<ControlState>(emptyControl);
+  const [platform, setPlatform] = useState<PlatformInfo>(() => ({
+    os: "other",
+    arch: "",
+    controlTransport: "unix-socket",
+    secretStore: "keychain",
+    desktopRelease: false,
+  }));
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorKind, setEditorKind] = useState<RouteKind>("HTTP");
@@ -161,6 +168,13 @@ export default function App() {
     const timer = window.setInterval(() => void refresh(), refreshInterval);
     return () => window.clearInterval(timer);
   }, [refreshInterval]);
+
+  useEffect(() => {
+    if (!isTauri) return;
+    void invoke<PlatformInfo>("get_platform_info")
+      .then(setPlatform)
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!notice) return;
@@ -453,11 +467,11 @@ export default function App() {
         </header>
 
         <div className="page-content" key={page}>
-          {page === "overview" && <Overview control={control} onRoutes={() => setPage("routes")} onAdd={() => openEditor()} onRetry={restartLocalCore} onManagePorts={() => setPortManagerOpen(true)} retrying={coreRetrying} />}
+          {page === "overview" && <Overview control={control} platform={platform} onRoutes={() => setPage("routes")} onAdd={() => openEditor()} onRetry={restartLocalCore} onManagePorts={() => setPortManagerOpen(true)} retrying={coreRetrying} />}
           {page === "routes" && <Routes routes={control.routes} connected={control.connected} testingAliases={testingAliases} onToggle={toggleRoute} onDelete={setPendingDelete} onPolicy={setPolicyRoute} onTest={runHealthCheck} onTestAll={testAllRoutes} onAdd={() => openEditor()} />}
           {page === "activity" && <ActivityPage events={control.activity} />}
           {page === "guide" && <GuidePage onRoutes={() => setPage("routes")} />}
-          {page === "settings" && <SettingsPage language={language} onLanguage={setLanguage} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} density={density} onDensity={setDensity} motion={motion} onMotion={setMotion} refreshInterval={refreshInterval} onRefreshInterval={setRefreshInterval} connected={control.connected} proxyConfigured={control.proxyConfigured} proxyTesting={proxyTesting} sshReady={control.sshReady} securitySettings={control.securitySettings} onSecuritySettings={applySecuritySettings} onConfigureProxy={configureProxy} onClearProxy={clearProxy} onTestProxy={testProxyHealth} updateCheck={updateCheck} checkingUpdate={checkingUpdate} onCheckUpdates={checkUpdates} onOpenGuide={() => setPage("guide")} onManagePorts={() => setPortManagerOpen(true)} />}
+          {page === "settings" && <SettingsPage platform={platform} language={language} onLanguage={setLanguage} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} density={density} onDensity={setDensity} motion={motion} onMotion={setMotion} refreshInterval={refreshInterval} onRefreshInterval={setRefreshInterval} connected={control.connected} proxyConfigured={control.proxyConfigured} proxyTesting={proxyTesting} sshReady={control.sshReady} securitySettings={control.securitySettings} onSecuritySettings={applySecuritySettings} onConfigureProxy={configureProxy} onClearProxy={clearProxy} onTestProxy={testProxyHealth} updateCheck={updateCheck} checkingUpdate={checkingUpdate} onCheckUpdates={checkUpdates} onOpenGuide={() => setPage("guide")} onManagePorts={() => setPortManagerOpen(true)} />}
         </div>
       </main>
 
@@ -465,28 +479,62 @@ export default function App() {
       {portManagerOpen && <PortManager securitySettings={control.securitySettings} onClose={() => setPortManagerOpen(false)} onSave={applySecuritySettings} onTerminate={terminatePortOwner} />}
       {emergencyOpen && <Modal title="停止全部路由" onClose={() => setEmergencyOpen(false)}><div className="warning-panel"><AlertTriangle size={19} /><p>新请求将立即被拒绝，已建立的连接会进入关闭流程。</p></div><div className="modal-actions"><button className="secondary-button" onClick={() => setEmergencyOpen(false)}>取消</button><button className="danger-button" onClick={() => void stopAll()}><CircleStop size={16} />确认停止</button></div></Modal>}
 	  {pendingDelete && <Modal title="删除路由" onClose={() => setPendingDelete(undefined)}><div className="danger-panel"><Trash2 size={19} /><div><strong>{pendingDelete.name}</strong><p>本地入口、Capability 和当前 SecretStore 中的受保护目标都会被永久删除。</p></div></div><div className="modal-actions"><button className="secondary-button" onClick={() => setPendingDelete(undefined)}>取消</button><button className="danger-button" onClick={() => void deleteRoute()}><Trash2 size={16} />删除路由</button></div></Modal>}
-      {policyRoute?.kind === "SSH" && <SSHPolicyEditor route={policyRoute} testing={testingAliases.has(policyRoute.alias)} onClose={() => setPolicyRoute(undefined)} onSave={updateSSHPolicy} onUpdateHost={updateSSHHost} onRotateCredential={rotateSSHCredential} onTest={() => runHealthCheck(policyRoute.alias)} onAddHost={() => { setPolicyRoute(undefined); openEditor("SSH"); }} onDelete={() => { setPendingDelete(policyRoute); setPolicyRoute(undefined); }} />}
+      {policyRoute?.kind === "SSH" && <SSHPolicyEditor route={policyRoute} platform={platform} testing={testingAliases.has(policyRoute.alias)} onClose={() => setPolicyRoute(undefined)} onSave={updateSSHPolicy} onUpdateHost={updateSSHHost} onRotateCredential={rotateSSHCredential} onTest={() => runHealthCheck(policyRoute.alias)} onAddHost={() => { setPolicyRoute(undefined); openEditor("SSH"); }} onDelete={() => { setPendingDelete(policyRoute); setPolicyRoute(undefined); }} />}
       {policyRoute?.kind === "LLM" && <LLMPolicyEditor route={policyRoute} onClose={() => setPolicyRoute(undefined)} onSave={updateLLMPolicy} onRotate={rotateLLMKey} onResetUsage={resetLLMUsage} />}
       {editorOpen && <RouteEditor initialKind={editorKind} routes={control.routes} connected={control.connected} proxyConfigured={control.proxyConfigured} sshReady={control.sshReady} onClose={() => setEditorOpen(false)} onCreated={(route) => setControl((current) => ({ ...current, routes: [...current.routes.filter((item) => item.id !== route.id), route] }))} onError={setNotice} />}
     </div>
   );
 }
 
-function Overview({ control, onRoutes, onAdd, onRetry, onManagePorts, retrying }: { control: ControlState; onRoutes: () => void; onAdd: () => void; onRetry: () => void; onManagePorts: () => void; retrying: boolean }) {
+function platformSecretStoreName(platform: PlatformInfo): string {
+  return platform.secretStore === "credential-manager" ? "凭据管理器" : platform.secretStore === "secret-service" ? "Secret Service" : "Keychain";
+}
+
+function platformFileStoreName(platform: PlatformInfo): string {
+  return platform.os === "windows" ? "ACL 文件" : "0600 文件";
+}
+
+function platformControlTransportName(platform: PlatformInfo): string {
+  return platform.controlTransport === "named-pipe" ? "命名管道 · 仅当前用户" : "Unix Socket · 仅当前用户";
+}
+
+function platformSecretStoreExplain(platform: PlatformInfo): string {
+  return platform.os === "windows"
+    ? "Windows 决定何时显示凭据输入框，Airlock 不能绕过该系统授权。"
+    : platform.os === "linux"
+      ? "系统决定何时要求解锁 Secret Service 钥匙串，Airlock 不能绕过该授权。"
+      : "macOS 决定何时显示密码框，Airlock 不能绕过该系统授权。";
+}
+
+function platformFileStoreExplain(platform: PlatformInfo): string {
+  return platform.os === "windows"
+    ? "Secret 仅由当前 Windows 账户与 ACL 文件权限隔离；同账户的其他进程可能读取。"
+    : "Secret 仅由当前账户与 0600 文件权限隔离；同账户的其他进程可能读取。";
+}
+
+function platformNativeConfirmText(platform: PlatformInfo): string {
+  return platform.os === "windows"
+    ? "该模式接近远程命令执行权限。保存时还会出现一次 Windows 原生风险确认。"
+    : platform.os === "linux"
+      ? "该模式接近远程命令执行权限。保存时还会出现一次系统原生风险确认。"
+      : "该模式接近远程命令执行权限。保存时还会出现一次 macOS 原生风险确认。";
+}
+
+function Overview({ control, platform, onRoutes, onAdd, onRetry, onManagePorts, retrying }: { control: ControlState; platform: PlatformInfo; onRoutes: () => void; onAdd: () => void; onRetry: () => void; onManagePorts: () => void; retrying: boolean }) {
   const enabled = control.routes.filter((route) => route.status === "enabled").length;
   const connections = control.routes.reduce((sum, route) => sum + route.currentConnections, 0);
   return <>
     <PageHeader title="概览" subtitle="本机开放能力与安全状态" action={<button className="primary-button" onClick={onAdd} disabled={!control.connected}><Plus size={16} />新增路由</button>} />
     <section className={`service-band ${control.connected ? "running" : "stopped"}`}>
       <span className="service-icon"><ShieldCheck size={20} /></span>
-      <div className="service-copy"><strong>{translate(control.connected ? "受保护控制通道已连接" : "airlockd 尚未连接")}</strong><span>{control.connected ? translate("Unix Socket · 当前用户专用") : translate(control.message ?? "启动本地核心后将自动重连")}</span></div>
+      <div className="service-copy"><strong>{translate(control.connected ? "受保护控制通道已连接" : "airlockd 尚未连接")}</strong><span>{control.connected ? translate(platformControlTransportName(platform)) : translate(control.message ?? "启动本地核心后将自动重连")}</span></div>
       <div className="listener-status"><span><Server size={14} />HTTP <b>{control.connected ? "ON" : "OFF"}</b></span><span><SquareTerminal size={14} />SSH <b>{control.sshReady ? "ON" : "OFF"}</b></span></div>
       {!control.connected && <div className="core-recovery-actions"><button className="secondary-button compact" onClick={onManagePorts} disabled={retrying}><Cable size={14} />{translate("管理端口")}</button><button className="secondary-button compact core-retry" onClick={onRetry} disabled={retrying}>{retrying ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}{translate(retrying ? "正在重启本地核心" : "重试本地核心")}</button></div>}
     </section>
     <section className="metric-strip" aria-label="运行指标">
       <Metric label="开放路由" value={String(enabled)} detail={translate(`共 ${control.routes.length} 条`)} />
       <Metric label="当前连接" value={String(connections)} detail="仅统计本地入口" />
-	  <Metric label="凭据存储" value={control.securitySettings.secretStore === "keychain" ? "Keychain" : "本机文件"} detail={control.securitySettings.secretStore === "keychain" ? "系统加密保护" : "0600 权限隔离"} tone={control.securitySettings.secretStore === "keychain" ? "success" : "warning"} />
+	  <Metric label="凭据存储" value={control.securitySettings.secretStore === "local_file" ? "本机文件" : platformSecretStoreName(platform)} detail={control.securitySettings.secretStore === "local_file" ? "账户与文件权限隔离" : "系统加密保护"} tone={control.securitySettings.secretStore === "local_file" ? "warning" : "success"} />
     </section>
     <section className="section-block">
       <div className="section-heading"><div><h2>路由</h2><p>界面只显示安全别名和本地入口。</p></div><button className="text-button" onClick={onRoutes}>查看全部<ChevronRight size={15} /></button></div>
@@ -592,7 +640,7 @@ function GuidePage({ onRoutes }: { onRoutes: () => void }) {
   </>;
 }
 
-function SettingsPage({ language, onLanguage, theme, onTheme, accent, onAccent, density, onDensity, motion, onMotion, refreshInterval, onRefreshInterval, connected, proxyConfigured, proxyTesting, sshReady, securitySettings, onSecuritySettings, onConfigureProxy, onClearProxy, onTestProxy, updateCheck, checkingUpdate, onCheckUpdates, onOpenGuide, onManagePorts }: { language: LocalePreference; onLanguage: (language: LocalePreference) => void; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; accent: AccentTheme; onAccent: (accent: AccentTheme) => void; density: DensityPreference; onDensity: (density: DensityPreference) => void; motion: MotionPreference; onMotion: (motion: MotionPreference) => void; refreshInterval: RefreshInterval; onRefreshInterval: (interval: RefreshInterval) => void; connected: boolean; proxyConfigured: boolean; proxyTesting: boolean; sshReady: boolean; securitySettings: SecuritySettings; onSecuritySettings: (settings: SecuritySettings) => Promise<void>; onConfigureProxy: () => void; onClearProxy: () => void; onTestProxy: () => void; updateCheck?: UpdateCheckResult; checkingUpdate: boolean; onCheckUpdates: () => Promise<void>; onOpenGuide: () => void; onManagePorts: () => void }) {
+function SettingsPage({ platform, language, onLanguage, theme, onTheme, accent, onAccent, density, onDensity, motion, onMotion, refreshInterval, onRefreshInterval, connected, proxyConfigured, proxyTesting, sshReady, securitySettings, onSecuritySettings, onConfigureProxy, onClearProxy, onTestProxy, updateCheck, checkingUpdate, onCheckUpdates, onOpenGuide, onManagePorts }: { platform: PlatformInfo; language: LocalePreference; onLanguage: (language: LocalePreference) => void; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; accent: AccentTheme; onAccent: (accent: AccentTheme) => void; density: DensityPreference; onDensity: (density: DensityPreference) => void; motion: MotionPreference; onMotion: (motion: MotionPreference) => void; refreshInterval: RefreshInterval; onRefreshInterval: (interval: RefreshInterval) => void; connected: boolean; proxyConfigured: boolean; proxyTesting: boolean; sshReady: boolean; securitySettings: SecuritySettings; onSecuritySettings: (settings: SecuritySettings) => Promise<void>; onConfigureProxy: () => void; onClearProxy: () => void; onTestProxy: () => void; updateCheck?: UpdateCheckResult; checkingUpdate: boolean; onCheckUpdates: () => Promise<void>; onOpenGuide: () => void; onManagePorts: () => void }) {
   const [draft, setDraft] = useState(securitySettings);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -608,10 +656,18 @@ function SettingsPage({ language, onLanguage, theme, onTheme, accent, onAccent, 
   const activeNetwork = securitySettings.networkScope;
   const presetLabel = preset === "strict" ? "严格" : preset === "standard" ? "标准" : preset === "convenient" ? "便捷" : "自定义";
   const levelLabel = preset === "strict" ? "高保护" : preset === "convenient" ? "局域网暴露" : preset === "standard" ? "推荐默认" : "自定义边界";
+  const secretStoreName = platformSecretStoreName(platform);
+  const fileStoreName = platformFileStoreName(platform);
+  const strictDescription = platform.os === "windows"
+    ? "适合长期保存高价值凭据。Secret 由 Windows 凭据管理器加密并控制访问，系统可能要求验证登录凭据。"
+    : platform.os === "linux"
+      ? "适合长期保存高价值凭据。Secret 由桌面 Secret Service 加密并控制访问，系统可能要求解锁钥匙串。"
+      : "适合长期保存高价值凭据。Secret 由 macOS 加密并控制访问，系统可能要求验证登录密码。";
+  const strictStore = platform.secretStore === "credential-manager" ? "Windows 凭据管理器" : platform.secretStore === "secret-service" ? "Secret Service" : "系统钥匙串";
   const profiles = [
-    { id: "strict" as const, title: "严格", subtitle: "Keychain · 仅本机", icon: ShieldCheck, description: "适合长期保存高价值凭据。Secret 由 macOS 加密并控制访问，系统可能要求验证登录密码。", store: "系统钥匙串", ingress: "仅本机" },
-    { id: "standard" as const, title: "标准", subtitle: "0600 文件 · 仅本机", icon: HardDrive, description: "默认方案。启动时不读取 Keychain，不弹授权框；Secret 未加密，由当前账户和文件权限隔离。", store: "当前用户文件", ingress: "仅本机" },
-    { id: "convenient" as const, title: "便捷", subtitle: "0600 文件 · 局域网", icon: Wifi, description: "用于受信任私网中转。持有路由凭据的局域网设备可访问入口，控制面仍保持本机专用。", store: "当前用户文件", ingress: "私有局域网" },
+    { id: "strict" as const, title: "严格", subtitle: `${secretStoreName} · 仅本机`, icon: ShieldCheck, description: strictDescription, store: strictStore, ingress: "仅本机" },
+    { id: "standard" as const, title: "标准", subtitle: `${fileStoreName} · 仅本机`, icon: HardDrive, description: "默认方案。启动时不读取系统钥匙串，不弹授权框；Secret 未加密，由当前账户和文件权限隔离。", store: "当前用户文件", ingress: "仅本机" },
+    { id: "convenient" as const, title: "便捷", subtitle: `${fileStoreName} · 局域网`, icon: Wifi, description: "用于受信任私网中转。持有路由凭据的局域网设备可访问入口，控制面仍保持本机专用。", store: "当前用户文件", ingress: "私有局域网" },
   ];
   const updateSummary = updateCheck?.status === "available" ? `v${updateCheck.latest} 可手动下载` : updateCheck?.status === "current" ? "已是最新稳定版本" : updateCheck?.status === "unavailable" ? "公开发布信息暂不可用" : "尚未检查";
   return <><PageHeader title="设置" subtitle="本地外观、网络与安全边界" />
@@ -621,13 +677,17 @@ function SettingsPage({ language, onLanguage, theme, onTheme, accent, onAccent, 
     <section className="settings-section security-settings"><div><h2>安全方案</h2><p>新安装默认标准；迁移会先验证再切换</p></div><div className="settings-controls security-controls">
       <div className="security-heading"><div><span>{dirty ? "待应用方案" : "当前方案"}</span><strong>{presetLabel}</strong></div><span className={`security-level level-${preset}`}>{levelLabel}</span></div>
       <div className="security-profile-grid" role="radiogroup" aria-label="安全等级">{profiles.map((profile) => <SecurityProfile key={profile.id} {...profile} selected={preset === profile.id} recommended={profile.id === "standard"} risk={profile.id === "convenient"} onSelect={() => choosePreset(profile.id)} />)}</div>
-      <details className="security-advanced"><summary><Settings2 size={14} />高级组合<span>分别调整凭据保护与入口范围</span></summary><div className="security-advanced-body"><SecurityChoice label="凭据保护" detail="上游地址、账号、密码与代理认证" value={draft.secretStore} options={[{ value: "keychain", label: "Keychain", icon: KeyRound }, { value: "local_file", label: "0600 文件", icon: HardDrive }]} onChange={(secretStore) => setDraft((current) => ({ ...current, secretStore }))} /><SecurityChoice label="网络范围" detail="只影响数据入口，控制面始终仅当前用户" value={draft.networkScope} options={[{ value: "loopback", label: "仅本机", icon: Monitor }, { value: "lan", label: "局域网", icon: Wifi }]} onChange={(networkScope) => setDraft((current) => ({ ...current, networkScope }))} /></div></details>
-      <div className={`security-explainer ${draft.secretStore === "local_file" || draft.networkScope === "lan" ? "warning" : "safe"}`}>{draft.secretStore === "keychain" ? <ShieldCheck size={17} /> : <TriangleAlert size={17} />}<div><strong>{draft.secretStore === "keychain" ? "系统加密保护，会按需授权" : draft.networkScope === "lan" ? "免钥匙串提示，但入口对私网开放" : "免钥匙串提示，但 Secret 不加密"}</strong><p>{draft.secretStore === "keychain" ? "macOS 决定何时显示密码框，Airlock 不能绕过该系统授权。" : "Secret 仅由当前 macOS 账户与 0600 文件权限隔离；同账户的其他进程可能读取。"}{draft.networkScope === "lan" ? " 请只在受信任局域网使用，绝不要映射到公网。" : ""}</p></div></div>
-      {draft.secretStore === "keychain" && <div className="keychain-explanation"><KeyRound size={17} /><div><strong>为什么调试包更容易弹出系统密码框？</strong><p>本地开发包采用 ad-hoc 签名；每次重建后，macOS 可能把新的 airlockd 视为不同程序并重新验证钥匙串访问。选择“始终允许”只对当前构建有效。正式稳定签名可减少询问，但 Keychain 仍保留最终授权决定。</p></div></div>}
-      <div className="security-actions"><span>{dirty ? "应用后会校验迁移结果并短暂重启 airlockd" : preset === "standard" ? "标准模式启动时不会读取 macOS Keychain" : "已与当前运行设置一致"}</span><button className="primary-button" disabled={!dirty || saving || (!connected && draft.secretStore !== securitySettings.secretStore)} onClick={() => void apply()}>{saving ? <RefreshCw className="spin" size={15} /> : <ShieldCheck size={15} />}{saving ? "正在迁移并重启" : "应用设置"}</button></div>
+      <details className="security-advanced"><summary><Settings2 size={14} />高级组合<span>分别调整凭据保护与入口范围</span></summary><div className="security-advanced-body"><SecurityChoice label="凭据保护" detail="上游地址、账号、密码与代理认证" value={draft.secretStore} options={[{ value: "keychain", label: secretStoreName, icon: KeyRound }, { value: "local_file", label: fileStoreName, icon: HardDrive }]} onChange={(secretStore) => setDraft((current) => ({ ...current, secretStore }))} /><SecurityChoice label="网络范围" detail="只影响数据入口，控制面始终仅当前用户" value={draft.networkScope} options={[{ value: "loopback", label: "仅本机", icon: Monitor }, { value: "lan", label: "局域网", icon: Wifi }]} onChange={(networkScope) => setDraft((current) => ({ ...current, networkScope }))} /></div></details>
+      <div className={`security-explainer ${draft.secretStore === "local_file" || draft.networkScope === "lan" ? "warning" : "safe"}`}>{draft.secretStore === "keychain" ? <ShieldCheck size={17} /> : <TriangleAlert size={17} />}<div><strong>{draft.secretStore === "keychain" ? "系统加密保护，会按需授权" : draft.networkScope === "lan" ? "免钥匙串提示，但入口对私网开放" : "免钥匙串提示，但 Secret 不加密"}</strong><p>{draft.secretStore === "keychain" ? platformSecretStoreExplain(platform) : platformFileStoreExplain(platform)}{draft.networkScope === "lan" ? " 请只在受信任局域网使用，绝不要映射到公网。" : ""}</p></div></div>
+      {draft.secretStore === "keychain" && (platform.os === "windows"
+        ? <div className="keychain-explanation"><KeyRound size={17} /><div><strong>{translate("为什么调试包更容易弹出系统凭据框？")}</strong><p>{translate("本地开发包为未签名或自签名构建；每次重建后，Windows 可能把新的 airlockd 视为不同程序并重新验证凭据管理器访问。正式稳定签名可减少询问，但系统仍保留最终授权决定。")}</p></div></div>
+        : platform.os === "linux"
+          ? <div className="keychain-explanation"><KeyRound size={17} /><div><strong>{translate("为什么调试包更容易弹出系统钥匙串？")}</strong><p>{translate("Airlock 使用桌面 Secret Service（如 GNOME Keyring / KWallet）。系统要求解锁时，Airlock 不能绕过；正式签名不影响该授权决定。")}</p></div></div>
+          : <div className="keychain-explanation"><KeyRound size={17} /><div><strong>{translate("为什么调试包更容易弹出系统密码框？")}</strong><p>{translate("本地开发包采用 ad-hoc 签名；每次重建后，macOS 可能把新的 airlockd 视为不同程序并重新验证钥匙串访问。选择“始终允许”只对当前构建有效。正式稳定签名可减少询问，但 Keychain 仍保留最终授权决定。")}</p></div></div>)}
+      <div className="security-actions"><span>{dirty ? "应用后会校验迁移结果并短暂重启 airlockd" : preset === "standard" ? "标准模式启动时不会读取系统钥匙串" : "已与当前运行设置一致"}</span><button className="primary-button" disabled={!dirty || saving || (!connected && draft.secretStore !== securitySettings.secretStore)} onClick={() => void apply()}>{saving ? <RefreshCw className="spin" size={15} /> : <ShieldCheck size={15} />}{saving ? "正在迁移并重启" : "应用设置"}</button></div>
     </div></section>
-    <section className="settings-section"><div><h2>网络与出口</h2><p>{activeNetwork === "lan" ? "数据入口已对局域网开放" : "数据入口仅本机可访问"}</p></div><div className="settings-controls"><ReadOnlyField label="HTTP 入口" value={`${activeNetwork === "lan" ? "0.0.0.0" : "127.0.0.1"}:${securitySettings.httpPort}${activeNetwork === "lan" ? " · 请使用本机局域网 IP" : ""}`} tone={activeNetwork === "lan" ? "warning" : undefined} /><ReadOnlyField label="SSH 入口" value={sshReady ? `${activeNetwork === "lan" ? "0.0.0.0" : "127.0.0.1"}:${securitySettings.sshPort}${activeNetwork === "lan" ? " · 局域网" : " · 已就绪"}` : "等待 airlockd"} tone={sshReady && activeNetwork !== "lan" ? "success" : "warning"} /><div className="listener-port-setting"><div><span>{translate("本地监听端口")}</span><strong className="setting-value">HTTP {securitySettings.httpPort} · SSH {securitySettings.sshPort}</strong><small>{translate("端口被占用时，可切换到其他非特权端口，或结束当前用户的占用进程。")}</small></div><button className="secondary-button compact" onClick={onManagePorts}><Cable size={14} />{translate("管理端口")}</button></div><ReadOnlyField label="控制通道" value={connected ? "Unix Socket · 仅当前用户" : "等待 airlockd"} tone={connected ? "success" : "warning"} /><div className="proxy-setting"><div><span>Clash / SOCKS5 出口</span><strong className={proxyConfigured ? "setting-value success" : "setting-value"}>{proxyConfigured ? `${securitySettings.secretStore === "keychain" ? "Keychain" : "0600 文件"} · 已配置` : "未配置"}</strong></div><div className="inline-actions">{proxyConfigured && <button className="secondary-button compact" onClick={onTestProxy} disabled={!connected || proxyTesting}>{proxyTesting ? <LoaderCircle className="spin" size={14} /> : <HeartPulse size={14} />}{proxyTesting ? "检测中" : "检测连接"}</button>}<button className="secondary-button compact" onClick={onConfigureProxy} disabled={!connected}><Network size={14} />{proxyConfigured ? "更换" : "配置"}</button>{proxyConfigured && <button className="row-icon-button danger visible" onClick={onClearProxy} aria-label="清除代理出口" title="清除代理出口"><Trash2 size={14} /></button>}</div></div></div></section>
-    <section className="settings-section"><div><h2>不变的安全边界</h2><p>便捷模式也不会放开控制面</p></div><div className="settings-controls"><ReadOnlyField label="路由元数据" value="0600 · 不包含明文本地密码" tone="success" /><ReadOnlyField label="SSH 安全核心" value={sshReady ? "双会话隔离 · Shell/PTY 默认拒绝" : "等待本地核心"} tone={sshReady ? "success" : "warning"} /><ReadOnlyField label="敏感录入" value="SSH 内嵌录入 · 仅发送到本机核心" tone="success" /></div></section>
+    <section className="settings-section"><div><h2>网络与出口</h2><p>{activeNetwork === "lan" ? "数据入口已对局域网开放" : "数据入口仅本机可访问"}</p></div><div className="settings-controls"><ReadOnlyField label="HTTP 入口" value={`${activeNetwork === "lan" ? "0.0.0.0" : "127.0.0.1"}:${securitySettings.httpPort}${activeNetwork === "lan" ? " · 请使用本机局域网 IP" : ""}`} tone={activeNetwork === "lan" ? "warning" : undefined} /><ReadOnlyField label="SSH 入口" value={sshReady ? `${activeNetwork === "lan" ? "0.0.0.0" : "127.0.0.1"}:${securitySettings.sshPort}${activeNetwork === "lan" ? " · 局域网" : " · 已就绪"}` : "等待 airlockd"} tone={sshReady && activeNetwork !== "lan" ? "success" : "warning"} /><div className="listener-port-setting"><div><span>{translate("本地监听端口")}</span><strong className="setting-value">HTTP {securitySettings.httpPort} · SSH {securitySettings.sshPort}</strong><small>{translate("端口被占用时，可切换到其他非特权端口，或结束当前用户的占用进程。")}</small></div><button className="secondary-button compact" onClick={onManagePorts}><Cable size={14} />{translate("管理端口")}</button></div><ReadOnlyField label="控制通道" value={connected ? platformControlTransportName(platform) : "等待 airlockd"} tone={connected ? "success" : "warning"} /><div className="proxy-setting"><div><span>Clash / SOCKS5 出口</span><strong className={proxyConfigured ? "setting-value success" : "setting-value"}>{proxyConfigured ? `${securitySettings.secretStore === "local_file" ? fileStoreName : secretStoreName} · 已配置` : "未配置"}</strong></div><div className="inline-actions">{proxyConfigured && <button className="secondary-button compact" onClick={onTestProxy} disabled={!connected || proxyTesting}>{proxyTesting ? <LoaderCircle className="spin" size={14} /> : <HeartPulse size={14} />}{proxyTesting ? "检测中" : "检测连接"}</button>}<button className="secondary-button compact" onClick={onConfigureProxy} disabled={!connected}><Network size={14} />{proxyConfigured ? "更换" : "配置"}</button>{proxyConfigured && <button className="row-icon-button danger visible" onClick={onClearProxy} aria-label="清除代理出口" title="清除代理出口"><Trash2 size={14} /></button>}</div></div></div></section>
+    <section className="settings-section"><div><h2>不变的安全边界</h2><p>便捷模式也不会放开控制面</p></div><div className="settings-controls"><ReadOnlyField label="路由元数据" value={platform.os === "windows" ? "ACL · 不包含明文本地密码" : "0600 · 不包含明文本地密码"} tone="success" /><ReadOnlyField label="SSH 安全核心" value={sshReady ? "双会话隔离 · Shell/PTY 默认拒绝" : "等待本地核心"} tone={sshReady ? "success" : "warning"} /><ReadOnlyField label="敏感录入" value="SSH 内嵌录入 · 仅发送到本机核心" tone="success" /></div></section>
     <DeveloperCard />
   </>;
 }
@@ -702,7 +762,7 @@ function PortManager({ securitySettings, onClose, onSave, onTerminate }: { secur
   };
 
   return <Modal title={translate("本地端口管理")} className="modal-wide port-manager-modal" onClose={saving || terminating ? () => undefined : onClose}>
-    <div className="port-manager-lead"><Cable size={19} /><div><strong>{translate("端口冲突处置")}</strong><p>{translate("只管理 Airlock 的 HTTP 与 SSH 监听端口。结束进程前会再次核对它仍在监听对应端口，且仅允许结束当前 macOS 用户的进程。")}</p></div></div>
+    <div className="port-manager-lead"><Cable size={19} /><div><strong>{translate("端口冲突处置")}</strong><p>{translate("只管理 Airlock 的 HTTP 与 SSH 监听端口。结束进程前会再次核对它仍在监听对应端口，且仅允许结束当前系统用户的进程。")}</p></div></div>
     <section className="port-manager-section"><div className="port-manager-heading"><div><strong>{translate("监听端口")}</strong><span>{translate("使用 1024-65535 的不同端口；保存后本地核心会重启，失败时自动恢复原设置。")}</span></div><button className="icon-button small" onClick={() => void inspect()} disabled={loading || saving || terminating} aria-label={translate("检查端口占用")} title={translate("检查端口占用")}>{loading ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}</button></div>
       <div className="port-input-grid"><label className={`form-field ${httpPort && (!Number.isInteger(parsedHTTPPort) || parsedHTTPPort < 1024 || parsedHTTPPort > 65535) ? "invalid" : ""}`}><span>HTTP</span><input type="text" inputMode="numeric" value={httpPort} onChange={(event) => setHttpPort(event.target.value.replace(/\D/g, "").slice(0, 5))} maxLength={5} aria-invalid={!validPorts} /><small>{translate("固定 URL 与 LLM 路由")}</small></label><label className={`form-field ${sshPort && (!Number.isInteger(parsedSSHPort) || parsedSSHPort < 1024 || parsedSSHPort > 65535) ? "invalid" : ""}`}><span>SSH</span><input type="text" inputMode="numeric" value={sshPort} onChange={(event) => setSshPort(event.target.value.replace(/\D/g, "").slice(0, 5))} maxLength={5} aria-invalid={!validPorts} /><small>{translate("SSH 用户名映射")}</small></label></div>
       {!validPorts && <div className="inline-error"><TriangleAlert size={16} /><span>{translate("请输入两个不同的 1024-65535 端口。")}</span></div>}
@@ -727,7 +787,7 @@ function SecurityChoice<T extends NetworkScope | SecretStoreMode>({ label, detai
 function PreferenceRow({ label, detail, children }: { label: string; detail: string; children: React.ReactNode }) { return <div className="preference-row"><div><strong>{label}</strong><small>{detail}</small></div>{children}</div>; }
 function PreferenceSegment<T extends string | number>({ value, options, onChange }: { value: T; options: Array<{ value: T; label: string }>; onChange: (value: T) => void }) { return <div className="preference-segment" role="group">{options.map((option) => <button key={String(option.value)} className={value === option.value ? "selected" : ""} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; }
 
-function SSHPolicyEditor({ route, testing, onClose, onSave, onUpdateHost, onRotateCredential, onTest, onAddHost, onDelete }: { route: RouteSummary; testing: boolean; onClose: () => void; onSave: (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, recordCommands: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"]) => Promise<void>; onUpdateHost: (input: SSHHostUpdateInput) => Promise<void>; onRotateCredential: (localPassword: string) => Promise<SSHRouteCreationResult>; onTest: () => Promise<boolean>; onAddHost: () => void; onDelete: () => void }) {
+function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHost, onRotateCredential, onTest, onAddHost, onDelete }: { route: RouteSummary; platform: PlatformInfo; testing: boolean; onClose: () => void; onSave: (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, recordCommands: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"]) => Promise<void>; onUpdateHost: (input: SSHHostUpdateInput) => Promise<void>; onRotateCredential: (localPassword: string) => Promise<SSHRouteCreationResult>; onTest: () => Promise<boolean>; onAddHost: () => void; onDelete: () => void }) {
   const [name, setName] = useState(route.name);
   const [localUsername, setLocalUsername] = useState(route.localUsername || route.alias);
   const [egress, setEgress] = useState(route.egress);
@@ -809,8 +869,8 @@ function SSHPolicyEditor({ route, testing, onClose, onSave, onUpdateHost, onRota
         <button className={allowAll ? "selected risk" : "risk"} role="radio" aria-checked={allowAll} onClick={() => setAllowAll(true)}><AlertTriangle size={17} /><span><strong>所有命令</strong><small>任意 exec，仍拒绝 Shell 与 PTY</small></span></button>
       </div>
       {!allowAll && <label className="form-field ssh-command-field"><span>唯一允许命令 <small>{allowedCommand.length}/4096</small></span><input value={allowedCommand} onChange={(event) => setAllowedCommand(event.target.value)} maxLength={4096} spellCheck={false} placeholder="例如：uptime" /><small>按完整字符串匹配，不要在命令参数中填写密码或 Token。</small></label>}
-      {allowAll && <div className="inline-warning policy-warning"><TriangleAlert size={16} /><span>该模式接近远程命令执行权限。保存时还会出现一次 macOS 原生风险确认。</span></div>}
-      <label className="audit-toggle"><input type="checkbox" checked={recordCommands} onChange={(event) => setRecordCommands(event.target.checked)} /><span><strong>记录执行命令</strong><small>完整命令保存在本机 0600 审计文件，参数可能包含敏感内容。</small></span></label>
+      {allowAll && <div className="inline-warning policy-warning"><TriangleAlert size={16} /><span>{translate(platformNativeConfirmText(platform))}</span></div>}
+      <label className="audit-toggle"><input type="checkbox" checked={recordCommands} onChange={(event) => setRecordCommands(event.target.checked)} /><span><strong>{translate("记录执行命令")}</strong><small>{translate("完整命令保存在本机受保护审计文件，参数可能包含敏感内容。")}</small></span></label>
       </section>
       <section className="ssh-manager-section"><div className="ssh-manager-heading"><div><strong>受保护宿主机</strong><span>真实地址、上游账号和密码默认不回显；替换时重新输入</span></div><button className="secondary-button compact" onClick={() => { setHostEditorOpen((current) => !current); setError(undefined); }} disabled={Boolean(busy)}>{hostEditorOpen ? <ChevronRight size={14} /> : <Settings2 size={14} />}{hostEditorOpen ? "收起" : "替换宿主机"}</button></div>{hostEditorOpen && <div className="ssh-host-editor"><div className="ssh-upstream-grid"><label className="form-field"><span>新的 SSH 主机</span><input value={hostAddress} onChange={(event) => updateHostAddress(event.target.value)} placeholder="192.168.1.20" maxLength={505} /></label><label className="form-field ssh-port-field"><span>端口</span><input type="text" inputMode="numeric" value={hostPort} onChange={(event) => updateHostPort(event.target.value)} maxLength={5} placeholder="22" /></label><label className="form-field"><span>新的上游用户名</span><input value={hostUsername} onChange={(event) => setHostUsername(event.target.value)} maxLength={255} /></label></div><SecretField label="新的上游密码" value={hostPassword} visible={hostPasswordVisible} onVisible={() => setHostPasswordVisible((current) => !current)} onChange={setHostPassword} placeholder="输入新的上游密码" detail="只保存到当前受保护凭据存储" />{hostProbe ? <div className="host-key-check ready"><div className="host-key-copy"><strong>新的 SSH Host Key</strong><span>通过可信渠道核对</span></div><code data-i18n="off">{hostProbe.fingerprint}</code><label className="compact-check host-key-accept"><input type="checkbox" checked={hostKeyAccepted} onChange={(event) => setHostKeyAccepted(event.target.checked)} /><span>我已核对并信任此 Host Key</span></label></div> : <button className="secondary-button host-probe-button" onClick={() => void probeHost()} disabled={!hostValid || Boolean(busy)}>{busy === "probe" ? <LoaderCircle className="spin" size={14} /> : <HeartPulse size={14} />}{busy === "probe" ? "检测中" : "检测新宿主 Host Key"}</button>}<div className="secure-entry-actions"><span>替换成功后，原宿主凭据会被覆盖</span><button className="primary-button" onClick={() => void replaceHost()} disabled={!hostValid || !hostProbe || !hostKeyAccepted || Boolean(busy)}>{busy === "host" ? <LoaderCircle className="spin" size={14} /> : <ShieldCheck size={14} />}{busy === "host" ? "正在替换" : "确认替换宿主机"}</button></div></div>}</section>
       <section className="ssh-manager-section"><div className="ssh-manager-heading"><div><strong>本地登录凭据</strong><span>轮换后旧密码或随机凭据立即失效</span></div><div className="policy-segmented"><button className={credentialMode === "generated" ? "selected" : ""} onClick={() => { setCredentialMode("generated"); setLocalPassword(""); setLocalPasswordConfirmation(""); }}><KeyRound size={13} />随机生成</button><button className={credentialMode === "custom" ? "selected" : ""} onClick={() => setCredentialMode("custom")}><ShieldCheck size={13} />自定义密码</button></div></div>{credentialMode === "custom" && <div className="local-password-grid"><SecretField label="新的本地密码" value={localPassword} visible={localPasswordVisible} onVisible={() => setLocalPasswordVisible((current) => !current)} onChange={setLocalPassword} placeholder="至少 12 个字节" detail={`${localPasswordBytes}/1024 bytes`} /><SecretField label="确认新密码" value={localPasswordConfirmation} visible={localPasswordVisible} onVisible={() => setLocalPasswordVisible((current) => !current)} onChange={setLocalPasswordConfirmation} placeholder="再次输入" detail={localPasswordConfirmation && localPassword !== localPasswordConfirmation ? "两次输入不一致" : "只保存摘要"} invalid={Boolean(localPasswordConfirmation && localPassword !== localPasswordConfirmation)} /></div>}<button className="secondary-button rotate-ssh-credential" onClick={() => void rotateCredential()} disabled={!localPasswordValid || Boolean(busy)}>{busy === "rotate" ? <LoaderCircle className="spin" size={14} /> : <RotateCcw size={14} />}{busy === "rotate" ? "正在轮换" : "轮换本地凭据"}</button>{rotatedCredential && <div className="one-time-credential"><span>新的本地凭据，仅显示一次</span><code data-i18n="off">{rotatedCredential}</code></div>}</section>

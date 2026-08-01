@@ -198,7 +198,7 @@ deploy/systemd     Server service examples
 - TTL and one-time capabilities.
 - SSH/HTTP capability rotation and per-connection approval.
 - Sanitized HTTP/LLM activity events and persistent quota/cost reporting.
-- Windows and Linux SecretStore and service integration.
+- Windows and Linux desktop runtime acceptance, signing, and service integration.
 - [Cross-platform artifact and security adaptation](docs/cross-platform.md).
 - Release signing, CI secret scanning, and a complete security review.
 

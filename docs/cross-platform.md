@@ -3,16 +3,18 @@
 Airlock v0.1.4 releases an Apple Silicon macOS desktop preview only. This
 branch adds a **Core/CLI compilation baseline** for Windows and Linux. It does
 not publish a Windows or Linux desktop application, installer, auto-updater,
-or signed artifact.
+or signed artifact. The desktop GUI, local control transport, and native
+prompt flows are now ported at the code level for Windows and Linux; they still
+require real-device runtime acceptance before any release is published.
 
 | Target | Core / CLI build | Local control transport | Platform secret backend | Desktop bundle | Status |
 | --- | --- | --- | --- | --- | --- |
 | macOS arm64 | Native | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Released preview |
 | macOS x64 | Target build | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Installer planned |
-| Windows x64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop planned |
-| Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop planned |
-| Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop planned |
-| Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop planned |
+| Windows x64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop port coded · not released |
+| Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop port coded · not released |
+| Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop port coded · not released |
+| Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop port coded · not released |
 | Linux ARMv7 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Raspberry Pi baseline |
 
 “Cross-compiled” means CI and the target-aware build script compile both
@@ -33,6 +35,20 @@ and installer checklist below is completed.
 - The server Core retains its conservative default: `local_file`, an explicit
   protected data directory, and a separate control token file. The `keychain`
   mode is available only where its platform store is configured and working.
+- The Rust/Tauri desktop client is platform-aware: the control exchange uses
+  the owner-only Unix socket on macOS/Linux and a SHA-256 derived named pipe
+  with overlapped I/O on Windows; protected files use `0600`/`0700` permissions
+  on Unix and an owner-only `icacls` ACL with atomic replace on Windows.
+- Security-sensitive desktop flows use native prompts on every platform:
+  `osascript` dialogs on macOS and PowerShell/Windows Forms dialogs on Windows
+  for protected input, LLM key choice, high-risk SSH confirmation, capability
+  handoff, and security-setting confirmation. Port management on Windows lists
+  owners through `netstat -ano` + `Win32_Process`, filters to the current
+  account, and ends only confirmed processes with `taskkill`.
+- The frontend renders platform-aware labels and zh/en/ja translations for the
+  control transport (Unix socket vs named pipe), credential store (Keychain /
+  Credential Manager / Secret Service), security profiles, and native risk
+  wording.
 - Build targets are explicit and isolated. A target build creates both
   `airlockd` and `airlock`; it does not create a Tauri bundle or alter the
   released npm installer contract.
@@ -43,17 +59,20 @@ Go 1.25 or newer is required. From the repository root, the following
 cross-compile without a target toolchain and place output under `bin/<target>`:
 
 ```bash
-./scripts/build-sidecar.sh windows-amd64
-./scripts/build-sidecar.sh windows-arm64
-./scripts/build-sidecar.sh linux-amd64
-./scripts/build-sidecar.sh linux-arm64
-./scripts/build-sidecar.sh linux-armv7
+node scripts/build-sidecar.mjs windows-amd64
+node scripts/build-sidecar.mjs windows-arm64
+node scripts/build-sidecar.mjs linux-amd64
+node scripts/build-sidecar.mjs linux-arm64
+node scripts/build-sidecar.mjs linux-armv7
 ```
 
-The default command, without an argument, preserves the desktop developer
-sidecar location at `bin/airlockd` and `bin/airlock` for the current host.
-The target names are deliberately limited to the contract table above; an
-unknown target fails before a binary is written.
+`scripts/build-sidecar.sh` remains as a compatibility wrapper around the same
+Node driver. The default command, without an argument, writes the desktop
+developer sidecars into `apps/desktop/src-tauri/binaries/` using Tauri's
+target-triple naming (`airlockd-aarch64-apple-darwin` and so on); an explicit
+target writes plain `airlockd`/`airlock` names under `bin/<target>`. The target
+names are deliberately limited to the contract table above; an unknown target
+fails before a binary is written.
 
 For a Raspberry Pi 3/4 running a 32-bit Raspberry Pi OS or Debian `armhf`
 system, copy `bin/linux-armv7/airlockd` and `bin/linux-armv7/airlock` to the
@@ -73,9 +92,10 @@ these checks on each supported architecture and distribution:
 2. Verify owner-only access to the Windows named pipe and protected state/token
    paths from a different local account; verify `0600` Unix socket and state
    protections on Linux.
-3. Build the Rust/Tauri control client without Unix-only imports, replace its
-   Unix-stream and filesystem-permission assumptions, and provide equivalent
-   native confirmation flows for security-sensitive changes.
+3. Compile the Rust/Tauri control client on real Windows and Linux toolchains
+   and verify the ported named-pipe/Unix control exchange, protected-file ACLs,
+   Windows Forms native prompts, port management, and frontend platform labels
+   on physical devices.
 4. Test service installation, clean removal, upgrades, recovery after a stale
    process, `Direct`/`Proxy`/`Auto` egress, SSH host-key pinning, and failure
    closure on target hardware.

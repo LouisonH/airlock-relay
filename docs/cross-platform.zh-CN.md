@@ -2,16 +2,17 @@
 
 Airlock v0.1.4 目前仅发布 Apple Silicon macOS 桌面测试版。本分支新增的是 Windows 和
 Linux 的**核心/CLI 编译基线**，并不表示已经发布 Windows/Linux 桌面应用、安装器、自动更新
-或签名产物。
+或签名产物。桌面 GUI、本地控制通道与原生提示流程现在已在代码层面完成 Windows/Linux 移植，
+但仍需在真实设备上完成运行验收后才会发布。
 
 | 目标 | Core / CLI 构建 | 本地控制通道 | 平台凭据后端 | 桌面安装包 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | macOS arm64 | 原生 | 当前用户 Unix Socket | Keychain / 受保护文件 | DMG / `.app` | 已发布测试版 |
 | macOS x64 | 目标构建 | 当前用户 Unix Socket | Keychain / 受保护文件 | DMG / `.app` | 安装包计划中 |
-| Windows x64 | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | 桌面端计划中 |
-| Windows arm64 | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | 桌面端计划中 |
-| Linux x64 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | 桌面端计划中 |
-| Linux arm64 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | 桌面端计划中 |
+| Windows x64 | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | 桌面端代码已移植 · 未发布 |
+| Windows arm64 | 交叉编译 | 当前所有者 ACL 命名管道 | Credential Manager / 受保护文件 | NSIS / MSI | 桌面端代码已移植 · 未发布 |
+| Linux x64 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | 桌面端代码已移植 · 未发布 |
+| Linux arm64 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | 桌面端代码已移植 · 未发布 |
 | Linux ARMv7 | 交叉编译 | 当前用户 Unix Socket | Secret Service / 受保护文件 | AppImage / deb | 树莓派基线 |
 
 “交叉编译”仅表示 CI 和目标构建脚本可用 `CGO_ENABLED=0` 编译 `airlockd` 与 `airlock`。
@@ -26,6 +27,15 @@ Linux 的**核心/CLI 编译基线**，并不表示已经发布 Windows/Linux �
   Windows 后端会把较大的加密记录分块，并以原子切换的索引保存，避免超过通用凭据的载荷限制。
 - Server Core 继续采取保守默认值：`local_file`、显式受保护的数据目录和独立控制令牌文件。
   `keychain` 模式仅在对应平台的凭据后端可用且已正确配置时使用。
+- Rust/Tauri 桌面客户端已平台化：macOS/Linux 使用仅当前用户可读的 Unix Socket 交换控制
+  消息，Windows 使用由 SHA-256 派生的命名管道与重叠 I/O；受保护文件在 Unix 上使用
+  `0600`/`0700` 权限，在 Windows 上使用仅当前用户的 `icacls` ACL 与原子替换。
+- 敏感桌面流程在各平台均使用原生弹窗：macOS 使用 `osascript`，Windows 使用
+  PowerShell/Windows Forms，覆盖安全录入、LLM Key 选择、高风险 SSH 确认、一次性
+  Capability 交接与安全设置确认。Windows 端口管理通过 `netstat -ano` +
+  `Win32_Process` 列出占用者、过滤当前账户，并只对确认的进程使用 `taskkill`。
+- 前端提供平台感知文案与中/英/日翻译，覆盖控制通道（Unix Socket / 命名管道）、凭据存储
+  （Keychain / Credential Manager / Secret Service）、安全等级说明与原生风险提示。
 - 构建目标显式隔离。每次目标构建都会产出 `airlockd` 与 `airlock`，不会生成 Tauri 包，也
   不会改变 npm 安装器的已发布平台范围。
 
@@ -35,15 +45,17 @@ Linux 的**核心/CLI 编译基线**，并不表示已经发布 Windows/Linux �
 `bin/<target>`：
 
 ```bash
-./scripts/build-sidecar.sh windows-amd64
-./scripts/build-sidecar.sh windows-arm64
-./scripts/build-sidecar.sh linux-amd64
-./scripts/build-sidecar.sh linux-arm64
-./scripts/build-sidecar.sh linux-armv7
+node scripts/build-sidecar.mjs windows-amd64
+node scripts/build-sidecar.mjs windows-arm64
+node scripts/build-sidecar.mjs linux-amd64
+node scripts/build-sidecar.mjs linux-arm64
+node scripts/build-sidecar.mjs linux-armv7
 ```
 
-不带参数时，脚本会保留桌面开发所需的当前主机输出位置：`bin/airlockd` 与 `bin/airlock`。
-仅支持表中的目标名；未知目标会在写入任何二进制文件前失败。
+`scripts/build-sidecar.sh` 保留为同一 Node 驱动的兼容入口。不带参数时，脚本会把桌面开发
+sidecar 按 Tauri 的目标三元组命名写入 `apps/desktop/src-tauri/binaries/`（例如
+`airlockd-aarch64-apple-darwin`）；显式指定目标时，则以普通 `airlockd`/`airlock` 名称写入
+`bin/<target>`。仅支持表中的目标名；未知目标会在写入任何二进制文件前失败。
 
 对于运行 32 位 Raspberry Pi OS 或 Debian `armhf` 的树莓派 3/4，将
 `bin/linux-armv7/airlockd` 与 `bin/linux-armv7/airlock` 复制到设备，再按
@@ -58,8 +70,8 @@ Windows/Linux 成为正式发布目标前，维护者必须在每一种受支持
    读取、轮换、删除，以及凭据库锁定或不可用时的失败关闭。
 2. 用另一台本地账户验证 Windows 命名管道和受保护状态/令牌路径不可访问；在 Linux 验证
    `0600` Unix Socket 与状态目录的所有者权限。
-3. 移植 Rust/Tauri 控制客户端，移除 Unix stream、Unix 文件权限和 macOS 专属确认流程，
-   并为高风险系统操作提供等价的原生确认。
+3. 在真实 Windows/Linux 工具链上编译 Rust/Tauri 控制客户端，并在物理设备上核验已移植的
+   命名管道/Unix 控制交换、受保护文件 ACL、Windows Forms 原生弹窗、端口管理与前端平台文案。
 4. 在目标硬件测试服务安装、干净卸载、升级、残留进程恢复、`Direct`/`Proxy`/`Auto` 出口、
    SSH Host Key 固定与失败关闭。
 5. 构建架构专用安装器、独立签名和固定校验和，并分别测试安装、更新与卸载。

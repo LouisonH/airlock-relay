@@ -1,10 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
-    fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Read, Write},
-    os::unix::fs::{OpenOptionsExt, PermissionsExt},
-    os::unix::net::UnixStream,
+    fs::File,
+    io::{BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
@@ -13,6 +11,10 @@ use std::{
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+mod platform;
+#[cfg(windows)]
+mod native_windows;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -75,6 +77,10 @@ fn native_text(source: &str) -> Cow<'_, str> {
         ("ja", "局域网设备将能连接 Airlock 的 HTTP/SSH 入口，仍需要每条路由的凭据。") => "プライベート LAN 上のデバイスから Airlock の HTTP/SSH 入口に接続できるようになります。各ルートの認証情報は引き続き必要です。",
         ("en", "上游地址和凭据将保存在仅当前用户可读的 0600 文件中，不再由 macOS Keychain 加密保护。") => "Upstream addresses and credentials will be stored in a 0600 file readable only by the current user, without macOS Keychain encryption.",
         ("ja", "上游地址和凭据将保存在仅当前用户可读的 0600 文件中，不再由 macOS Keychain 加密保护。") => "上流アドレスと認証情報は、現在のユーザーだけが読み取れる 0600 ファイルに保存され、macOS Keychain では暗号化されません。",
+        ("en", "上游地址和凭据将保存在仅当前用户可读的受保护文件中，不再由系统凭据库加密保护。") => "Upstream addresses and credentials will be stored in a protected file readable only by the current user, without system credential-store encryption.",
+        ("ja", "上游地址和凭据将保存在仅当前用户可读的受保护文件中，不再由系统凭据库加密保护。") => "上流アドレスと認証情報は、現在のユーザーだけが読み取れる保護されたファイルに保存され、システムの資格情報ストアでは暗号化されません。",
+        ("en", "复制") => "Copy",
+        ("ja", "复制") => "コピー",
         ("en", "应用设置会短暂重启本地转发核心。") => "Applying these settings briefly restarts the local relay core.",
         ("ja", "应用设置会短暂重启本地转发核心。") => "設定を適用すると、ローカル転送コアが短時間再起動します。",
         ("en", "高风险 SSH 权限") => "High-risk SSH permissions",
@@ -144,7 +150,7 @@ fn native_text(source: &str) -> Cow<'_, str> {
 
 #[derive(Clone)]
 struct ControlClient {
-    socket_path: PathBuf,
+    endpoint: String,
     token: Arc<SecretToken>,
 }
 
@@ -533,6 +539,16 @@ struct SecurityUpdate {
     message: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlatformInfo {
+    os: String,
+    arch: String,
+    control_transport: String,
+    secret_store: String,
+    desktop_release: bool,
+}
+
 impl ControlClient {
     fn request(&self, request: &ControlRequest<'_>) -> Result<ControlResponse, String> {
         self.request_with_timeout(request, CONTROL_EXCHANGE_TIMEOUT)
@@ -605,23 +621,14 @@ impl ControlClient {
     }
 
     fn exchange(&self, payload: &[u8], timeout: Duration) -> Result<ControlResponse, String> {
-        let mut stream = UnixStream::connect(&self.socket_path)
-            .map_err(|_| "无法连接 airlockd 控制通道".to_string())?;
-        stream
-            .set_read_timeout(Some(timeout))
-            .map_err(|_| "无法保护控制通道".to_string())?;
-        stream
-            .set_write_timeout(Some(timeout))
-            .map_err(|_| "无法保护控制通道".to_string())?;
-        stream
-            .write_all(payload)
-            .map_err(|_| "控制请求发送失败".to_string())?;
-
         let mut raw = String::new();
-        BufReader::new(stream)
-            .take(MAX_CONTROL_RESPONSE)
-            .read_line(&mut raw)
-            .map_err(|_| "控制响应读取失败".to_string())?;
+        let response = platform::exchange_control(&self.endpoint, payload, timeout)
+            .map_err(|_| "无法连接 airlockd 控制通道".to_string())?;
+        raw.push_str(&response);
+        if raw.len() > MAX_CONTROL_RESPONSE as usize {
+            clear_string(&mut raw);
+            return Err("控制响应过大".to_string());
+        }
         let response = serde_json::from_str::<ControlResponse>(&raw)
             .map_err(|_| "控制响应格式无效".to_string());
         clear_string(&mut raw);
@@ -634,6 +641,40 @@ impl ControlClient {
             });
         }
         Ok(response)
+    }
+}
+
+#[tauri::command]
+fn get_platform_info() -> PlatformInfo {
+    let os = if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        "other"
+    };
+    PlatformInfo {
+        os: os.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        control_transport: if cfg!(windows) {
+            "named-pipe".to_string()
+        } else {
+            "unix-socket".to_string()
+        },
+        secret_store: if cfg!(target_os = "macos") {
+            "keychain".to_string()
+        } else if cfg!(windows) {
+            "credential-manager".to_string()
+        } else {
+            "secret-service".to_string()
+        },
+        desktop_release: cfg!(all(
+            target_os = "macos",
+            target_arch = "aarch64",
+            not(debug_assertions)
+        )),
     }
 }
 
@@ -2099,22 +2140,64 @@ fn prompt_llm_local_api_key() -> Result<(String, bool), String> {
     Ok((local_api_key, true))
 }
 
-#[cfg(not(target_os = "macos"))]
-fn prompt_protected_value(_message: &str, _optional: bool) -> Result<String, String> {
-    Err("当前版本仅支持 macOS 原生安全录入".to_string())
+#[cfg(windows)]
+fn prompt_protected_value(message: &str, optional: bool) -> Result<String, String> {
+    native_windows::prompt_protected_value(message, optional)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn prompt_native_value(
+    message: &str,
+    optional: bool,
+    hidden: bool,
+    default_value: &str,
+) -> Result<String, String> {
+    native_windows::prompt_native_value(message, optional, hidden, default_value)
+}
+
+#[cfg(windows)]
+fn prompt_native_value_with_title(
+    title: &str,
+    message: &str,
+    optional: bool,
+    hidden: bool,
+    default_value: &str,
+) -> Result<String, String> {
+    native_windows::prompt_native_value_with_title(
+        title,
+        message,
+        optional,
+        hidden,
+        default_value,
+    )
+}
+
+#[cfg(windows)]
+fn choose_llm_local_api_key_mode() -> Result<bool, String> {
+    native_windows::choose_llm_local_api_key_mode()
+}
+
+#[cfg(windows)]
+fn prompt_llm_local_api_key() -> Result<(String, bool), String> {
+    native_windows::prompt_llm_local_api_key()
+}
+
+#[cfg(all(not(target_os = "macos"), not(windows)))]
+fn prompt_protected_value(_message: &str, _optional: bool) -> Result<String, String> {
+    Err("当前版本暂不支持该平台的原生安全录入".to_string())
+}
+
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 fn prompt_native_value(
     _message: &str,
     _optional: bool,
     _hidden: bool,
     _default_value: &str,
 ) -> Result<String, String> {
-    Err("当前版本仅支持 macOS 原生安全录入".to_string())
+    Err("当前版本暂不支持该平台的原生安全录入".to_string())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 fn prompt_native_value_with_title(
     _title: &str,
     _message: &str,
@@ -2122,17 +2205,17 @@ fn prompt_native_value_with_title(
     _hidden: bool,
     _default_value: &str,
 ) -> Result<String, String> {
-    Err("当前版本仅支持 macOS 原生安全录入".to_string())
+    Err("当前版本暂不支持该平台的原生安全录入".to_string())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 fn choose_llm_local_api_key_mode() -> Result<bool, String> {
-    Err("当前版本仅支持 macOS 原生二次 API Key 设置".to_string())
+    Err("当前版本暂不支持该平台的二次 API Key 设置".to_string())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 fn prompt_llm_local_api_key() -> Result<(String, bool), String> {
-    Err("当前版本仅支持 macOS 原生二次 API Key 设置".to_string())
+    Err("当前版本暂不支持该平台的二次 API Key 设置".to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -2179,9 +2262,19 @@ true;
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
+    let (message, title, _allow) = match ui_locale() {
+        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, SFTP, and port forwarding remain denied, but commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
+        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、SFTP、ポート転送は引き続き拒否されますが、コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
+        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY、SFTP 与端口转发仍会被拒绝，但上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
+    };
+    native_windows::confirm_yes_no(title, &message.replace("{alias}", alias))
+}
+
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 fn confirm_allow_all_commands(_alias: &str) -> Result<(), String> {
-    Err("当前版本仅支持 macOS 原生 SSH 风险确认".to_string())
+    Err("当前版本暂不支持该平台的原生 SSH 风险确认".to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -2295,19 +2388,73 @@ true;
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
-fn present_capability(_endpoint: &str, _capability: &str) -> Result<(), String> {
-    Err("当前版本仅支持 macOS 原生 Capability 窗口".to_string())
+#[cfg(windows)]
+fn present_capability(endpoint: &str, capability: &str) -> Result<(), String> {
+    native_windows::present_text(
+        &native_text("Airlock 路由已创建"),
+        &native_text("路由已安全保存。Capability 仅显示这一次，请交给需要访问该路由的客户端。"),
+        &format!("{endpoint}\n{capability}"),
+    )
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn present_llm_access(
+    provider: &str,
+    endpoint: &str,
+    capability: &str,
+    custom_local_key: bool,
+) -> Result<(), String> {
+    let (custom_message, random_message, custom_placeholder) = match ui_locale() {
+        "en" => (
+            "The LLM route is enabled. Airlock will not reveal the custom local API key.",
+            "The LLM route is enabled. The random local API key is shown only once.",
+            "<use the local API key set earlier>",
+        ),
+        "ja" => (
+            "LLM ルートが有効になりました。Airlock はカスタムのローカル API Key を再表示しません。",
+            "LLM ルートが有効になりました。ランダム生成されたローカル API Key は一度だけ表示されます。",
+            "<先ほど設定したローカル API Key を使用>",
+        ),
+        _ => (
+            "LLM 路由已启用。Airlock 不会回显自定义的本地 API Key。",
+            "LLM 路由已启用。随机生成的本地 API Key 仅显示这一次。",
+            "<使用刚才设置的本地 API Key>",
+        ),
+    };
+    let openai = provider == "openai";
+    let prefix = if openai { "OPENAI" } else { "ANTHROPIC" };
+    let base_url = if openai {
+        format!("{}/v1", endpoint.trim_end_matches('/'))
+    } else {
+        endpoint.to_string()
+    };
+    let api_key = if custom_local_key {
+        custom_placeholder
+    } else {
+        capability
+    };
+    let details = format!("{prefix}_BASE_URL={base_url}\n{prefix}_API_KEY={api_key}");
+    let message = if custom_local_key {
+        custom_message
+    } else {
+        random_message
+    };
+    native_windows::present_text(&native_text("Airlock LLM 路由已创建"), message, &details)
+}
+
+#[cfg(all(not(target_os = "macos"), not(windows)))]
+fn present_capability(_endpoint: &str, _capability: &str) -> Result<(), String> {
+    Err("当前版本暂不支持该平台的 Capability 窗口".to_string())
+}
+
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 fn present_llm_access(
     _provider: &str,
     _endpoint: &str,
     _capability: &str,
     _custom_local_key: bool,
 ) -> Result<(), String> {
-    Err("当前版本仅支持 macOS 原生 LLM 连接信息窗口".to_string())
+    Err("当前版本暂不支持该平台的 LLM 连接信息窗口".to_string())
 }
 
 fn clear_string(value: &mut String) {
@@ -2317,9 +2464,7 @@ fn clear_string(value: &mut String) {
 
 fn generate_control_token() -> Result<Arc<SecretToken>, String> {
     let mut random = [0_u8; 32];
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut source| source.read_exact(&mut random))
-        .map_err(|_| "无法生成本地控制令牌".to_string())?;
+    getrandom::getrandom(&mut random).map_err(|_| "无法生成本地控制令牌".to_string())?;
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut token = String::with_capacity(80);
     token.push_str("airlock_control_");
@@ -2372,9 +2517,8 @@ fn load_security_settings(path: &PathBuf) -> Result<SecuritySettings, String> {
     let parent = path
         .parent()
         .ok_or_else(|| "安全设置路径无效".to_string())?;
-    std::fs::create_dir_all(parent).map_err(|_| "无法创建安全设置目录".to_string())?;
-    std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))
-        .map_err(|_| "无法保护安全设置目录".to_string())?;
+    platform::protect_directory(parent)
+        .map_err(|_| "无法创建或保护安全设置目录".to_string())?;
     let metadata = match std::fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -2384,12 +2528,16 @@ fn load_security_settings(path: &PathBuf) -> Result<SecuritySettings, String> {
         }
         Err(_) => return Err("无法读取安全设置".to_string()),
     };
-    if !metadata.is_file()
-        || metadata.file_type().is_symlink()
-        || metadata.permissions().mode() & 0o077 != 0
-        || metadata.len() > 4096
-    {
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 4096 {
         return Err("安全设置文件权限或类型无效".to_string());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err("安全设置文件权限或类型无效".to_string());
+        }
     }
     let raw = std::fs::read(path).map_err(|_| "无法读取安全设置".to_string())?;
     let settings = serde_json::from_slice::<SecuritySettings>(&raw)
@@ -2403,9 +2551,8 @@ fn save_security_settings(path: &PathBuf, settings: &SecuritySettings) -> Result
     let parent = path
         .parent()
         .ok_or_else(|| "安全设置路径无效".to_string())?;
-    std::fs::create_dir_all(parent).map_err(|_| "无法创建安全设置目录".to_string())?;
-    std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))
-        .map_err(|_| "无法保护安全设置目录".to_string())?;
+    platform::protect_directory(parent)
+        .map_err(|_| "无法创建或保护安全设置目录".to_string())?;
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| "无法生成安全设置临时路径".to_string())?
@@ -2414,11 +2561,7 @@ fn save_security_settings(path: &PathBuf, settings: &SecuritySettings) -> Result
         ".security-settings-{}-{nonce}.tmp",
         std::process::id()
     ));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&temporary)
+    let mut file = platform::open_private_file(&temporary, true, false)
         .map_err(|_| "无法创建安全设置临时文件".to_string())?;
     let result = (|| {
         let payload =
@@ -2428,7 +2571,8 @@ fn save_security_settings(path: &PathBuf, settings: &SecuritySettings) -> Result
         file.sync_all()
             .map_err(|_| "无法同步安全设置".to_string())?;
         drop(file);
-        std::fs::rename(&temporary, path).map_err(|_| "无法安装安全设置".to_string())?;
+        platform::replace_file(&temporary, path)
+            .map_err(|_| "无法安装安全设置".to_string())?;
         Ok(())
     })();
     if result.is_err() {
@@ -2538,12 +2682,39 @@ true;
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn confirm_security_change(
+    current: &SecuritySettings,
+    next: &SecuritySettings,
+) -> Result<(), String> {
+    let mut risks: Vec<Cow<'_, str>> = Vec::new();
+    if current.network_scope != "lan" && next.network_scope == "lan" {
+        risks.push(native_text(
+            "局域网设备将能连接 Airlock 的 HTTP/SSH 入口，仍需要每条路由的凭据。",
+        ));
+    }
+    if current.secret_store != "local_file" && next.secret_store == "local_file" {
+        risks.push(native_text(
+            "上游地址和凭据将保存在仅当前用户可读的受保护文件中，不再由系统凭据库加密保护。",
+        ));
+    }
+    if risks.is_empty() {
+        return Ok(());
+    }
+    let message = format!(
+        "{}\n\n{}",
+        risks.iter().map(Cow::as_ref).collect::<Vec<_>>().join("\n\n"),
+        native_text("应用设置会短暂重启本地转发核心。")
+    );
+    native_windows::confirm_yes_no(&native_text("Airlock 安全设置"), &message)
+}
+
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 fn confirm_security_change(
     _current: &SecuritySettings,
     _next: &SecuritySettings,
 ) -> Result<(), String> {
-    Err("当前版本仅支持 macOS 原生安全设置确认".to_string())
+    Err("当前版本暂不支持该平台的原生安全设置确认".to_string())
 }
 
 fn locate_sidecar(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -2552,16 +2723,26 @@ fn locate_sidecar(app: &tauri::AppHandle) -> Result<PathBuf, String> {
             return Ok(path);
         }
     }
+    let binary_name = platform::sidecar_binary_name();
+    let triple_binary_name = platform::sidecar_bundle_name();
     let mut candidates = Vec::new();
     if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(resource_dir.join("airlockd"));
+        candidates.push(resource_dir.join(binary_name));
     }
     if let Ok(executable) = std::env::current_exe() {
         if let Some(directory) = executable.parent() {
-            candidates.push(directory.join("airlockd"));
+            candidates.push(directory.join(binary_name));
         }
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../bin/airlockd"));
+    if let Some(triple_name) = triple_binary_name {
+        candidates.push(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("binaries")
+                .join(triple_name),
+        );
+    }
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries").join(binary_name));
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../bin").join(binary_name));
     candidates
         .into_iter()
         .find(|path| path.is_file())
@@ -2573,19 +2754,11 @@ fn create_sidecar_startup_log(app: &tauri::AppHandle) -> Result<(PathBuf, File),
         .path()
         .app_config_dir()
         .map_err(|_| "无法读取 Airlock 配置目录".to_string())?;
-    std::fs::create_dir_all(&directory).map_err(|_| "无法创建 Airlock 配置目录".to_string())?;
-    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))
-        .map_err(|_| "无法保护 Airlock 配置目录".to_string())?;
+    platform::protect_directory(&directory)
+        .map_err(|_| "无法创建或保护 Airlock 配置目录".to_string())?;
     let path = directory.join("airlockd-startup.log");
-    let file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&path)
+    let file = platform::open_private_file(&path, false, true)
         .map_err(|_| "无法创建本地核心启动日志".to_string())?;
-    file.set_permissions(std::fs::Permissions::from_mode(0o600))
-        .map_err(|_| "无法保护本地核心启动日志".to_string())?;
     Ok((path, file))
 }
 
@@ -2628,6 +2801,12 @@ fn spawn_sidecar(
     let http_address = listener_address(settings, settings.http_port);
     let ssh_address = listener_address(settings, settings.ssh_port);
     let mut command = Command::new(binary);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
     command
         .arg("--control-token-stdin")
         .args(["--listen", &http_address])
@@ -2861,7 +3040,7 @@ async fn restart_local_core(
     .map_err(|_| "本地核心重启意外终止".to_string())?
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PortOwner {
     port: u16,
@@ -2869,6 +3048,7 @@ struct PortOwner {
     command: String,
 }
 
+#[cfg(unix)]
 #[derive(Default)]
 struct RawPortOwner {
     pid: Option<u32>,
@@ -2876,6 +3056,7 @@ struct RawPortOwner {
     uid: Option<u32>,
 }
 
+#[cfg(unix)]
 fn append_port_owner(
     owners: &mut Vec<PortOwner>,
     raw: &RawPortOwner,
@@ -2906,6 +3087,7 @@ fn append_port_owner(
     });
 }
 
+#[cfg(unix)]
 fn listening_port_owners(port: u16, managed_pid: Option<u32>) -> Result<Vec<PortOwner>, String> {
     let selection = format!("-iTCP:{port}");
     let output = Command::new("/usr/sbin/lsof")
@@ -2940,6 +3122,49 @@ fn listening_port_owners(port: u16, managed_pid: Option<u32>) -> Result<Vec<Port
         }
     }
     append_port_owner(&mut owners, &raw, port, current_uid, managed_pid);
+    owners.sort_by_key(|owner| owner.pid);
+    owners.dedup_by_key(|owner| owner.pid);
+    Ok(owners)
+}
+
+#[cfg(windows)]
+fn listening_port_owners(port: u16, managed_pid: Option<u32>) -> Result<Vec<PortOwner>, String> {
+    let script = r#"
+$port = [int]$env:AIRLOCK_PORT
+$rows = netstat -ano | Select-String -Pattern 'LISTENING'
+$owners = foreach ($row in $rows) {
+  $parts = ($row.Line -split '\s+') | Where-Object { $_ -ne '' }
+  if ($parts.Count -lt 5) { continue }
+  $local = $parts[1]
+  $state = $parts[3]
+  $pidText = $parts[4]
+  if ($state -ne 'LISTENING') { continue }
+  if ($local -notmatch (':' + $port + '$')) { continue }
+  $pid = 0
+  if (-not [int]::TryParse($pidText, [ref]$pid)) { continue }
+  if ($pid -le 0) { continue }
+  $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $pid" -ErrorAction SilentlyContinue
+  if (-not $proc) { continue }
+  $owner = Invoke-CimMethod -InputObject $proc -MethodName GetOwner -ErrorAction SilentlyContinue
+  if (-not $owner -or $owner.User -ne $env:USERNAME) { continue }
+  [pscustomobject]@{ port = $port; pid = $pid; command = $proc.Name }
+}
+$owners | Sort-Object pid -Unique | ConvertTo-Json -Compress
+"#;
+    let output = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .env("AIRLOCK_PORT", port.to_string())
+        .output()
+        .map_err(|_| "无法读取端口占用情况".to_string())?;
+    if output.stdout.len() > 64 << 10 {
+        return Err("端口占用信息异常".to_string());
+    }
+    if output.stdout.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Ok(Vec::new());
+    }
+    let mut owners: Vec<PortOwner> =
+        serde_json::from_slice(&output.stdout).map_err(|_| "端口占用信息无效".to_string())?;
+    owners.retain(|owner| Some(owner.pid) != managed_pid);
     owners.sort_by_key(|owner| owner.pid);
     owners.dedup_by_key(|owner| owner.pid);
     Ok(owners)
@@ -2995,10 +3220,21 @@ async fn terminate_listener_port_owner(
         if !owners.iter().any(|owner| owner.pid == pid) {
             return Err("该进程不再监听所选端口，未执行结束操作".to_string());
         }
-        let status = Command::new("/bin/kill")
-            .args(["-TERM", &pid.to_string()])
-            .status()
-            .map_err(|_| "无法向该进程发送结束请求".to_string())?;
+        let status = {
+            #[cfg(unix)]
+            {
+                Command::new("/bin/kill")
+                    .args(["-TERM", &pid.to_string()])
+                    .status()
+            }
+            #[cfg(windows)]
+            {
+                Command::new("taskkill")
+                    .args(["/PID", &pid.to_string()])
+                    .status()
+            }
+        }
+        .map_err(|_| "无法向该进程发送结束请求".to_string())?;
         if !status.success() {
             return Err("系统拒绝结束该进程".to_string());
         }
@@ -3034,7 +3270,7 @@ pub fn run() {
                 load_security_settings(&security_path).map_err(std::io::Error::other)?;
             let token = generate_control_token().map_err(std::io::Error::other)?;
             let client = ControlClient {
-                socket_path: config_directory.join("control.sock"),
+                endpoint: platform::local_control_endpoint(&config_directory),
                 token,
             };
             let process = DaemonProcess(Arc::new(Mutex::new(None)));
@@ -3121,7 +3357,8 @@ pub fn run() {
             list_listener_port_owners,
             terminate_listener_port_owner,
             open_external_url,
-            set_ui_locale
+            set_ui_locale,
+            get_platform_info
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -3289,8 +3526,10 @@ mod tests {
         assert!(payload.get("host_key").is_none());
     }
 
+    #[cfg(unix)]
     #[test]
     fn authenticated_control_request_preserves_ssh_local_usernames() {
+        use std::io::BufRead;
         use std::os::unix::net::UnixListener;
         use std::thread;
 
@@ -3317,7 +3556,7 @@ mod tests {
             raw
         });
         let client = ControlClient {
-            socket_path,
+            endpoint: socket_path.to_string_lossy().into_owned(),
             token: Arc::new(SecretToken("authenticated-test-token".to_string())),
         };
         let request = ControlRequest {
@@ -3366,11 +3605,14 @@ mod tests {
         assert_eq!(payload["token"], "authenticated-test-token");
         assert_eq!(payload["create_ssh"]["local_username"], "builder");
         assert_eq!(payload["ssh_policy"]["local_username"], "release");
-        let _ = std::fs::remove_file(client.socket_path);
+        let _ = std::fs::remove_file(PathBuf::from(&client.endpoint));
     }
 
+    #[cfg(unix)]
     #[test]
     fn security_settings_persist_with_user_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
         let directory = TestDirectory::new();
         let path = directory.path().join("security-settings.json");
         let settings = SecuritySettings {
@@ -3404,8 +3646,11 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn older_security_settings_receive_default_listener_ports() {
+        use std::os::unix::fs::PermissionsExt;
+
         let directory = TestDirectory::new();
         let path = directory.path().join("security-settings.json");
         std::fs::write(
@@ -3420,6 +3665,7 @@ mod tests {
         assert_eq!(settings.ssh_port, DEFAULT_SSH_PORT);
     }
 
+    #[cfg(unix)]
     #[test]
     fn port_owner_filter_keeps_only_external_current_user_processes() {
         let current_uid = unsafe { libc::geteuid() } as u32;
