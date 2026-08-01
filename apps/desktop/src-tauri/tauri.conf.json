@@ -39,6 +39,11 @@
     "shortDescription": "Local credential-isolation relay for HTTP, SSH, and LLM traffic",
     "targets": "all",
     "externalBin": ["binaries/airlockd"],
+    "windows": {
+      "wix": {
+        "version": "0.1.5.0"
+      }
+    },
     "macOS": {
       "minimumSystemVersion": "12.0",
       "signingIdentity": "-"
