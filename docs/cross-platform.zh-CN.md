@@ -38,6 +38,9 @@ Linux 的**核心/CLI 编译基线**，并不表示已经发布 Windows/Linux �
   （Keychain / Credential Manager / Secret Service）、安全等级说明与原生风险提示。
 - CI 会在每次推送时对 Windows x64、Windows arm64 与 Linux x64 桌面目标运行 Rust
   `cargo check`，在真实目标工具链上持续复核已移植的控制客户端，直到进入运行验收阶段。
+- 独立的 `desktop-windows` 工作流会在 GitHub 官方 Windows runner 上构建 Windows x64 与
+  arm64 的 NSIS/MSI 安装包，并以可下载产物形式发布。正式签名配置完成前产物不签名，
+  SmartScreen 首次运行时可能提示。
 - 构建目标显式隔离。每次目标构建都会产出 `airlockd` 与 `airlock`，不会生成 Tauri 包，也
   不会改变 npm 安装器的已发布平台范围。
 

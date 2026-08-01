@@ -1,0 +1,64 @@
+name: Desktop Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "codex/**"
+    paths:
+      - "apps/desktop/**"
+      - "scripts/build-sidecar.mjs"
+      - ".github/workflows/desktop-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    name: Build Windows installer (${{ matrix.target }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-amd64
+            triple: x86_64-pc-windows-msvc
+          - target: windows-arm64
+            triple: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc, aarch64-pc-windows-msvc
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Build Tauri sidecars (both Windows architectures)
+        shell: bash
+        env:
+          AIRLOCK_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/src-tauri/binaries
+        run: |
+          node scripts/build-sidecar.mjs windows-amd64
+          node scripts/build-sidecar.mjs windows-arm64
+      - name: Build desktop installer
+        working-directory: apps/desktop
+        run: npm run tauri build -- --target ${{ matrix.triple }}
+      - name: Collect installer artifacts
+        shell: bash
+        run: |
+          mkdir -p .verify/installer-${{ matrix.target }}
+          find apps/desktop/src-tauri/target/${{ matrix.triple }}/release/bundle -type f \( -name "*.msi" -o -name "*.exe" \) -exec cp {} .verify/installer-${{ matrix.target }}/ \;
+      - uses: actions/upload-artifact@v5
+        with:
+          name: airlock-windows-${{ matrix.target }}
+          path: .verify/installer-${{ matrix.target }}/
+          if-no-files-found: error

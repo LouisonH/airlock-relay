@@ -46,6 +46,10 @@ Desktop GUI、local control transport、native prompt フローはコードレ�
 - CI は push のたびに Windows x64、Windows arm64、Linux x64 の Desktop ターゲットで
   Rust `cargo check` を実行し、移植済みの control client を実機 acceptance 前に
   継続的に検証します。
+- 別の `desktop-windows` workflow が GitHub の Windows runner 上で Windows x64/arm64
+  向け NSIS/MSI インストーラーをビルドし、ダウンロード可能な artifact として公開します。
+  release signing の設定が完了するまで署名なしのため、SmartScreen が初回起動時に警告する
+  場合があります。
 - Target build は明示的に分離され、`airlockd` と `airlock` の両方を生成します。Tauri bundle
   を作らず、npm installer が公開済みとする対象範囲も変更しません。
 

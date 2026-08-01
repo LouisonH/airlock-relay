@@ -52,6 +52,10 @@ and installer checklist below is completed.
 - CI runs Rust `cargo check` for the Windows x64, Windows arm64, and Linux x64
   desktop targets on every push, so the ported control client is re-verified
   on real target toolchains before runtime acceptance.
+- A separate `desktop-windows` workflow builds the NSIS/MSI installers for
+  Windows x64 and arm64 on GitHub-hosted Windows runners and publishes them as
+  downloadable artifacts. The artifacts are unsigned until release signing is
+  configured, so SmartScreen may warn on first run.
 - Build targets are explicit and isolated. A target build creates both
   `airlockd` and `airlock`; it does not create a Tauri bundle or alter the
   released npm installer contract.
