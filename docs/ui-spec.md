@@ -9,7 +9,7 @@ Airlock Desktop is a native control plane for the local relay. It is not a web a
 - Activity: sanitized metadata by default. Full SSH commands appear only for routes with explicit command auditing enabled; targets, headers, credentials, and request/response bodies never appear.
 - Settings: appearance, refresh cadence, density, motion, listener scope, SecretStore protection, proxy profiles, security defaults, and diagnostics.
 
-The default window is 1120x720 with a minimum size of 960x640. Navigation uses a fixed sidebar that narrows at medium widths. Narrow windows hide secondary table columns rather than converting operational rows into cards; route actions must remain reachable without horizontal clipping.
+The default window is 1120x720 with a minimum size of 960x640. Tauri desktop builds use an Airlock-owned 38px title bar with drag, minimize, maximize, and close controls; the operating-system frame is disabled so Windows does not render a mismatched native title bar. Navigation uses a fixed sidebar that narrows at medium widths. Narrow windows hide secondary table columns rather than converting operational rows into cards; route actions must remain reachable without horizontal clipping.
 
 ## Security Rules
 

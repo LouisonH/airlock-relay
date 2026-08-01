@@ -54,7 +54,7 @@ Airlock is a fixed-route relay, not an open proxy, VPN, or general provider-mana
   requires explicit high-risk acknowledgement inside Airlock.
 - Multiple routes may share one upstream address; distinct local usernames select
   independent upstream accounts and protected credentials.
-- Shell, PTY, SFTP, agent/X11 forwarding, and port forwarding remain denied.
+- Shell, PTY, agent/X11 forwarding, and port forwarding remain denied. SFTP is disabled by default and can be explicitly enabled per route for modern `scp`/SFTP clients; it remains a separate high-risk file access permission.
 - Optional per-route command audit stored in a user-only `0600` rolling file.
 
 ### LLM API

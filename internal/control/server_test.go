@@ -424,16 +424,16 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 		t.Fatalf("delete shared upstream route response = %+v", deleted)
 	}
 
-	updated := server.setSSHPolicy("build", &SSHPolicyUpdate{Name: "Release host", LocalUsername: "release", AllowedCommand: "uname -a", RecordCommands: true, AuthenticationTimeoutSeconds: 45, Egress: egress.Proxy})
-	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].Name != "Release host" || updated.Routes[0].LocalUsername != "release" || updated.Routes[0].LocalEndpoint != "release@127.0.0.1:4770" || updated.Routes[0].AllowedCommand != "uname -a" || updated.Routes[0].AllowAllCommands || updated.Routes[0].Egress != egress.Proxy || updated.Routes[0].AuthenticationTimeoutSeconds != 45 {
+	updated := server.setSSHPolicy("build", &SSHPolicyUpdate{Name: "Release host", LocalUsername: "release", AllowedCommand: "uname -a", RecordCommands: true, AllowSFTP: true, AuthenticationTimeoutSeconds: 45, Egress: egress.Proxy})
+	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].Name != "Release host" || updated.Routes[0].LocalUsername != "release" || updated.Routes[0].LocalEndpoint != "release@127.0.0.1:4770" || updated.Routes[0].AllowedCommand != "uname -a" || updated.Routes[0].AllowAllCommands || !updated.Routes[0].AllowSFTP || updated.Routes[0].Egress != egress.Proxy || updated.Routes[0].AuthenticationTimeoutSeconds != 45 {
 		t.Fatalf("updated exact-command policy response = %+v", updated)
 	}
 	loaded, err = sshMetadata.Load()
-	if err != nil || len(loaded) != 1 || loaded[0].Name != "Release host" || loaded[0].LocalUsername != "release" || loaded[0].Egress != egress.Proxy || loaded[0].AuthenticationTimeoutSeconds != 45 || !loaded[0].Policy.AllowsCommand("uname -a") || loaded[0].Policy.AllowsCommand("printf airlock-ok") {
+	if err != nil || len(loaded) != 1 || loaded[0].Name != "Release host" || loaded[0].LocalUsername != "release" || loaded[0].Egress != egress.Proxy || loaded[0].AuthenticationTimeoutSeconds != 45 || !loaded[0].Policy.AllowsCommand("uname -a") || !loaded[0].Policy.AllowSFTP || loaded[0].Policy.AllowsCommand("printf airlock-ok") {
 		t.Fatalf("persisted exact-command policy = %+v, %v", loaded, err)
 	}
 	updated = server.setSSHPolicy("build", &SSHPolicyUpdate{AllowAllCommands: true, RecordCommands: true})
-	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].LocalUsername != "release" || !updated.Routes[0].AllowAllCommands || !updated.Routes[0].RecordCommands {
+	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].LocalUsername != "release" || !updated.Routes[0].AllowAllCommands || !updated.Routes[0].RecordCommands || updated.Routes[0].AllowSFTP {
 		t.Fatalf("updated SSH policy response = %+v", updated)
 	}
 	loaded, err = sshMetadata.Load()

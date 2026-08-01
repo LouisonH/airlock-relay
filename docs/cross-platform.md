@@ -12,6 +12,7 @@ require real-device runtime acceptance before any release is published.
 | macOS arm64 | Native | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Released preview |
 | macOS x64 | Target build | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Installer planned |
 | Windows x64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop port coded · not released |
+| Windows x86 (i686) | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop port coded · not released |
 | Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Desktop port coded · not released |
 | Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop port coded · not released |
 | Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Desktop port coded · not released |
@@ -55,11 +56,11 @@ and installer checklist below is completed.
   security-setting confirmation. Linux port-ownership management reads
   `/proc` directly and needs no external `lsof`; desktop bundles still expect
   one prompt backend. Headless servers use the CLI instead.
-- CI runs Rust `cargo check` for the Windows x64, Windows arm64, and Linux x64
+- CI runs Rust `cargo check` for the Windows x64, Windows x86, Windows arm64, and Linux x64
   desktop targets on every push, so the ported control client is re-verified
   on real target toolchains before runtime acceptance.
 - A separate `desktop-windows` workflow builds the NSIS/MSI installers for
-  Windows x64 and arm64 on GitHub-hosted Windows runners and publishes them as
+  Windows x64, x86 (i686), and arm64 on GitHub-hosted Windows runners and publishes them as
   downloadable artifacts. The artifacts are unsigned until release signing is
   configured, so SmartScreen may warn on first run.
 - A `desktop-linux` workflow builds `deb` and AppImage installers for Linux x64
@@ -77,6 +78,7 @@ cross-compile without a target toolchain and place output under `bin/<target>`:
 ```bash
 node scripts/build-sidecar.mjs windows-amd64
 node scripts/build-sidecar.mjs windows-arm64
+node scripts/build-sidecar.mjs windows-386
 node scripts/build-sidecar.mjs linux-amd64
 node scripts/build-sidecar.mjs linux-arm64
 node scripts/build-sidecar.mjs linux-armv7

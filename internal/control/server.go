@@ -117,6 +117,7 @@ type CreateSSHRoute struct {
 	AllowedCommand               string `json:"allowed_command"`
 	AllowAllCommands             bool   `json:"allow_all_commands"`
 	RecordCommands               bool   `json:"record_commands"`
+	AllowSFTP                    bool   `json:"allow_sftp"`
 	AuthenticationTimeoutSeconds int    `json:"authentication_timeout_seconds,omitempty"`
 	Egress                       string `json:"egress,omitempty"`
 }
@@ -127,6 +128,7 @@ type SSHPolicyUpdate struct {
 	AllowedCommand               string `json:"allowed_command"`
 	AllowAllCommands             bool   `json:"allow_all_commands"`
 	RecordCommands               bool   `json:"record_commands"`
+	AllowSFTP                    bool   `json:"allow_sftp"`
 	AuthenticationTimeoutSeconds int    `json:"authentication_timeout_seconds,omitempty"`
 	Egress                       string `json:"egress,omitempty"`
 }
@@ -195,6 +197,7 @@ type RouteSummary struct {
 	CurrentConnections           int      `json:"currentConnections"`
 	AllowAllCommands             bool     `json:"allowAllCommands"`
 	RecordCommands               bool     `json:"recordCommands"`
+	AllowSFTP                    bool     `json:"allowSftp"`
 	AllowedCommand               string   `json:"allowedCommand,omitempty"`
 	Provider                     string   `json:"provider,omitempty"`
 	AllowedModels                []string `json:"allowedModels,omitempty"`
@@ -214,6 +217,7 @@ type ActivitySummary struct {
 	RouteName string `json:"routeName"`
 	Caller    string `json:"caller"`
 	Action    string `json:"action"`
+	Detail    string `json:"detail,omitempty"`
 	Result    string `json:"result"`
 	Latency   string `json:"latency"`
 	Egress    string `json:"egress"`
@@ -862,14 +866,16 @@ func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
 	if input.AllowAllCommands {
 		commands = nil
 	}
+	sshPolicy := sshgw.NewPolicyWithOptions(
+		commands, nil, false, input.AllowAllCommands, input.RecordCommands,
+	)
+	sshPolicy.AllowSFTP = input.AllowSFTP
 	route := sshgw.Route{
 		Name: input.Name, Alias: input.Alias, LocalUsername: localUsername,
 		TargetSecretRef:  reference,
 		CapabilityDigest: digest,
-		Policy: sshgw.NewPolicyWithOptions(
-			commands, nil, false, input.AllowAllCommands, input.RecordCommands,
-		),
-		Egress: policy, AuthenticationTimeoutSeconds: authenticationTimeout, Enabled: false,
+		Policy:           sshPolicy,
+		Egress:           policy, AuthenticationTimeoutSeconds: authenticationTimeout, Enabled: false,
 	}
 	if err := s.ssh.Registry.Upsert(route); err != nil {
 		_ = s.secrets.DeleteTarget(context.Background(), reference)
@@ -923,6 +929,7 @@ func (s *Server) setSSHPolicy(alias string, input *SSHPolicyUpdate) Response {
 	}
 	updated.LocalUsername = localUsername
 	updated.Policy = sshgw.NewPolicyWithOptions(commands, fingerprints, false, input.AllowAllCommands, input.RecordCommands)
+	updated.Policy.AllowSFTP = input.AllowSFTP
 	if input.Name != "" {
 		updated.Name = strings.TrimSpace(input.Name)
 	}
@@ -1417,7 +1424,7 @@ func (s *Server) recentActivities() []ActivitySummary {
 			result = append(result, ActivitySummary{
 				ID: event.ID, Time: event.Time.Local().Format("01-02 15:04:05"),
 				RouteName: s.routeDisplayName(event.RouteAlias), Caller: event.Caller,
-				Action: event.Action, Result: event.Result,
+				Action: event.Action, Detail: event.Action, Result: event.Result,
 				Latency: fmt.Sprintf("%d ms", event.DurationMS), Egress: effectiveEgress(event.Egress),
 				Category: event.Category, EventType: event.EventType, when: event.Time,
 			})
@@ -1428,7 +1435,7 @@ func (s *Server) recentActivities() []ActivitySummary {
 			result = append(result, ActivitySummary{
 				ID: event.ID, Time: event.Time.Local().Format("01-02 15:04:05"),
 				RouteName: s.routeDisplayName(event.RouteAlias), Caller: event.RouteAlias + "@loopback",
-				Action: commandPreview(event.Command), Result: event.Result,
+				Action: commandPreview(event.Command), Detail: event.Command, Result: event.Result,
 				Latency: fmt.Sprintf("%d ms", event.DurationMS), Egress: effectiveEgress(event.Egress),
 				Category: "SSH", EventType: "command", when: event.Time,
 			})
@@ -1555,6 +1562,9 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 	if route.Policy.RecordCommands {
 		permissionSummary += " · recorded"
 	}
+	if route.Policy.AllowSFTP {
+		permissionSummary += " · SFTP high risk"
+	}
 	allowedCommands := make([]string, 0, len(route.Policy.AllowedCommands))
 	for command := range route.Policy.AllowedCommands {
 		allowedCommands = append(allowedCommands, command)
@@ -1572,6 +1582,7 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 		Egress:            egressPolicy, Health: "unknown", LastUsed: "从未", CurrentConnections: 0,
 		AllowAllCommands:             route.Policy.AllowAllCommands,
 		RecordCommands:               route.Policy.RecordCommands,
+		AllowSFTP:                    route.Policy.AllowSFTP,
 		AllowedCommand:               allowedCommand,
 		AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
 	}

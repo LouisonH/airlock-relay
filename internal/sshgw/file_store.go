@@ -40,6 +40,7 @@ type persistedRoute struct {
 	AllowStdin                   bool     `json:"allow_stdin"`
 	AllowAllCommands             bool     `json:"allow_all_commands,omitempty"`
 	RecordCommands               bool     `json:"record_commands,omitempty"`
+	AllowSFTP                    bool     `json:"allow_sftp,omitempty"`
 	Egress                       string   `json:"egress"`
 	AuthenticationTimeoutSeconds int      `json:"authentication_timeout_seconds,omitempty"`
 	Enabled                      bool     `json:"enabled"`
@@ -92,18 +93,20 @@ func (s *FileStore) Load() ([]Route, error) {
 		var digest capability.Digest
 		copy(digest[:], digestBytes)
 		clear(digestBytes)
+		policy := NewPolicyWithOptions(
+			stored.AllowedCommands,
+			stored.LocalPublicKeyFingerprints,
+			stored.AllowStdin,
+			stored.AllowAllCommands,
+			stored.RecordCommands,
+		)
+		policy.AllowSFTP = stored.AllowSFTP
 		route := Route{
 			Name: stored.Name, Alias: stored.Alias, LocalUsername: stored.LocalUsername,
 			TargetSecretRef:  stored.TargetSecretRef,
 			CapabilityDigest: digest,
-			Policy: NewPolicyWithOptions(
-				stored.AllowedCommands,
-				stored.LocalPublicKeyFingerprints,
-				stored.AllowStdin,
-				stored.AllowAllCommands,
-				stored.RecordCommands,
-			),
-			Egress: stored.Egress, AuthenticationTimeoutSeconds: stored.AuthenticationTimeoutSeconds, Enabled: stored.Enabled,
+			Policy:           policy,
+			Egress:           stored.Egress, AuthenticationTimeoutSeconds: stored.AuthenticationTimeoutSeconds, Enabled: stored.Enabled,
 		}
 		if route.AuthenticationTimeoutSeconds == 0 {
 			route.AuthenticationTimeoutSeconds = DefaultAuthenticationTimeoutSeconds
@@ -144,6 +147,7 @@ func (s *FileStore) Save(routes []Route) error {
 			AllowStdin:                 route.Policy.AllowStdin, Egress: route.Egress, Enabled: route.Enabled,
 			AllowAllCommands:             route.Policy.AllowAllCommands,
 			RecordCommands:               route.Policy.RecordCommands,
+			AllowSFTP:                    route.Policy.AllowSFTP,
 			AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
 		})
 	}

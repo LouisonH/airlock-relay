@@ -3,7 +3,9 @@ package sshgw
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/LouisonH/airlock-relay/internal/activity"
@@ -281,33 +283,69 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 				}
 				return
 			}
-			if done != nil || request.Type != "exec" {
+			if done != nil {
 				if request.WantReply {
 					_ = request.Reply(false, nil)
 				}
 				continue
 			}
 
-			var payload struct{ Command string }
 			route, err := s.routes.Lookup(alias)
-			if err != nil || route.EffectiveLocalUsername() != connection.User() || ssh.Unmarshal(request.Payload, &payload) != nil || !route.Policy.AllowsCommand(payload.Command) {
-				if err == nil && validCommand(payload.Command) {
-					s.recordCommand(route, payload.Command, "blocked", 0)
-				}
+			if err != nil || route.EffectiveLocalUsername() != connection.User() {
 				if request.WantReply {
 					_ = request.Reply(false, nil)
 				}
-				_ = sendExitStatus(local, 126)
-				_ = local.Close()
-				return
+				continue
 			}
 
-			executionDone := make(chan struct{})
-			done = executionDone
-			go func() {
-				defer close(executionDone)
-				s.execute(local, request, route, payload.Command)
-			}()
+			switch request.Type {
+			case "exec":
+				var payload struct{ Command string }
+				if ssh.Unmarshal(request.Payload, &payload) != nil || !route.Policy.AllowsCommand(payload.Command) {
+					if validCommand(payload.Command) {
+						s.recordCommand(route, payload.Command, "blocked", 0)
+					}
+					if request.WantReply {
+						_ = request.Reply(false, nil)
+					}
+					_ = sendExitStatus(local, 126)
+					_ = local.Close()
+					return
+				}
+
+				executionDone := make(chan struct{})
+				done = executionDone
+				go func() {
+					defer close(executionDone)
+					s.execute(local, request, route, payload.Command)
+				}()
+			case "subsystem":
+				var payload struct{ Name string }
+				if ssh.Unmarshal(request.Payload, &payload) != nil || payload.Name != "sftp" {
+					if request.WantReply {
+						_ = request.Reply(false, nil)
+					}
+					continue
+				}
+				caller := sshActivityCaller(route, connection.RemoteAddr())
+				if !route.Policy.AllowSFTP {
+					s.recordSFTP(route, caller, "blocked", 0)
+					if request.WantReply {
+						_ = request.Reply(false, nil)
+					}
+					continue
+				}
+				executionDone := make(chan struct{})
+				done = executionDone
+				go func() {
+					defer close(executionDone)
+					s.executeSFTP(local, request, route, caller)
+				}()
+			default:
+				if request.WantReply {
+					_ = request.Reply(false, nil)
+				}
+			}
 		}
 	}
 }
@@ -360,6 +398,84 @@ func (s *Server) execute(local ssh.Channel, request *ssh.Request, route Route, c
 	_ = sendExitStatus(local, exitStatus(waitError))
 }
 
+func (s *Server) executeSFTP(local ssh.Channel, request *ssh.Request, route Route, caller string) {
+	defer local.Close()
+	started := time.Now()
+	result := "failed"
+	defer func() { s.recordSFTP(route, caller, result, time.Since(started)) }()
+	ctx, cancel := context.WithTimeout(context.Background(), s.handshakeTimeout)
+	defer cancel()
+	target, err := s.secrets.ResolveSSHTarget(ctx, route.TargetSecretRef)
+	if err != nil {
+		_ = request.Reply(false, nil)
+		return
+	}
+	defer clearTarget(&target)
+
+	upstream, err := dialUpstream(ctx, s.dialer, route, target)
+	if err != nil {
+		_ = request.Reply(false, nil)
+		return
+	}
+	defer upstream.Close()
+	remote, remoteRequests, err := upstream.OpenChannel("session", nil)
+	if err != nil {
+		_ = request.Reply(false, nil)
+		return
+	}
+	defer remote.Close()
+
+	accepted, err := remote.SendRequest("subsystem", true, ssh.Marshal(struct{ Name string }{Name: "sftp"}))
+	if err != nil || !accepted {
+		_ = request.Reply(false, nil)
+		return
+	}
+	if request.WantReply {
+		if err := request.Reply(true, nil); err != nil {
+			return
+		}
+	}
+	status := make(chan uint32, 1)
+	go func() { status <- receiveExitStatus(remoteRequests) }()
+	var copies sync.WaitGroup
+	copies.Add(3)
+	go func() {
+		defer copies.Done()
+		_, _ = io.Copy(remote, local)
+		_ = remote.CloseWrite()
+	}()
+	go func() {
+		defer copies.Done()
+		_, _ = io.Copy(local, remote)
+	}()
+	go func() {
+		defer copies.Done()
+		_, _ = io.Copy(local.Stderr(), remote.Stderr())
+	}()
+	copies.Wait()
+	exitCode := <-status
+	if exitCode == 0 {
+		result = "allowed"
+	}
+	_ = sendExitStatus(local, exitCode)
+}
+
+func receiveExitStatus(requests <-chan *ssh.Request) uint32 {
+	status := uint32(255)
+	for request := range requests {
+		if request.Type == "exit-status" {
+			var payload struct{ Status uint32 }
+			if ssh.Unmarshal(request.Payload, &payload) == nil {
+				status = payload.Status
+			}
+		}
+		if request.WantReply {
+			_ = request.Reply(false, nil)
+		}
+	}
+	return status
+}
+
 func (s *Server) recordCommand(route Route, command, result string, duration time.Duration) {
 	if s.commandAudit == nil || !route.Policy.RecordCommands {
 		return
@@ -371,6 +487,44 @@ func (s *Server) recordCommand(route Route, command, result string, duration tim
 		DurationMS: duration.Milliseconds(),
 		Egress:     route.Egress,
 	})
+}
+
+func (s *Server) recordSFTP(route Route, caller, result string, duration time.Duration) {
+	if s.activity == nil {
+		return
+	}
+	_ = s.activity.Record(activity.Event{
+		RouteAlias: route.Alias,
+		Category:   "SSH",
+		EventType:  "command",
+		Caller:     caller,
+		Action:     "SFTP subsystem",
+		Result:     result,
+		DurationMS: duration.Milliseconds(),
+		Egress:     route.Egress,
+	})
+}
+
+func sshActivityCaller(route Route, address net.Addr) string {
+	caller := route.EffectiveLocalUsername() + "@network"
+	if address == nil {
+		return caller
+	}
+	host, _, err := net.SplitHostPort(address.String())
+	if err != nil {
+		return caller
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return caller
+	}
+	if ip.IsLoopback() {
+		return route.EffectiveLocalUsername() + "@loopback"
+	}
+	if ip.IsPrivate() {
+		return route.EffectiveLocalUsername() + "@private-lan"
+	}
+	return caller
 }
 
 func exitStatus(err error) uint32 {

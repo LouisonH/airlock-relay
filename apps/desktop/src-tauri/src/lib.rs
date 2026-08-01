@@ -9,14 +9,14 @@ use std::{
         atomic::{AtomicU8, Ordering},
         Arc, Mutex,
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-mod platform;
-#[cfg(windows)]
-mod native_windows;
 #[cfg(not(any(target_os = "macos", windows)))]
 mod native_linux;
+#[cfg(windows)]
+mod native_windows;
+mod platform;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -27,7 +27,8 @@ const CONTROL_PROTOCOL_VERSION: u8 = 1;
 const MAX_CONTROL_RESPONSE: u64 = 64 << 10;
 const CONTROL_EXCHANGE_TIMEOUT: Duration = Duration::from_secs(20);
 const CONTROL_STATUS_TIMEOUT: Duration = Duration::from_millis(800);
-const CONTROL_STARTUP_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
+const CONTROL_STARTUP_PROBE_TIMEOUT: Duration = Duration::from_millis(400);
+const CORE_STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
 const SIDECAR_STARTUP_LOG_MAX_BYTES: u64 = 8 << 10;
 const SECURITY_SETTINGS_VERSION: u8 = 1;
 const DEFAULT_HTTP_PORT: u16 = 4768;
@@ -201,6 +202,16 @@ impl DaemonProcess {
             .ok()
             .and_then(|guard| guard.as_ref().map(|daemon| daemon.child.id()))
     }
+
+    fn has_exited(&self) -> bool {
+        let Ok(mut guard) = self.0.lock() else {
+            return false;
+        };
+        let Some(daemon) = guard.as_mut() else {
+            return true;
+        };
+        matches!(daemon.child.try_wait(), Ok(Some(_)))
+    }
 }
 
 #[derive(Clone, Default)]
@@ -322,6 +333,8 @@ struct RouteSummary {
     allow_all_commands: bool,
     record_commands: bool,
     #[serde(default)]
+    allow_sftp: bool,
+    #[serde(default)]
     allowed_command: String,
     #[serde(default)]
     provider: String,
@@ -417,6 +430,7 @@ struct CreateSSHRoute<'a> {
     allowed_command: &'a str,
     allow_all_commands: bool,
     record_commands: bool,
+    allow_sftp: bool,
     authentication_timeout_seconds: u32,
     egress: &'a str,
 }
@@ -428,6 +442,7 @@ struct SSHPolicyUpdate<'a> {
     allowed_command: &'a str,
     allow_all_commands: bool,
     record_commands: bool,
+    allow_sftp: bool,
     authentication_timeout_seconds: u32,
     egress: &'a str,
 }
@@ -468,6 +483,8 @@ struct ActivityEvent {
     route_name: String,
     caller: String,
     action: String,
+    #[serde(default)]
+    detail: String,
     result: String,
     latency: String,
     egress: String,
@@ -591,6 +608,7 @@ impl ControlClient {
                 allowed_command: create.allowed_command,
                 allow_all_commands: create.allow_all_commands,
                 record_commands: create.record_commands,
+                allow_sftp: create.allow_sftp,
                 authentication_timeout_seconds: create.authentication_timeout_seconds,
                 egress: create.egress,
             }),
@@ -604,6 +622,7 @@ impl ControlClient {
                 allowed_command: policy.allowed_command,
                 allow_all_commands: policy.allow_all_commands,
                 record_commands: policy.record_commands,
+                allow_sftp: policy.allow_sftp,
                 authentication_timeout_seconds: policy.authentication_timeout_seconds,
                 egress: policy.egress,
             }),
@@ -1123,6 +1142,7 @@ struct CreateSSHRouteInput {
     allow_all_commands: bool,
     allow_all_confirmed: bool,
     record_commands: bool,
+    allow_sftp: bool,
     authentication_timeout_seconds: u32,
 }
 
@@ -1196,6 +1216,7 @@ fn create_ssh_route_blocking(
         allow_all_commands,
         allow_all_confirmed,
         record_commands,
+        allow_sftp,
         authentication_timeout_seconds,
     } = input;
     let validation = validate_route_identity(&name, &alias, &egress)
@@ -1270,6 +1291,7 @@ fn create_ssh_route_blocking(
             allowed_command: &command,
             allow_all_commands,
             record_commands,
+            allow_sftp,
             authentication_timeout_seconds,
             egress: &egress,
         }),
@@ -1434,6 +1456,7 @@ async fn set_ssh_policy(
     allowed_command: String,
     allow_all_commands: bool,
     record_commands: bool,
+    allow_sftp: bool,
     authentication_timeout_seconds: u32,
     egress: String,
 ) -> Result<Vec<RouteSummary>, String> {
@@ -1447,6 +1470,7 @@ async fn set_ssh_policy(
             allowed_command,
             allow_all_commands,
             record_commands,
+            allow_sftp,
             authentication_timeout_seconds,
             egress,
         )
@@ -1464,6 +1488,7 @@ fn set_ssh_policy_blocking(
     allowed_command: String,
     allow_all_commands: bool,
     record_commands: bool,
+    allow_sftp: bool,
     authentication_timeout_seconds: u32,
     egress: String,
 ) -> Result<Vec<RouteSummary>, String> {
@@ -1493,6 +1518,7 @@ fn set_ssh_policy_blocking(
             allowed_command: &command,
             allow_all_commands,
             record_commands,
+            allow_sftp,
             authentication_timeout_seconds,
             egress: &egress,
         }),
@@ -1575,6 +1601,7 @@ fn update_ssh_target_blocking(
             allowed_command: "",
             allow_all_commands: false,
             record_commands: false,
+            allow_sftp: false,
             authentication_timeout_seconds: 0,
             egress: &egress,
         }),
@@ -1629,6 +1656,7 @@ async fn rotate_ssh_credential(
                 allowed_command: "",
                 allow_all_commands: false,
                 record_commands: false,
+                allow_sftp: false,
                 authentication_timeout_seconds: 0,
                 egress: "",
             }),
@@ -2165,13 +2193,7 @@ fn prompt_native_value_with_title(
     hidden: bool,
     default_value: &str,
 ) -> Result<String, String> {
-    native_windows::prompt_native_value_with_title(
-        title,
-        message,
-        optional,
-        hidden,
-        default_value,
-    )
+    native_windows::prompt_native_value_with_title(title, message, optional, hidden, default_value)
 }
 
 #[cfg(windows)]
@@ -2237,9 +2259,9 @@ app.displayDialog(payload.message.replace('{alias}', payload.alias), {
 true;
 "#;
     let (message, title, allow) = match ui_locale() {
-        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, SFTP, and port forwarding remain denied, but commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
-        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、SFTP、ポート転送は引き続き拒否されますが、コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
-        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY、SFTP 与端口转发仍会被拒绝，但上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
+        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, and port forwarding remain denied; SFTP follows its separate route setting. Commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
+        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、ポート転送は引き続き拒否され、SFTP は独立したルート設定に従います。コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
+        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY 与端口转发仍会被拒绝，SFTP 由独立路由开关控制。上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
     };
     let mut payload = serde_json::to_vec(&serde_json::json!({ "alias": alias, "message": message, "title": title, "cancel": native_text("取消"), "allow": allow })).map_err(|_| "无法编码 SSH 风险确认".to_string())?;
     let mut child = Command::new("/usr/bin/osascript")
@@ -2267,9 +2289,9 @@ true;
 #[cfg(windows)]
 fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
     let (message, title, _allow) = match ui_locale() {
-        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, SFTP, and port forwarding remain denied, but commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
-        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、SFTP、ポート転送は引き続き拒否されますが、コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
-        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY、SFTP 与端口转发仍会被拒绝，但上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
+        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, and port forwarding remain denied; SFTP follows its separate route setting. Commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
+        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、ポート転送は引き続き拒否され、SFTP は独立したルート設定に従います。コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
+        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY 与端口转发仍会被拒绝，SFTP 由独立路由开关控制。上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
     };
     native_windows::confirm_yes_no(title, &message.replace("{alias}", alias))
 }
@@ -2277,9 +2299,9 @@ fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
 #[cfg(all(not(target_os = "macos"), not(windows)))]
 fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
     let (message, title, _allow) = match ui_locale() {
-        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, SFTP, and port forwarding remain denied, but commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
-        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、SFTP、ポート転送は引き続き拒否されますが、コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
-        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY、SFTP 与端口转发仍会被拒绝，但上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
+        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, and port forwarding remain denied; SFTP follows its separate route setting. Commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
+        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、ポート転送は引き続き拒否され、SFTP は独立したルート設定に従います。コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
+        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY 与端口转发仍会被拒绝，SFTP 由独立路由开关控制。上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
     };
     native_linux::confirm_yes_no(title, &message.replace("{alias}", alias))
 }
@@ -2563,8 +2585,7 @@ fn load_security_settings(path: &PathBuf) -> Result<SecuritySettings, String> {
     let parent = path
         .parent()
         .ok_or_else(|| "安全设置路径无效".to_string())?;
-    platform::protect_directory(parent)
-        .map_err(|_| "无法创建或保护安全设置目录".to_string())?;
+    platform::protect_directory(parent).map_err(|_| "无法创建或保护安全设置目录".to_string())?;
     let metadata = match std::fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -2597,8 +2618,7 @@ fn save_security_settings(path: &PathBuf, settings: &SecuritySettings) -> Result
     let parent = path
         .parent()
         .ok_or_else(|| "安全设置路径无效".to_string())?;
-    platform::protect_directory(parent)
-        .map_err(|_| "无法创建或保护安全设置目录".to_string())?;
+    platform::protect_directory(parent).map_err(|_| "无法创建或保护安全设置目录".to_string())?;
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| "无法生成安全设置临时路径".to_string())?
@@ -2617,8 +2637,7 @@ fn save_security_settings(path: &PathBuf, settings: &SecuritySettings) -> Result
         file.sync_all()
             .map_err(|_| "无法同步安全设置".to_string())?;
         drop(file);
-        platform::replace_file(&temporary, path)
-            .map_err(|_| "无法安装安全设置".to_string())?;
+        platform::replace_file(&temporary, path).map_err(|_| "无法安装安全设置".to_string())?;
         Ok(())
     })();
     if result.is_err() {
@@ -2652,13 +2671,17 @@ fn secret_store_request<'a>(action: &'a str, mode: &'a str) -> ControlRequest<'a
     request
 }
 
-fn wait_for_control(client: &ControlClient) -> bool {
-    for _ in 0..40 {
+fn wait_for_control(client: &ControlClient, process: Option<&DaemonProcess>) -> bool {
+    let deadline = Instant::now() + CORE_STARTUP_TIMEOUT;
+    while Instant::now() < deadline {
         if client
             .request_with_timeout(&status_request(), CONTROL_STARTUP_PROBE_TIMEOUT)
             .is_ok()
         {
             return true;
+        }
+        if process.is_some_and(DaemonProcess::has_exited) {
+            return false;
         }
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -2749,7 +2772,11 @@ fn confirm_security_change(
     }
     let message = format!(
         "{}\n\n{}",
-        risks.iter().map(Cow::as_ref).collect::<Vec<_>>().join("\n\n"),
+        risks
+            .iter()
+            .map(Cow::as_ref)
+            .collect::<Vec<_>>()
+            .join("\n\n"),
         native_text("应用设置会短暂重启本地转发核心。")
     );
     native_windows::confirm_yes_no(&native_text("Airlock 安全设置"), &message)
@@ -2776,7 +2803,11 @@ fn confirm_security_change(
     }
     let message = format!(
         "{}\n\n{}",
-        risks.iter().map(Cow::as_ref).collect::<Vec<_>>().join("\n\n"),
+        risks
+            .iter()
+            .map(Cow::as_ref)
+            .collect::<Vec<_>>()
+            .join("\n\n"),
         native_text("应用设置会短暂重启本地转发核心。")
     );
     native_linux::confirm_yes_no(&native_text("Airlock 安全设置"), &message)
@@ -2792,11 +2823,23 @@ fn locate_sidecar(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let triple_binary_name = platform::sidecar_bundle_name();
     let mut candidates = Vec::new();
     if let Ok(resource_dir) = app.path().resource_dir() {
+        // Tauri keeps external binaries under their target-triple name in a
+        // production bundle. Development builds may still use the plain name.
+        if let Some(triple_name) = triple_binary_name.as_deref() {
+            candidates.push(resource_dir.join(triple_name));
+            candidates.push(resource_dir.join("binaries").join(triple_name));
+        }
         candidates.push(resource_dir.join(binary_name));
+        candidates.push(resource_dir.join("binaries").join(binary_name));
     }
     if let Ok(executable) = std::env::current_exe() {
         if let Some(directory) = executable.parent() {
+            if let Some(triple_name) = triple_binary_name.as_deref() {
+                candidates.push(directory.join(triple_name));
+                candidates.push(directory.join("binaries").join(triple_name));
+            }
             candidates.push(directory.join(binary_name));
+            candidates.push(directory.join("binaries").join(binary_name));
         }
     }
     if let Some(triple_name) = triple_binary_name {
@@ -2806,8 +2849,16 @@ fn locate_sidecar(app: &tauri::AppHandle) -> Result<PathBuf, String> {
                 .join(triple_name),
         );
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries").join(binary_name));
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../bin").join(binary_name));
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries")
+            .join(binary_name),
+    );
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../bin")
+            .join(binary_name),
+    );
     candidates
         .into_iter()
         .find(|path| path.is_file())
@@ -2845,12 +2896,24 @@ fn sidecar_start_failure(log_path: Option<&Path>, settings: &SecuritySettings) -
             "本地核心未能启动：{} 已被其他程序占用。请释放端口、改用其他端口，或退出其他 Airlock 副本后重试。",
             configured_listener_description(settings)
         )
+    } else if log.contains("bind: permission denied")
+        || log.contains("forbidden by its access permissions")
+    {
+        format!(
+            "本地核心未能启动：Windows 拒绝监听 {}。请检查端口权限或安全软件拦截。",
+            configured_listener_description(settings)
+        )
     } else if log.contains("control socket") || log.contains("control channel") {
         "本地核心未能启动：当前用户的受保护控制通道不可用。请退出其他 Airlock 副本后重试。"
             .to_string()
+    } else if log.contains("listen for local ssh") || log.contains("listen tcp") {
+        format!(
+            "本地核心未能启动：无法监听 {}。请检查 Windows 防火墙、端口权限或其他 Airlock 副本。",
+            configured_listener_description(settings)
+        )
     } else {
         format!(
-            "本地核心未能在 4 秒内准备就绪。请重试；若问题持续，请检查 {}。",
+            "本地核心未能在 20 秒内准备就绪。请重试；若问题持续，请检查 {}。",
             configured_listener_description(settings)
         )
     }
@@ -2917,7 +2980,7 @@ fn start_configured_sidecar(
         }
     };
     process.replace(child, startup_log);
-    if wait_for_control(client) {
+    if wait_for_control(client, Some(process)) {
         startup.clear();
         return Ok(());
     }
@@ -2934,7 +2997,7 @@ fn monitor_initial_sidecar(
     settings: SecuritySettings,
 ) {
     std::thread::spawn(move || {
-        if wait_for_control(&client) {
+        if wait_for_control(&client, Some(&process)) {
             startup.clear();
             return;
         }
@@ -3234,8 +3297,8 @@ fn listening_port_owners(port: u16, managed_pid: Option<u32>) -> Result<Vec<Port
     }
 
     let mut owners = Vec::new();
-    let processes = std::fs::read_dir("/proc")
-        .map_err(|_| "无法读取 Linux 进程信息".to_string())?;
+    let processes =
+        std::fs::read_dir("/proc").map_err(|_| "无法读取 Linux 进程信息".to_string())?;
     for process in processes.flatten() {
         let Some(pid) = process
             .file_name()
@@ -3671,7 +3734,7 @@ mod tests {
     #[test]
     fn sidecar_startup_diagnostic_falls_back_to_a_safe_generic_message() {
         let message = sidecar_start_failure(None, &SecuritySettings::default());
-        assert!(message.contains("4 秒"));
+        assert!(message.contains("20 秒"));
         assert!(!message.contains("airlockd-startup.log"));
     }
 
@@ -3737,6 +3800,7 @@ mod tests {
                 allowed_command: "uptime",
                 allow_all_commands: false,
                 record_commands: true,
+                allow_sftp: true,
                 authentication_timeout_seconds: 20,
                 egress: "Auto",
             }),
@@ -3747,6 +3811,7 @@ mod tests {
                 allowed_command: "uptime",
                 allow_all_commands: false,
                 record_commands: true,
+                allow_sftp: true,
                 authentication_timeout_seconds: 20,
                 egress: "Auto",
             }),
@@ -3765,7 +3830,9 @@ mod tests {
             serde_json::from_str(&raw).expect("control request should be JSON");
         assert_eq!(payload["token"], "authenticated-test-token");
         assert_eq!(payload["create_ssh"]["local_username"], "builder");
+        assert_eq!(payload["create_ssh"]["allow_sftp"], true);
         assert_eq!(payload["ssh_policy"]["local_username"], "release");
+        assert_eq!(payload["ssh_policy"]["allow_sftp"], true);
         let _ = std::fs::remove_file(PathBuf::from(&client.endpoint));
     }
 

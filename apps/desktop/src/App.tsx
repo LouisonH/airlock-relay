@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useId, useMemo, useState } from "react";
 import {
   Activity,
@@ -6,6 +7,7 @@ import {
   BookOpen,
   Cable,
   Check,
+  Copy,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -27,6 +29,8 @@ import {
   LockKeyhole,
   Monitor,
   Moon,
+  Minus,
+  Maximize2,
   Network,
   PencilLine,
   Plus,
@@ -77,9 +81,9 @@ function composeSSHAddress(host: string, port: string): string {
 
 const isTauri = "__TAURI_INTERNALS__" in window;
 const previewRoutes: RouteSummary[] = isTauri ? [] : [
-  { id: "release", name: "Release downloads", alias: "release", kind: "HTTP", status: "enabled", localEndpoint: "127.0.0.1:4768/r/release", permissionSummary: "GET, HEAD · Range", egress: "Direct", health: "healthy", lastUsed: "2 分钟前", currentConnections: 1, allowAllCommands: false, recordCommands: false },
-  { id: "models", name: "Model gateway", alias: "models", kind: "LLM", status: "disabled", localEndpoint: "http://127.0.0.1:4768/r/models", permissionSummary: "OpenAI · 3 models · output ≤ 8192 · 60/min · 4 concurrent", egress: "Proxy", health: "unknown", lastUsed: "从未", currentConnections: 0, allowAllCommands: false, recordCommands: false, provider: "openai", allowedModels: ["gpt-5.2", "gpt-5.2-codex", "gpt-5.1"], maxOutputTokens: 8192, requestsPerMinute: 60, maxConcurrent: 4, trackUsage: true, totalRequests: 128, inputTokens: 184320, outputTokens: 42670 },
-  { id: "build", name: "Release builder", alias: "build", localUsername: "builder", kind: "SSH", status: "enabled", localEndpoint: "builder@127.0.0.1:4770", permissionSummary: "all exec commands · high risk · recorded", egress: "Auto", health: "healthy", lastUsed: "刚刚", currentConnections: 0, allowAllCommands: true, recordCommands: true, allowedCommand: "" },
+  { id: "release", name: "Release downloads", alias: "release", kind: "HTTP", status: "enabled", localEndpoint: "127.0.0.1:4768/r/release", permissionSummary: "GET, HEAD · Range", egress: "Direct", health: "healthy", lastUsed: "2 分钟前", currentConnections: 1, allowAllCommands: false, recordCommands: false, allowSftp: false },
+  { id: "models", name: "Model gateway", alias: "models", kind: "LLM", status: "disabled", localEndpoint: "http://127.0.0.1:4768/r/models", permissionSummary: "OpenAI · 3 models · output ≤ 8192 · 60/min · 4 concurrent", egress: "Proxy", health: "unknown", lastUsed: "从未", currentConnections: 0, allowAllCommands: false, recordCommands: false, allowSftp: false, provider: "openai", allowedModels: ["gpt-5.2", "gpt-5.2-codex", "gpt-5.1"], maxOutputTokens: 8192, requestsPerMinute: 60, maxConcurrent: 4, trackUsage: true, totalRequests: 128, inputTokens: 184320, outputTokens: 42670 },
+  { id: "build", name: "Release builder", alias: "build", localUsername: "builder", kind: "SSH", status: "enabled", localEndpoint: "builder@127.0.0.1:4770", permissionSummary: "all exec commands · high risk · recorded", egress: "Auto", health: "healthy", lastUsed: "刚刚", currentConnections: 0, allowAllCommands: true, recordCommands: true, allowSftp: false, allowedCommand: "" },
 ];
 
 const previewActivity: ActivityEvent[] = isTauri ? [] : [
@@ -261,11 +265,11 @@ export default function App() {
     }
   };
 
-  const updateSSHPolicy = async (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, recordCommands: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"]) => {
+  const updateSSHPolicy = async (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, recordCommands: boolean, allowSftp: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"]) => {
     if (!policyRoute) return;
     try {
       const routes = isTauri
-        ? await invoke<RouteSummary[]>("set_ssh_policy", { alias: policyRoute.alias, name, localUsername, allowedCommand, allowAllCommands, recordCommands, authenticationTimeoutSeconds, egress })
+        ? await invoke<RouteSummary[]>("set_ssh_policy", { alias: policyRoute.alias, name, localUsername, allowedCommand, allowAllCommands, recordCommands, allowSftp, authenticationTimeoutSeconds, egress })
         : control.routes.map((route) => route.alias === policyRoute.alias ? {
           ...route,
           name,
@@ -274,9 +278,10 @@ export default function App() {
           allowedCommand: allowAllCommands ? "" : allowedCommand,
           allowAllCommands,
           recordCommands,
+          allowSftp,
           authenticationTimeoutSeconds,
           egress,
-          permissionSummary: `${allowAllCommands ? "all exec commands · high risk" : "1 exact command · stdin denied"}${recordCommands ? " · recorded" : ""}`,
+          permissionSummary: `${allowAllCommands ? "all exec commands · high risk" : "1 exact command · stdin denied"}${recordCommands ? " · recorded" : ""}${allowSftp ? " · SFTP high risk" : ""}`,
         } : route);
       setControl((current) => ({ ...current, routes }));
       setPolicyRoute(undefined);
@@ -443,6 +448,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <WindowChrome />
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><LockKeyhole size={17} /></span><span><strong>Airlock</strong><small>Local security relay</small></span></div>
         <nav aria-label="主导航">
@@ -638,15 +644,40 @@ function ActivityPage({ events }: { events: ActivityEvent[] }) {
     { value: "Health", label: translate(`健康检查分类 ${events.filter((event) => event.eventType === "health").length}`) },
     { value: "Problems", label: `异常 ${events.filter((event) => event.result !== "allowed").length}` },
   ];
-  return <><PageHeader title="活动" subtitle="脱敏记录仅保留类别、结果与耗时；不记录目标、凭据、请求正文或模型内容" />
+  return <><PageHeader title="活动" subtitle={translate("默认仅保留脱敏类别、结果与耗时；开启命令审计后，可在详情中查看完整 SSH 命令")} />
     <div className="activity-summary" aria-label="活动摘要"><span><Activity size={15} /><b>{events.length}</b> 最近事件</span><span><HeartPulse size={15} /><b>{events.filter((event) => event.eventType === "health").length}</b> 健康检查</span><span className={events.some((event) => event.result !== "allowed") ? "has-problems" : ""}><ShieldAlert size={15} /><b>{events.filter((event) => event.result !== "allowed").length}</b> 异常或阻止</span></div>
     <div className="activity-filter-bar"><div className="segmented activity-segmented" aria-label="活动分类">{options.map((option) => <button key={option.value} className={filter === option.value ? "selected" : ""} onClick={() => setFilter(option.value)}>{option.label}</button>)}</div><span>{translate(`${filtered.length} 条匹配`)}</span></div>
     <ActivityTable events={filtered} /></>;
 }
 
 function ActivityTable({ events }: { events: ActivityEvent[] }) {
+  const [selected, setSelected] = useState<ActivityEvent>();
   if (events.length === 0) return <EmptyState icon={Activity} title="暂无活动" detail="新的脱敏事件会显示在这里。" />;
-  return <div className="table-wrap"><table className="activity-table"><thead><tr><th>时间</th><th>类别</th><th>路由</th><th>调用者</th><th>动作</th><th>结果</th><th>延迟</th><th>出口</th><th>事件 ID</th></tr></thead><tbody>{events.map((event, index) => <tr key={event.id} style={{ animationDelay: `${index * 26}ms` }}><td>{event.time}</td><td><ActivityKindBadge event={event} /></td><td data-i18n="off"><strong>{event.routeName}</strong></td><td data-i18n="off">{event.caller}</td><td><code className="command-cell" data-i18n={event.eventType === "command" ? "off" : undefined}>{formatActivityAction(event)}</code></td><td><StatusBadge status={event.result} /></td><td>{event.latency}</td><td>{event.egress}</td><td data-i18n="off"><code>{event.id}</code></td></tr>)}</tbody></table></div>;
+  const open = (event: ActivityEvent) => setSelected(event);
+  return <>
+    <div className="table-wrap activity-table-wrap"><table className="activity-table"><thead><tr><th>时间</th><th>类别</th><th>路由</th><th>动作</th><th>结果</th><th>延迟</th><th><span className="sr-only">查看详情</span></th></tr></thead><tbody>{events.map((event, index) => <tr key={event.id} className="activity-row" tabIndex={0} role="button" aria-label={`${translate("查看活动详情")} · ${event.routeName}`} style={{ animationDelay: `${index * 26}ms` }} onClick={() => open(event)} onKeyDown={(keyEvent) => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); open(event); } }}><td>{event.time}</td><td><ActivityKindBadge event={event} /></td><td data-i18n="off"><strong>{event.routeName}</strong></td><td><code className="command-cell" data-i18n={event.eventType === "command" ? "off" : undefined}>{formatActivityAction(event)}</code></td><td><StatusBadge status={event.result} /></td><td>{event.latency}</td><td><ChevronRight className="activity-detail-arrow" size={16} aria-hidden="true" /></td></tr>)}</tbody></table></div>
+    {selected && <ActivityDetail event={selected} onClose={() => setSelected(undefined)} />}
+  </>;
+}
+
+function ActivityDetail({ event, onClose }: { event: ActivityEvent; onClose: () => void }) {
+  const action = event.detail || formatActivityAction(event);
+  const copy = (value: string) => { if (navigator.clipboard) void navigator.clipboard.writeText(value); };
+  const eventType = event.eventType === "health" ? "健康检查" : event.eventType === "command" ? "SSH 动作" : "请求";
+  return <Modal title={translate("活动详情")} className="modal-wide activity-detail-modal" onClose={onClose}>
+    <div className="activity-detail">
+      <div className="activity-detail-lead"><ActivityKindBadge event={event} /><StatusBadge status={event.result} /><span>{event.time}</span></div>
+      <dl className="activity-detail-grid">
+        <div><dt>路由</dt><dd data-i18n="off">{event.routeName}</dd></div>
+        <div><dt>调用者</dt><dd data-i18n="off">{event.caller}</dd></div>
+        <div><dt>{translate("事件类型")}</dt><dd>{translate(eventType)}</dd></div>
+        <div><dt>延迟</dt><dd>{event.latency}</dd></div>
+        <div><dt>出口</dt><dd>{event.egress}</dd></div>
+        <div className="activity-event-id"><dt>事件 ID</dt><dd data-i18n="off"><code>{event.id}</code><button className="icon-button small" type="button" onClick={() => copy(event.id)} title={translate("复制事件 ID")} aria-label={translate("复制事件 ID")}><Copy size={14} /></button></dd></div>
+      </dl>
+      <section className="activity-action-detail"><header><div><strong>{translate("完整动作")}</strong><span>{translate(event.eventType === "command" ? "仅在路由启用命令记录时保存完整命令" : "已脱敏，不包含目标、凭据或请求正文")}</span></div><button className="secondary-button compact" type="button" onClick={() => copy(action)}><Copy size={14} />{translate("复制内容")}</button></header><pre data-i18n="off">{action}</pre></section>
+    </div>
+  </Modal>;
 }
 
 function GuidePage({ onRoutes }: { onRoutes: () => void }) {
@@ -807,13 +838,14 @@ function SecurityChoice<T extends NetworkScope | SecretStoreMode>({ label, detai
 function PreferenceRow({ label, detail, children }: { label: string; detail: string; children: React.ReactNode }) { return <div className="preference-row"><div><strong>{label}</strong><small>{detail}</small></div>{children}</div>; }
 function PreferenceSegment<T extends string | number>({ value, options, onChange }: { value: T; options: Array<{ value: T; label: string }>; onChange: (value: T) => void }) { return <div className="preference-segment" role="group">{options.map((option) => <button key={String(option.value)} className={value === option.value ? "selected" : ""} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>; }
 
-function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHost, onRotateCredential, onTest, onAddHost, onDelete }: { route: RouteSummary; platform: PlatformInfo; testing: boolean; onClose: () => void; onSave: (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, recordCommands: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"]) => Promise<void>; onUpdateHost: (input: SSHHostUpdateInput) => Promise<void>; onRotateCredential: (localPassword: string) => Promise<SSHRouteCreationResult>; onTest: () => Promise<boolean>; onAddHost: () => void; onDelete: () => void }) {
+function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHost, onRotateCredential, onTest, onAddHost, onDelete }: { route: RouteSummary; platform: PlatformInfo; testing: boolean; onClose: () => void; onSave: (name: string, localUsername: string, allowedCommand: string, allowAllCommands: boolean, recordCommands: boolean, allowSftp: boolean, authenticationTimeoutSeconds: number, egress: RouteSummary["egress"]) => Promise<void>; onUpdateHost: (input: SSHHostUpdateInput) => Promise<void>; onRotateCredential: (localPassword: string) => Promise<SSHRouteCreationResult>; onTest: () => Promise<boolean>; onAddHost: () => void; onDelete: () => void }) {
   const [name, setName] = useState(route.name);
   const [localUsername, setLocalUsername] = useState(route.localUsername || route.alias);
   const [egress, setEgress] = useState(route.egress);
   const [allowAll, setAllowAll] = useState(route.allowAllCommands);
   const [allowedCommand, setAllowedCommand] = useState(route.allowedCommand || "printf airlock-ok");
   const [recordCommands, setRecordCommands] = useState(route.recordCommands);
+  const [allowSftp, setAllowSftp] = useState(route.allowSftp);
   const [authenticationTimeoutSeconds, setAuthenticationTimeoutSeconds] = useState(route.authenticationTimeoutSeconds ?? 20);
   const [busy, setBusy] = useState<"save" | "probe" | "host" | "rotate">();
   const [error, setError] = useState<string>();
@@ -841,7 +873,7 @@ function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHo
   const save = async () => {
     setBusy("save");
     setError(undefined);
-    try { await onSave(name.trim(), localUsername, allowedCommand, allowAll, recordCommands, authenticationTimeoutSeconds, egress); }
+    try { await onSave(name.trim(), localUsername, allowedCommand, allowAll, recordCommands, allowSftp, authenticationTimeoutSeconds, egress); }
     catch (caught) { setError(translate(String(caught))); }
     finally { setBusy(undefined); }
   };
@@ -891,6 +923,7 @@ function SSHPolicyEditor({ route, platform, testing, onClose, onSave, onUpdateHo
       {!allowAll && <label className="form-field ssh-command-field"><span>唯一允许命令 <small>{allowedCommand.length}/4096</small></span><input value={allowedCommand} onChange={(event) => setAllowedCommand(event.target.value)} maxLength={4096} spellCheck={false} placeholder="例如：uptime" /><small>按完整字符串匹配，不要在命令参数中填写密码或 Token。</small></label>}
       {allowAll && <div className="inline-warning policy-warning"><TriangleAlert size={16} /><span>{translate(platformNativeConfirmText(platform))}</span></div>}
       <label className="audit-toggle"><input type="checkbox" checked={recordCommands} onChange={(event) => setRecordCommands(event.target.checked)} /><span><strong>{translate("记录执行命令")}</strong><small>{translate("完整命令保存在本机受保护审计文件，参数可能包含敏感内容。")}</small></span></label>
+      <label className={`audit-toggle sftp-toggle ${allowSftp ? "enabled" : ""}`}><input type="checkbox" checked={allowSftp} onChange={(event) => setAllowSftp(event.target.checked)} /><span><strong>{translate("允许 SFTP 文件传输（高风险）")}</strong><small>{translate("允许列出、读取、写入、重命名和删除上游账号可访问的文件。请使用专用低权限账号；Shell、PTY、端口转发及其他子系统仍拒绝。")}</small></span></label>
       </section>
       <section className="ssh-manager-section"><div className="ssh-manager-heading"><div><strong>受保护宿主机</strong><span>真实地址、上游账号和密码默认不回显；替换时重新输入</span></div><button className="secondary-button compact" onClick={() => { setHostEditorOpen((current) => !current); setError(undefined); }} disabled={Boolean(busy)}>{hostEditorOpen ? <ChevronRight size={14} /> : <Settings2 size={14} />}{hostEditorOpen ? "收起" : "替换宿主机"}</button></div>{hostEditorOpen && <div className="ssh-host-editor"><div className="ssh-upstream-grid"><label className="form-field"><span>新的 SSH 主机</span><input value={hostAddress} onChange={(event) => updateHostAddress(event.target.value)} placeholder="192.168.1.20" maxLength={505} /></label><label className="form-field ssh-port-field"><span>端口</span><input type="text" inputMode="numeric" value={hostPort} onChange={(event) => updateHostPort(event.target.value)} maxLength={5} placeholder="22" /></label><label className="form-field"><span>新的上游用户名</span><input value={hostUsername} onChange={(event) => setHostUsername(event.target.value)} maxLength={255} /></label></div><SecretField label="新的上游密码" value={hostPassword} visible={hostPasswordVisible} onVisible={() => setHostPasswordVisible((current) => !current)} onChange={setHostPassword} placeholder="输入新的上游密码" detail="只保存到当前受保护凭据存储" />{hostProbe ? <div className="host-key-check ready"><div className="host-key-copy"><strong>新的 SSH Host Key</strong><span>通过可信渠道核对</span></div><code data-i18n="off">{hostProbe.fingerprint}</code><label className="compact-check host-key-accept"><input type="checkbox" checked={hostKeyAccepted} onChange={(event) => setHostKeyAccepted(event.target.checked)} /><span>我已核对并信任此 Host Key</span></label></div> : <button className="secondary-button host-probe-button" onClick={() => void probeHost()} disabled={!hostValid || Boolean(busy)}>{busy === "probe" ? <LoaderCircle className="spin" size={14} /> : <HeartPulse size={14} />}{busy === "probe" ? "检测中" : "检测新宿主 Host Key"}</button>}<div className="secure-entry-actions"><span>替换成功后，原宿主凭据会被覆盖</span><button className="primary-button" onClick={() => void replaceHost()} disabled={!hostValid || !hostProbe || !hostKeyAccepted || Boolean(busy)}>{busy === "host" ? <LoaderCircle className="spin" size={14} /> : <ShieldCheck size={14} />}{busy === "host" ? "正在替换" : "确认替换宿主机"}</button></div></div>}</section>
       <section className="ssh-manager-section"><div className="ssh-manager-heading"><div><strong>本地登录凭据</strong><span>轮换后旧密码或随机凭据立即失效</span></div><div className="policy-segmented"><button className={credentialMode === "generated" ? "selected" : ""} onClick={() => { setCredentialMode("generated"); setLocalPassword(""); setLocalPasswordConfirmation(""); }}><KeyRound size={13} />随机生成</button><button className={credentialMode === "custom" ? "selected" : ""} onClick={() => setCredentialMode("custom")}><ShieldCheck size={13} />自定义密码</button></div></div>{credentialMode === "custom" && <div className="local-password-grid"><SecretField label="新的本地密码" value={localPassword} visible={localPasswordVisible} onVisible={() => setLocalPasswordVisible((current) => !current)} onChange={setLocalPassword} placeholder="至少 12 个字节" detail={`${localPasswordBytes}/1024 bytes`} /><SecretField label="确认新密码" value={localPasswordConfirmation} visible={localPasswordVisible} onVisible={() => setLocalPasswordVisible((current) => !current)} onChange={setLocalPasswordConfirmation} placeholder="再次输入" detail={localPasswordConfirmation && localPassword !== localPasswordConfirmation ? "两次输入不一致" : "只保存摘要"} invalid={Boolean(localPasswordConfirmation && localPassword !== localPasswordConfirmation)} /></div>}<button className="secondary-button rotate-ssh-credential" onClick={() => void rotateCredential()} disabled={!localPasswordValid || Boolean(busy)}>{busy === "rotate" ? <LoaderCircle className="spin" size={14} /> : <RotateCcw size={14} />}{busy === "rotate" ? "正在轮换" : "轮换本地凭据"}</button>{rotatedCredential && <div className="one-time-credential"><span>新的本地凭据，仅显示一次</span><code data-i18n="off">{rotatedCredential}</code></div>}</section>
@@ -962,6 +995,7 @@ function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady
   const [allowAllCommands, setAllowAllCommands] = useState(false);
   const [allowedCommand, setAllowedCommand] = useState("printf airlock-ok");
   const [recordCommands, setRecordCommands] = useState(true);
+  const [allowSftp, setAllowSftp] = useState(false);
   const [sshAuthenticationTimeoutSeconds, setSSHAuthenticationTimeoutSeconds] = useState(20);
   const [llmProvider, setLLMProvider] = useState<"openai" | "anthropic">("openai");
   const [llmModels, setLLMModels] = useState("");
@@ -1065,14 +1099,14 @@ function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady
       if (isTauri) {
         if (kind === "SSH") {
           if (!sshProbe) throw new Error("请先检测并确认上游 SSH Host Key");
-          const result = await invoke<SSHRouteCreationResult>("create_ssh_route", { input: { name: name.trim(), alias, localUsername, address: sshEndpoint, username: sshUsername, password: sshPassword, localPassword: localCredentialMode === "custom" ? localPassword : "", expectedHostKey: sshProbe.hostKey, egress, allowedCommand, allowAllCommands, allowAllConfirmed, recordCommands, authenticationTimeoutSeconds: sshAuthenticationTimeoutSeconds } });
+          const result = await invoke<SSHRouteCreationResult>("create_ssh_route", { input: { name: name.trim(), alias, localUsername, address: sshEndpoint, username: sshUsername, password: sshPassword, localPassword: localCredentialMode === "custom" ? localPassword : "", expectedHostKey: sshProbe.hostKey, egress, allowedCommand, allowAllCommands, allowAllConfirmed, recordCommands, allowSftp, authenticationTimeoutSeconds: sshAuthenticationTimeoutSeconds } });
           route = result.route;
           setSSHCreation(result);
         }
         else if (kind === "LLM") route = await invoke<RouteSummary>("create_llm_route", { name: name.trim(), alias, egress, provider: llmProvider, models, maxOutputTokens, requestsPerMinute, maxConcurrent, trackUsage });
         else route = await invoke<RouteSummary>("create_http_route", { name: name.trim(), alias, egress });
       } else {
-        route = { id: alias, name: name.trim(), alias, localUsername: kind === "SSH" ? localUsername : undefined, kind, status: kind === "SSH" ? "disabled" : "enabled", localEndpoint: kind === "SSH" ? `${localUsername}@127.0.0.1:4770` : `${kind === "LLM" ? "http://" : ""}127.0.0.1:4768/r/${alias}`, permissionSummary: kind === "SSH" ? `${allowAllCommands ? "all exec commands · high risk" : "1 exact command · stdin denied"}${recordCommands ? " · recorded" : ""}` : kind === "LLM" ? `${llmProvider === "openai" ? "OpenAI" : "Anthropic"} · ${models.length} models · output ≤ ${maxOutputTokens} · ${requestsPerMinute}/min · ${maxConcurrent} concurrent` : "GET, HEAD · Range", egress, health: kind === "SSH" ? "unknown" : "healthy", lastUsed: "从未", currentConnections: 0, allowAllCommands: kind === "SSH" && allowAllCommands, recordCommands: kind === "SSH" && recordCommands, allowedCommand: kind === "SSH" && !allowAllCommands ? allowedCommand : undefined, ...(kind === "SSH" ? { authenticationTimeoutSeconds: sshAuthenticationTimeoutSeconds } : {}), ...(kind === "LLM" ? { provider: llmProvider, allowedModels: models, maxOutputTokens, requestsPerMinute, maxConcurrent, trackUsage, totalRequests: 0, inputTokens: 0, outputTokens: 0 } : {}) };
+        route = { id: alias, name: name.trim(), alias, localUsername: kind === "SSH" ? localUsername : undefined, kind, status: kind === "SSH" ? "disabled" : "enabled", localEndpoint: kind === "SSH" ? `${localUsername}@127.0.0.1:4770` : `${kind === "LLM" ? "http://" : ""}127.0.0.1:4768/r/${alias}`, permissionSummary: kind === "SSH" ? `${allowAllCommands ? "all exec commands · high risk" : "1 exact command · stdin denied"}${recordCommands ? " · recorded" : ""}${allowSftp ? " · SFTP high risk" : ""}` : kind === "LLM" ? `${llmProvider === "openai" ? "OpenAI" : "Anthropic"} · ${models.length} models · output ≤ ${maxOutputTokens} · ${requestsPerMinute}/min · ${maxConcurrent} concurrent` : "GET, HEAD · Range", egress, health: kind === "SSH" ? "unknown" : "healthy", lastUsed: "从未", currentConnections: 0, allowAllCommands: kind === "SSH" && allowAllCommands, recordCommands: kind === "SSH" && recordCommands, allowSftp: kind === "SSH" && allowSftp, allowedCommand: kind === "SSH" && !allowAllCommands ? allowedCommand : undefined, ...(kind === "SSH" ? { authenticationTimeoutSeconds: sshAuthenticationTimeoutSeconds } : {}), ...(kind === "LLM" ? { provider: llmProvider, allowedModels: models, maxOutputTokens, requestsPerMinute, maxConcurrent, trackUsage, totalRequests: 0, inputTokens: 0, outputTokens: 0 } : {}) };
         if (kind === "SSH") setSSHCreation({ route, localCredential: localCredentialMode === "generated" ? "airlock_preview_credential" : "", generatedCredential: localCredentialMode === "generated" });
       }
       if (kind === "SSH") clearSSHSecrets();
@@ -1102,6 +1136,7 @@ function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady
         {kind === "SSH" && <div className="route-policy-strip"><span>命令权限</span><div className="policy-segmented"><button className={!allowAllCommands ? "selected" : ""} onClick={() => { setAllowAllCommands(false); setAllowAllConfirmed(false); }}><ShieldCheck size={14} />指定命令</button><button className={allowAllCommands ? "selected risk" : "risk"} onClick={() => { setAllowAllCommands(true); setAllowAllConfirmed(false); }}><AlertTriangle size={14} />所有命令</button></div><label className="compact-check"><input type="checkbox" checked={recordCommands} onChange={(event) => setRecordCommands(event.target.checked)} />记录命令</label></div>}
         {kind === "SSH" && !allowAllCommands && <label className="form-field ssh-command-field"><span>唯一允许命令 <small>{allowedCommand.length}/4096</small></span><input value={allowedCommand} onChange={(event) => setAllowedCommand(event.target.value)} maxLength={4096} spellCheck={false} placeholder="例如：uptime" /><small>按完整字符串匹配，不要在命令参数中填写密码或 Token。</small></label>}
         {kind === "SSH" && allowAllCommands && <div className="inline-warning"><TriangleAlert size={15} />所有命令是高风险能力，创建时需要在 Airlock 内明确确认。</div>}
+        {kind === "SSH" && <label className={`audit-toggle sftp-toggle ${allowSftp ? "enabled" : ""}`}><input type="checkbox" checked={allowSftp} onChange={(event) => setAllowSftp(event.target.checked)} /><span><strong>{translate("允许 SFTP 文件传输（高风险）")}</strong><small>{translate("现代 OpenSSH 的 scp 默认使用 SFTP。启用后可列出、读取、写入、重命名和删除上游账号可访问的文件；请使用专用低权限账号。")}</small></span></label>}
         <div className="egress-field"><span>出口策略</span><div className="egress-control" role="group" aria-label="出口策略">{([{ value: "Direct", label: "直连", icon: Cable }, { value: "Proxy", label: "代理", icon: Network }, { value: "Auto", label: "自动", icon: GitBranch }] as const).map((option) => { const Icon = option.icon; return <button key={option.value} className={egress === option.value ? "selected" : ""} onClick={() => updateEgress(option.value)} aria-pressed={egress === option.value}><Icon size={14} />{option.label}</button>; })}</div></div>
         {egress !== "Direct" && !proxyConfigured && <div className="inline-warning"><TriangleAlert size={15} />代理出口尚未在设置中安全配置。</div>}
       </>}
@@ -1119,7 +1154,7 @@ function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady
             {localCredentialMode === "generated" ? <p className="generated-credential-note">Airlock 将生成高强度本地凭据，并只在完成页显示一次。</p> : <div className="local-password-grid"><SecretField label="本地登录密码" value={localPassword} visible={showLocalPassword} onVisible={() => setShowLocalPassword((current) => !current)} onChange={setLocalPassword} placeholder="至少 12 个字节" detail={`${localPasswordBytes}/1024 bytes`} /><SecretField label="确认本地密码" value={localPasswordConfirmation} visible={showLocalPassword} onVisible={() => setShowLocalPassword((current) => !current)} onChange={setLocalPasswordConfirmation} placeholder="再次输入" detail={localPasswordConfirmation && localPassword !== localPasswordConfirmation ? "两次输入不一致" : "Airlock 只保存摘要"} invalid={Boolean(localPasswordConfirmation && localPassword !== localPasswordConfirmation)} /></div>}
           </div>
           <div className={`host-key-check ${sshProbe ? "ready" : ""}`}><div className="host-key-copy"><strong>SSH Host Key</strong><span>{sshProbe ? "通过可信渠道核对后再确认" : "先连接上游并读取公开指纹，不会尝试登录"}</span></div>{sshProbe ? <><code data-i18n="off">{sshProbe.fingerprint}</code><label className="compact-check host-key-accept"><input type="checkbox" checked={hostKeyAccepted} onChange={(event) => setHostKeyAccepted(event.target.checked)} /><span>我已核对并信任此 Host Key</span></label></> : <button className="secondary-button" onClick={() => void probeSSHHostKey()} disabled={!canProbeSSH}>{sshBusy === "probe" ? <RefreshCw className="spin" size={15} /> : <HeartPulse size={15} />}{sshBusy === "probe" ? "正在检测" : "检测 Host Key"}</button>}</div>
-          {allowAllCommands && <label className="risk-consent"><input type="checkbox" checked={allowAllConfirmed} onChange={(event) => setAllowAllConfirmed(event.target.checked)} /><TriangleAlert size={16} /><span><strong>确认开放所有非交互 exec 命令</strong><small>Shell、PTY、SFTP 与端口转发仍拒绝，但命令拥有上游账号可访问的数据与操作权限。</small></span></label>}
+          {allowAllCommands && <label className="risk-consent"><input type="checkbox" checked={allowAllConfirmed} onChange={(event) => setAllowAllConfirmed(event.target.checked)} /><TriangleAlert size={16} /><span><strong>确认开放所有非交互 exec 命令</strong><small>Shell、PTY 与端口转发仍拒绝；SFTP 由独立开关控制。命令拥有上游账号可访问的数据与操作权限。</small></span></label>}
           {sshError && <div className="inline-error ssh-entry-error"><TriangleAlert size={16} /><span>{sshError}</span></div>}
           {!connected && <div className="inline-error"><TriangleAlert size={16} />airlockd 未连接，暂时无法保存。</div>}
           <div className="secure-entry-actions"><span>{sshProbe ? "Host Key 已读取；确认后安全保存，稍后可在路由页检查连接" : "先检测 Host Key，再保存凭据和路由"}</span><button className="primary-button" onClick={() => void secureCreate()} disabled={!canCreateSSH}>{sshBusy === "create" ? <RefreshCw className="spin" size={16} /> : <ShieldCheck size={16} />}{sshBusy === "create" ? "正在安全保存" : "信任并保存路由"}</button></div>
@@ -1134,6 +1169,22 @@ function RouteEditor({ initialKind, routes, connected, proxyConfigured, sshReady
 function SecretField({ label, value, visible, onVisible, onChange, placeholder, detail, invalid = false }: { label: string; value: string; visible: boolean; onVisible: () => void; onChange: (value: string) => void; placeholder: string; detail: string; invalid?: boolean }) {
   const inputId = useId();
   return <div className={`form-field secret-field ${invalid ? "invalid" : ""}`}><label htmlFor={inputId}>{label}</label><span className="secret-input-wrap"><input id={inputId} type={visible ? "text" : "password"} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" spellCheck={false} placeholder={placeholder} aria-invalid={invalid} /><button type="button" className="secret-visibility" onClick={onVisible} aria-label={visible ? "隐藏密码" : "显示密码"} title={visible ? "隐藏密码" : "显示密码"}>{visible ? <EyeOff size={15} /> : <Eye size={15} />}</button></span><small>{detail}</small></div>;
+}
+
+function WindowChrome() {
+  if (!isTauri) return null;
+  const window = getCurrentWindow();
+  const minimize = () => void window.minimize().catch(() => undefined);
+  const toggleMaximize = () => void window.toggleMaximize().catch(() => undefined);
+  const close = () => void window.close().catch(() => undefined);
+  return <div className="window-chrome" data-tauri-drag-region onDoubleClick={toggleMaximize}>
+    <div className="window-chrome-brand" data-tauri-drag-region><span className="window-chrome-mark"><LockKeyhole size={13} /></span><strong>Airlock</strong><span>Local security relay</span></div>
+    <div className="window-chrome-actions" aria-label={translate("窗口控制")}>
+      <button type="button" className="window-control" onClick={minimize} aria-label={translate("最小化窗口")} title={translate("最小化窗口")}><Minus size={15} /></button>
+      <button type="button" className="window-control" onClick={toggleMaximize} aria-label={translate("最大化窗口")} title={translate("最大化窗口")}><Maximize2 size={13} /></button>
+      <button type="button" className="window-control window-control-close" onClick={close} aria-label={translate("关闭窗口")} title={translate("关闭窗口")}><X size={14} /></button>
+    </div>
+  </div>;
 }
 
 function DeveloperCard() {

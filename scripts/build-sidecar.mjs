@@ -12,6 +12,7 @@ const targets = {
   "darwin-amd64": { goos: "darwin", goarch: "amd64", extension: "", rustTriple: "x86_64-apple-darwin" },
   "windows-amd64": { goos: "windows", goarch: "amd64", extension: ".exe", rustTriple: "x86_64-pc-windows-msvc" },
   "windows-arm64": { goos: "windows", goarch: "arm64", extension: ".exe", rustTriple: "aarch64-pc-windows-msvc" },
+  "windows-386": { goos: "windows", goarch: "386", extension: ".exe", rustTriple: "i686-pc-windows-msvc" },
   "linux-amd64": { goos: "linux", goarch: "amd64", extension: "", rustTriple: "x86_64-unknown-linux-gnu" },
   "linux-arm64": { goos: "linux", goarch: "arm64", extension: "", rustTriple: "aarch64-unknown-linux-gnu" },
   "linux-armv7": { goos: "linux", goarch: "arm", goarm: "7", extension: "", rustTriple: "armv7-unknown-linux-gnueabihf" },
@@ -24,6 +25,7 @@ function detectTarget() {
   if (platform === "darwin" && arch === "x64") return "darwin-amd64";
   if (platform === "win32" && arch === "x64") return "windows-amd64";
   if (platform === "win32" && arch === "arm64") return "windows-arm64";
+  if (platform === "win32" && arch === "ia32") return "windows-386";
   if (platform === "linux" && arch === "x64") return "linux-amd64";
   if (platform === "linux" && arch === "arm64") return "linux-arm64";
   if (platform === "linux" && arch === "arm") return "linux-armv7";

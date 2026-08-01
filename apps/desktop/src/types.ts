@@ -42,6 +42,7 @@ export interface RouteSummary {
   currentConnections: number;
   allowAllCommands: boolean;
   recordCommands: boolean;
+  allowSftp: boolean;
   allowedCommand?: string;
   provider?: "openai" | "anthropic";
   allowedModels?: string[];
@@ -74,6 +75,7 @@ export interface ActivityEvent {
   routeName: string;
   caller: string;
   action: string;
+  detail?: string;
   result: "allowed" | "blocked" | "failed";
   latency: string;
   egress: "Direct" | "Proxy" | "Auto";

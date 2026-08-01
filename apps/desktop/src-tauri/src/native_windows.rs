@@ -129,13 +129,7 @@ pub fn prompt_native_value(
     hidden: bool,
     default_value: &str,
 ) -> Result<String, String> {
-    prompt_native_value_with_title(
-        "Airlock 安全录入",
-        message,
-        optional,
-        hidden,
-        default_value,
-    )
+    prompt_native_value_with_title("Airlock 安全录入", message, optional, hidden, default_value)
 }
 
 pub fn prompt_native_value_with_title(

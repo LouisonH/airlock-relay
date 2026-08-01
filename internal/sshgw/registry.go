@@ -43,6 +43,7 @@ type Policy struct {
 	AllowStdin                 bool
 	AllowAllCommands           bool
 	RecordCommands             bool
+	AllowSFTP                  bool
 }
 
 func NewPolicy(commands, fingerprints []string, allowStdin bool) Policy {

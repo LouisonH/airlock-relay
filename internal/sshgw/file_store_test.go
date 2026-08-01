@@ -22,6 +22,7 @@ func TestSSHFileStoreRoundTripAndPermissions(t *testing.T) {
 		Policy:           NewPolicy([]string{"printf airlock-ok"}, []string{"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, false),
 		Egress:           "Auto", AuthenticationTimeoutSeconds: 37, Enabled: true,
 	}
+	route.Policy.AllowSFTP = true
 	if err := store.Save([]Route{route}); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +37,7 @@ func TestSSHFileStoreRoundTripAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded) != 1 || loaded[0].Alias != route.Alias || loaded[0].LocalUsername != "builder" || loaded[0].AuthenticationTimeoutSeconds != 37 || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || !loaded[0].Enabled {
+	if len(loaded) != 1 || loaded[0].Alias != route.Alias || loaded[0].LocalUsername != "builder" || loaded[0].AuthenticationTimeoutSeconds != 37 || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || !loaded[0].Policy.AllowSFTP || !loaded[0].Enabled {
 		t.Fatalf("loaded SSH routes = %+v", loaded)
 	}
 	raw, err := os.ReadFile(path)
@@ -78,6 +79,9 @@ func TestSSHFileStoreLoadsLegacyAliasAsLocalUsername(t *testing.T) {
 	}
 	if loaded[0].AuthenticationTimeoutSeconds != DefaultAuthenticationTimeoutSeconds {
 		t.Fatalf("legacy authentication timeout = %d", loaded[0].AuthenticationTimeoutSeconds)
+	}
+	if loaded[0].Policy.AllowSFTP {
+		t.Fatal("legacy route unexpectedly enabled SFTP")
 	}
 	if err := store.Save(loaded); err != nil {
 		t.Fatal(err)

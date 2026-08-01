@@ -11,6 +11,7 @@ Desktop GUI、local control transport、native prompt フローはコードレ�
 | macOS arm64 | native | user-only Unix Socket | Keychain / protected file | DMG / `.app` | preview 公開済み |
 | macOS x64 | target build | user-only Unix Socket | Keychain / protected file | DMG / `.app` | installer は予定 |
 | Windows x64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop 移植済み（コード）· 未公開 |
+| Windows x86 (i686) | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop 移植済み（コード）· 未公開 |
 | Windows arm64 | cross-compiled | current-owner ACL Named Pipe | Credential Manager / protected file | NSIS / MSI | Desktop 移植済み（コード）· 未公開 |
 | Linux x64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop 移植済み（コード）· 未公開 |
 | Linux arm64 | cross-compiled | user-only Unix Socket | Secret Service / protected file | AppImage / deb | Desktop 移植済み（コード）· 未公開 |
@@ -48,10 +49,10 @@ Desktop GUI、local control transport、native prompt フローはコードレ�
   Capability の受け渡し、security setting 確認に対応します。Linux の port 所有者管理は
   `/proc` を直接読み取るため `lsof` は不要です。Desktop bundle では prompt backend のいずれかが
   必要で、headless server では CLI を使用します。
-- CI は push のたびに Windows x64、Windows arm64、Linux x64 の Desktop ターゲットで
+- CI は push のたびに Windows x64、Windows x86、Windows arm64、Linux x64 の Desktop ターゲットで
   Rust `cargo check` を実行し、移植済みの control client を実機 acceptance 前に
   継続的に検証します。
-- 別の `desktop-windows` workflow が GitHub の Windows runner 上で Windows x64/arm64
+- 別の `desktop-windows` workflow が GitHub の Windows runner 上で Windows x64/x86（i686）/arm64
   向け NSIS/MSI インストーラーをビルドし、ダウンロード可能な artifact として公開します。
   release signing の設定が完了するまで署名なしのため、SmartScreen が初回起動時に警告する
   場合があります。
@@ -69,6 +70,7 @@ cross-compile し、`bin/<target>` に配置します。
 ```bash
 node scripts/build-sidecar.mjs windows-amd64
 node scripts/build-sidecar.mjs windows-arm64
+node scripts/build-sidecar.mjs windows-386
 node scripts/build-sidecar.mjs linux-amd64
 node scripts/build-sidecar.mjs linux-arm64
 node scripts/build-sidecar.mjs linux-armv7

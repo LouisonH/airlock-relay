@@ -7,7 +7,10 @@ use std::{
 
 #[cfg(unix)]
 pub fn local_control_endpoint(directory: &Path) -> String {
-    directory.join("control.sock").to_string_lossy().into_owned()
+    directory
+        .join("control.sock")
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[cfg(windows)]
@@ -57,11 +60,15 @@ mod windows_control {
             CreateFileW, ReadFile, WriteFile, FILE_ATTRIBUTE_NORMAL, FILE_FLAG_OVERLAPPED,
             OPEN_EXISTING,
         },
-        System::IO::{GetOverlappedResult, OVERLAPPED},
         System::Threading::{CreateEventW, WaitForSingleObject},
+        System::IO::{GetOverlappedResult, OVERLAPPED},
     };
 
-    pub(super) fn exchange(endpoint: &str, payload: &[u8], timeout: Duration) -> io::Result<String> {
+    pub(super) fn exchange(
+        endpoint: &str,
+        payload: &[u8],
+        timeout: Duration,
+    ) -> io::Result<String> {
         let pipe = connect(endpoint)?;
         let event = EventHandle::create()?;
         let timeout_ms = timeout.as_millis().min(u32::MAX as u128) as u32;
@@ -69,15 +76,21 @@ mod windows_control {
         let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
         overlapped.hEvent = event.0;
         let written = unsafe {
-            wait_for_io(pipe.0, event.0, &mut overlapped, timeout_ms, |transferred| {
-                WriteFile(
-                    pipe.0,
-                    payload.as_ptr() as *const _,
-                    payload.len() as u32,
-                    transferred,
-                    &mut overlapped,
-                )
-            })
+            wait_for_io(
+                pipe.0,
+                event.0,
+                &mut overlapped,
+                timeout_ms,
+                |transferred| {
+                    WriteFile(
+                        pipe.0,
+                        payload.as_ptr() as *const _,
+                        payload.len() as u32,
+                        transferred,
+                        &mut overlapped,
+                    )
+                },
+            )
         }?;
         if written as usize != payload.len() {
             return Err(io::Error::new(
@@ -92,15 +105,21 @@ mod windows_control {
             let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
             overlapped.hEvent = event.0;
             let read = unsafe {
-                wait_for_io(pipe.0, event.0, &mut overlapped, timeout_ms, |transferred| {
-                    ReadFile(
-                        pipe.0,
-                        chunk.as_mut_ptr() as *mut _,
-                        chunk.len() as u32,
-                        transferred,
-                        &mut overlapped,
-                    )
-                })
+                wait_for_io(
+                    pipe.0,
+                    event.0,
+                    &mut overlapped,
+                    timeout_ms,
+                    |transferred| {
+                        ReadFile(
+                            pipe.0,
+                            chunk.as_mut_ptr() as *mut _,
+                            chunk.len() as u32,
+                            transferred,
+                            &mut overlapped,
+                        )
+                    },
+                )
             }?;
             if read == 0 {
                 break;
@@ -116,8 +135,9 @@ mod windows_control {
                 break;
             }
         }
-        String::from_utf8(raw)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "control response is not UTF-8"))
+        String::from_utf8(raw).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "control response is not UTF-8")
+        })
     }
 
     fn connect(endpoint: &str) -> io::Result<PipeHandle> {
@@ -294,11 +314,7 @@ pub fn replace_file(source: &Path, destination: &Path) -> io::Result<()> {
         MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
     };
 
-    let source: Vec<u16> = source
-        .as_os_str()
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
+    let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
     let destination: Vec<u16> = destination
         .as_os_str()
         .encode_wide()

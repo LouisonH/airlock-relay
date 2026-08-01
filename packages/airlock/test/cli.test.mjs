@@ -101,6 +101,7 @@ test("reports platform contracts without claiming planned targets are released",
   assert.equal(report.targets.find((target) => target.platform === "darwin" && target.arch === "arm64").status, "released");
   assert.equal(report.targets.find((target) => target.platform === "win32" && target.arch === "x64").status, "planned");
   assert.equal(report.targets.find((target) => target.platform === "win32" && target.arch === "arm64").status, "planned");
+  assert.equal(report.targets.find((target) => target.platform === "win32" && target.arch === "ia32").status, "planned");
   assert.equal(report.targets.find((target) => target.platform === "linux" && target.arch === "arm").label, "Linux / ARMv7 (Raspberry Pi)");
 });
 

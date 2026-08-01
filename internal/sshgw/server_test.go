@@ -95,6 +95,70 @@ func TestGatewayPasswordIsolationAndRestrictedExec(t *testing.T) {
 	}
 }
 
+func TestGatewayForwardsOnlyEnabledSFTPSubsystem(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	policy := NewPolicy([]string{"build --release"}, nil, false)
+	policy.AllowSFTP = true
+	route := testSSHRoute(policy, egress.Direct)
+	target := secrets.SSHTarget{
+		Address:         upstream.address(),
+		Username:        upstreamUser,
+		Password:        []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	recorder := activity.NewMemoryRecorder()
+	gateway := startGatewayRoutesWithOptions(t, []Route{route}, map[string]secrets.SSHTarget{route.TargetSecretRef: target}, egress.NewManager(nil), WithActivityRecorder(recorder))
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	unknown, unknownRequests, err := client.OpenChannel("session", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go ssh.DiscardRequests(unknownRequests)
+	if accepted, err := unknown.SendRequest("subsystem", true, ssh.Marshal(struct{ Name string }{Name: "not-sftp"})); err != nil || accepted {
+		t.Fatal("unexpected subsystem was allowed")
+	}
+	_ = unknown.Close()
+	if upstream.snapshot().connections != 0 {
+		t.Fatal("unexpected subsystem reached the upstream host")
+	}
+
+	channel, channelRequests, err := client.OpenChannel("session", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := make(chan uint32, 1)
+	go func() { status <- receiveExitStatus(channelRequests) }()
+	if accepted, err := channel.SendRequest("subsystem", true, ssh.Marshal(struct{ Name string }{Name: "sftp"})); err != nil || !accepted {
+		t.Fatalf("SFTP subsystem failed: accepted=%v, err=%v", accepted, err)
+	}
+	if _, err := io.WriteString(channel, "sanitized-sftp-test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := channel.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	output, err := io.ReadAll(channel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exitCode := <-status; exitCode != 0 {
+		t.Fatalf("SFTP exit status = %d", exitCode)
+	}
+	if string(output) != "sftp:sanitized-sftp-test" {
+		t.Fatalf("SFTP output = %q", output)
+	}
+	snapshot := upstream.snapshot()
+	if snapshot.sftpRequests != 1 || snapshot.lastStdin != "sanitized-sftp-test" {
+		t.Fatalf("upstream SFTP state = %+v", snapshot)
+	}
+	events := recorder.List(10)
+	if len(events) != 1 || events[0].Action != "SFTP subsystem" || events[0].Result != "allowed" || events[0].Caller != "build@loopback" {
+		t.Fatalf("SFTP activity = %+v", events)
+	}
+}
+
 func TestServerResourceLimitsRejectCapacityWithoutBlocking(t *testing.T) {
 	registry, err := NewRegistry(testSSHRoute(NewPolicy([]string{"uptime"}, nil, false), egress.Direct))
 	if err != nil {
@@ -586,6 +650,7 @@ type upstreamSnapshot struct {
 	keyboardInteractiveAuths int
 	publicKeyAuths           int
 	commands                 int
+	sftpRequests             int
 	lastUser                 string
 	lastPassword             string
 	lastCommand              string
@@ -703,6 +768,24 @@ func (h *upstreamHarness) serveConnection(raw net.Conn) {
 func (h *upstreamHarness) serveSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 	defer channel.Close()
 	for request := range requests {
+		if request.Type == "subsystem" {
+			var payload struct{ Name string }
+			if ssh.Unmarshal(request.Payload, &payload) != nil || payload.Name != "sftp" {
+				_ = request.Reply(false, nil)
+				continue
+			}
+			h.mu.Lock()
+			h.state.sftpRequests++
+			h.mu.Unlock()
+			_ = request.Reply(true, nil)
+			stdin, _ := io.ReadAll(channel)
+			h.mu.Lock()
+			h.state.lastStdin = string(stdin)
+			h.mu.Unlock()
+			_, _ = channel.Write([]byte("sftp:" + string(stdin)))
+			_ = sendExitStatus(channel, 0)
+			return
+		}
 		if request.Type != "exec" {
 			_ = request.Reply(false, nil)
 			continue

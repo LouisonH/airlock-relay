@@ -181,6 +181,7 @@ Copy the returned `host_key` exactly into a protected spec. `local_username` sel
   "expected_host_key": "BASE64_VALUE_FROM_PROBE",
   "allowed_command": "uptime",
   "record_commands": true,
+  "allow_sftp": false,
   "egress": "Auto"
 }
 ```
@@ -197,7 +198,7 @@ airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token rout
 airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token routes enable build-host
 ```
 
-The health check verifies the pinned Host Key and upstream password within the route authentication budget (20 seconds by default; 3-120 seconds). `allowed_command` is an exact match. `allow_all_commands: true` additionally requires `--allow-all-confirmed`; unrestricted non-interactive exec is close to remote code execution, so use a dedicated least-privilege account. Shells, PTYs, SFTP, port forwarding, and Agent/X11 forwarding remain denied.
+The health check verifies the pinned Host Key and upstream password within the route authentication budget (20 seconds by default; 3-120 seconds). `allowed_command` is an exact match. `allow_all_commands: true` additionally requires `--allow-all-confirmed`; unrestricted non-interactive exec is close to remote code execution, so use a dedicated least-privilege account. Shells, PTYs, port forwarding, and Agent/X11 forwarding remain denied. SFTP is disabled by default; set `allow_sftp: true` explicitly in the route spec to support modern OpenSSH `scp`/SFTP clients through the SFTP subsystem. This permits listing, reading, writing, renaming, and deleting files available to the upstream account, so enable it only for a dedicated least-privilege account.
 
 ## Proxy Egress and Lifecycle
 

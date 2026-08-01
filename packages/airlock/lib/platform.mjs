@@ -40,6 +40,15 @@ const targets = [
     status: "planned",
   },
   {
+    id: "windows-x86",
+    platform: "win32",
+    arch: "ia32",
+    label: "Windows / x86 (i686)",
+    bundles: ["nsis", "msi"],
+    secureEntry: "airlock-ssh-wizard+windows-confirmation",
+    status: "planned",
+  },
+  {
     id: "linux-x64",
     platform: "linux",
     arch: "x64",
