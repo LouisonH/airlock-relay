@@ -345,6 +345,8 @@ struct RouteSummary {
     #[serde(default)]
     allow_sftp: bool,
     #[serde(default)]
+    allow_interactive_shell: bool,
+    #[serde(default)]
     allowed_command: String,
     #[serde(default)]
     provider: String,
@@ -451,6 +453,7 @@ struct CreateSSHRoute<'a> {
     allow_all_commands: bool,
     record_commands: bool,
     allow_sftp: bool,
+    allow_interactive_shell: bool,
     authentication_timeout_seconds: u32,
     egress: &'a str,
 }
@@ -463,6 +466,7 @@ struct SSHPolicyUpdate<'a> {
     allow_all_commands: bool,
     record_commands: bool,
     allow_sftp: bool,
+    allow_interactive_shell: bool,
     authentication_timeout_seconds: u32,
     egress: &'a str,
 }
@@ -641,6 +645,7 @@ impl ControlClient {
                 allow_all_commands: create.allow_all_commands,
                 record_commands: create.record_commands,
                 allow_sftp: create.allow_sftp,
+                allow_interactive_shell: create.allow_interactive_shell,
                 authentication_timeout_seconds: create.authentication_timeout_seconds,
                 egress: create.egress,
             }),
@@ -655,6 +660,7 @@ impl ControlClient {
                 allow_all_commands: policy.allow_all_commands,
                 record_commands: policy.record_commands,
                 allow_sftp: policy.allow_sftp,
+                allow_interactive_shell: policy.allow_interactive_shell,
                 authentication_timeout_seconds: policy.authentication_timeout_seconds,
                 egress: policy.egress,
             }),
@@ -1227,6 +1233,7 @@ struct CreateSSHRouteInput {
     allow_all_confirmed: bool,
     record_commands: bool,
     allow_sftp: bool,
+    allow_interactive_shell: bool,
     authentication_timeout_seconds: u32,
 }
 
@@ -1301,11 +1308,19 @@ fn create_ssh_route_blocking(
         allow_all_confirmed,
         record_commands,
         allow_sftp,
+        allow_interactive_shell,
         authentication_timeout_seconds,
     } = input;
     let validation = validate_route_identity(&name, &alias, &egress)
         .and_then(|_| validate_ssh_local_username(&local_username))
         .and_then(|_| validate_ssh_command(&allowed_command, allow_all_commands))
+        .and_then(|_| {
+            if allow_interactive_shell && !allow_all_commands {
+                Err("交互式 Shell 需要开放所有命令".to_string())
+            } else {
+                Ok(())
+            }
+        })
         .and_then(|_| validate_ssh_upstream(&address, &username, &password))
         .and_then(|_| validate_ssh_authentication_timeout(authentication_timeout_seconds));
     if let Err(error) = validation {
@@ -1376,6 +1391,7 @@ fn create_ssh_route_blocking(
             allow_all_commands,
             record_commands,
             allow_sftp,
+            allow_interactive_shell,
             authentication_timeout_seconds,
             egress: &egress,
         }),
@@ -1542,6 +1558,7 @@ async fn set_ssh_policy(
     allow_all_confirmed: bool,
     record_commands: bool,
     allow_sftp: bool,
+    allow_interactive_shell: bool,
     authentication_timeout_seconds: u32,
     egress: String,
 ) -> Result<Vec<RouteSummary>, String> {
@@ -1557,6 +1574,7 @@ async fn set_ssh_policy(
             allow_all_confirmed,
             record_commands,
             allow_sftp,
+            allow_interactive_shell,
             authentication_timeout_seconds,
             egress,
         )
@@ -1576,6 +1594,7 @@ fn set_ssh_policy_blocking(
     allow_all_confirmed: bool,
     record_commands: bool,
     allow_sftp: bool,
+    allow_interactive_shell: bool,
     authentication_timeout_seconds: u32,
     egress: String,
 ) -> Result<Vec<RouteSummary>, String> {
@@ -1588,6 +1607,9 @@ fn set_ssh_policy_blocking(
     validate_egress(&egress)?;
     if allow_all_commands && !allow_all_confirmed {
         return Err("请在 Airlock 中确认所有 SSH exec 命令的高风险权限".to_string());
+    }
+    if allow_interactive_shell && !allow_all_commands {
+        return Err("交互式 Shell 需要开放所有命令".to_string());
     }
     let mut command = if allow_all_commands {
         String::new()
@@ -1608,6 +1630,7 @@ fn set_ssh_policy_blocking(
             allow_all_commands,
             record_commands,
             allow_sftp,
+            allow_interactive_shell,
             authentication_timeout_seconds,
             egress: &egress,
         }),
@@ -1691,6 +1714,7 @@ fn update_ssh_target_blocking(
             allow_all_commands: false,
             record_commands: false,
             allow_sftp: false,
+            allow_interactive_shell: false,
             authentication_timeout_seconds: 0,
             egress: &egress,
         }),
@@ -1746,6 +1770,7 @@ async fn rotate_ssh_credential(
                 allow_all_commands: false,
                 record_commands: false,
                 allow_sftp: false,
+                allow_interactive_shell: false,
                 authentication_timeout_seconds: 0,
                 egress: "",
             }),
@@ -3869,6 +3894,7 @@ mod tests {
                 allow_all_commands: false,
                 record_commands: true,
                 allow_sftp: true,
+                allow_interactive_shell: false,
                 authentication_timeout_seconds: 20,
                 egress: "Auto",
             }),
@@ -3880,6 +3906,7 @@ mod tests {
                 allow_all_commands: false,
                 record_commands: true,
                 allow_sftp: true,
+                allow_interactive_shell: false,
                 authentication_timeout_seconds: 20,
                 egress: "Auto",
             }),

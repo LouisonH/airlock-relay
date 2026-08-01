@@ -2,6 +2,7 @@ package sshgw
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -32,6 +33,15 @@ type RouteLookup interface {
 	Lookup(alias string) (Route, error)
 	LookupByUsername(username string) (Route, error)
 	GetByUsername(username string) (Route, error)
+}
+
+type ptyRequest struct {
+	Term    string
+	Columns uint32
+	Rows    uint32
+	Width   uint32
+	Height  uint32
+	Modes   []byte
 }
 
 type Server struct {
@@ -296,6 +306,7 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 	}
 
 	var done <-chan struct{}
+	var pty *ptyRequest
 	startCommand := func(request *ssh.Request, route Route, command string) {
 		executionDone := make(chan struct{})
 		done = executionDone
@@ -331,11 +342,18 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 			}
 
 			switch request.Type {
-			case "pty-req", "window-change":
-				// Windows OpenSSH requests a PTY before an exec command. Airlock
-				// remains non-interactive and does not forward a terminal, but
-				// acknowledging these metadata requests lets `ssh -t host command`
-				// reach the normal command policy instead of failing at allocation.
+			case "pty-req":
+				// Remember the terminal request so an enabled interactive
+				// shell can replay it upstream; other routes only acknowledge
+				// it so `ssh -t host command` reaches the command policy.
+				var payload ptyRequest
+				if ssh.Unmarshal(request.Payload, &payload) == nil {
+					pty = &payload
+				}
+				if request.WantReply {
+					_ = request.Reply(true, nil)
+				}
+			case "window-change":
 				if request.WantReply {
 					_ = request.Reply(true, nil)
 				}
@@ -355,11 +373,23 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 
 				startCommand(request, route, payload.Command)
 			case "shell":
-				// A plain `ssh user@airlock` asks for an interactive shell. Do
-				// not create one; for the common single-command route, run its
-				// configured exact command and close the session cleanly. Other
-				// routes accept the channel and return guidance so clients like
-				// PuTTY do not report a refused shell.
+				// A plain `ssh user@airlock` asks for an interactive shell.
+				// Routes with the interactive-shell switch replay the terminal
+				// upstream with stored credentials. Everything else stays
+				// non-interactive: single-command routes run their exact
+				// command, and other routes return guidance instead of a
+				// refused-shell error.
+				if route.Policy.AllowInteractiveShell && route.Policy.AllowAllCommands {
+					interactiveDone := make(chan struct{})
+					done = interactiveDone
+					caller := sshActivityCaller(route, connection.RemoteAddr())
+					go func() {
+						defer close(interactiveDone)
+						s.interactiveShell(local, request, route, pty, requests, caller)
+					}()
+					<-interactiveDone
+					return
+				}
 				if !route.Policy.AllowAllCommands && len(route.Policy.AllowedCommands) == 1 {
 					var command string
 					for allowed := range route.Policy.AllowedCommands {
@@ -403,6 +433,133 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 				}
 			}
 		}
+	}
+}
+
+func (s *Server) interactiveShell(local ssh.Channel, request *ssh.Request, route Route, pty *ptyRequest, requests <-chan *ssh.Request, caller string) {
+	defer local.Close()
+	started := time.Now()
+	result := "failed"
+	defer func() { s.recordCommand(route, "interactive-shell", result, time.Since(started)) }()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(route.EffectiveAuthenticationTimeoutSeconds())*time.Second)
+	defer cancel()
+	target, err := s.secrets.ResolveSSHTarget(ctx, route.TargetSecretRef)
+	if err != nil {
+		if request.WantReply {
+			_ = request.Reply(false, nil)
+		}
+		return
+	}
+	defer clearTarget(&target)
+
+	upstream, err := dialUpstream(ctx, s.dialer, route, target)
+	if err != nil {
+		if request.WantReply {
+			_ = request.Reply(false, nil)
+		}
+		return
+	}
+	defer upstream.Close()
+	session, err := upstream.NewSession()
+	if err != nil {
+		if request.WantReply {
+			_ = request.Reply(false, nil)
+		}
+		return
+	}
+	defer session.Close()
+
+	session.Stdin = local
+	session.Stdout = local
+	session.Stderr = local.Stderr()
+	if pty != nil {
+		if err := session.RequestPty(pty.Term, int(pty.Columns), int(pty.Rows), parseTerminalModes(pty.Modes)); err != nil {
+			if request.WantReply {
+				_ = request.Reply(false, nil)
+			}
+			return
+		}
+	}
+	if err := session.Shell(); err != nil {
+		if request.WantReply {
+			_ = request.Reply(false, nil)
+		}
+		return
+	}
+	if request.WantReply {
+		if err := request.Reply(true, nil); err != nil {
+			return
+		}
+	}
+
+	forwardDone := make(chan struct{})
+	go func() {
+		defer close(forwardDone)
+		for forwardRequest := range requests {
+			forwardSessionRequest(session, forwardRequest)
+		}
+		_ = session.Close()
+	}()
+
+	waitError := session.Wait()
+	if waitError == nil {
+		result = "allowed"
+	}
+	_ = sendExitStatus(local, exitStatus(waitError))
+	_ = local.Close()
+	select {
+	case <-forwardDone:
+	case <-time.After(2 * time.Second):
+	}
+	if s.activity != nil {
+		_ = s.activity.Record(activity.Event{
+			RouteAlias: route.Alias,
+			Category:   "SSH",
+			EventType:  "command",
+			Caller:     caller,
+			Action:     "SSH interactive shell",
+			Result:     result,
+			DurationMS: time.Since(started).Milliseconds(),
+			Egress:     route.Egress,
+		})
+	}
+}
+
+func parseTerminalModes(raw []byte) ssh.TerminalModes {
+	modes := ssh.TerminalModes{}
+	for len(raw) >= 5 {
+		opcode := raw[0]
+		value := binary.BigEndian.Uint32(raw[1:5])
+		raw = raw[5:]
+		if opcode == 0 {
+			break
+		}
+		modes[opcode] = value
+	}
+	return modes
+}
+
+func forwardSessionRequest(session *ssh.Session, request *ssh.Request) {
+	switch request.Type {
+	case "window-change":
+		var payload struct {
+			Columns uint32
+			Rows    uint32
+			Width   uint32
+			Height  uint32
+		}
+		if ssh.Unmarshal(request.Payload, &payload) == nil {
+			_, _ = session.SendRequest("window-change", false, request.Payload)
+		}
+	case "signal":
+		_, _ = session.SendRequest("signal", false, request.Payload)
+	default:
+		if request.Type != "pty-req" {
+			_, _ = session.SendRequest(request.Type, false, request.Payload)
+		}
+	}
+	if request.WantReply {
+		_ = request.Reply(true, nil)
 	}
 }
 

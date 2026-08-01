@@ -120,6 +120,7 @@ type CreateSSHRoute struct {
 	AllowAllCommands             bool                       `json:"allow_all_commands"`
 	RecordCommands               bool                       `json:"record_commands"`
 	AllowSFTP                    bool                       `json:"allow_sftp"`
+	AllowInteractiveShell        bool                       `json:"allow_interactive_shell"`
 	AuthenticationTimeoutSeconds int                        `json:"authentication_timeout_seconds,omitempty"`
 	Egress                       string                     `json:"egress,omitempty"`
 	KeywordReplacements          []sshgw.KeywordReplacement `json:"keyword_replacements,omitempty"`
@@ -132,6 +133,7 @@ type SSHPolicyUpdate struct {
 	AllowAllCommands             bool   `json:"allow_all_commands"`
 	RecordCommands               bool   `json:"record_commands"`
 	AllowSFTP                    bool   `json:"allow_sftp"`
+	AllowInteractiveShell        bool   `json:"allow_interactive_shell"`
 	AuthenticationTimeoutSeconds int    `json:"authentication_timeout_seconds,omitempty"`
 	Egress                       string `json:"egress,omitempty"`
 }
@@ -202,6 +204,7 @@ type RouteSummary struct {
 	AllowAllCommands             bool     `json:"allowAllCommands"`
 	RecordCommands               bool     `json:"recordCommands"`
 	AllowSFTP                    bool     `json:"allowSftp"`
+	AllowInteractiveShell        bool     `json:"allowInteractiveShell"`
 	AllowedCommand               string   `json:"allowedCommand,omitempty"`
 	Provider                     string   `json:"provider,omitempty"`
 	AllowedModels                []string `json:"allowedModels,omitempty"`
@@ -807,7 +810,7 @@ func hostIsLocal(host string) bool {
 }
 
 func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
-	if s.ssh == nil || input == nil || strings.TrimSpace(input.Name) == "" || len(input.Name) > 80 || len(input.Address) > 512 || input.Username == "" || len(input.Username) > 255 || len(input.Password) == 0 || len(input.Password) > 8<<10 || (input.LocalPassword != "" && !validLocalPassword(input.LocalPassword)) || len(input.ExpectedHostKey) > 16<<10 || !validEgressPolicy(input.Egress) {
+	if s.ssh == nil || input == nil || strings.TrimSpace(input.Name) == "" || len(input.Name) > 80 || len(input.Address) > 512 || input.Username == "" || len(input.Username) > 255 || len(input.Password) == 0 || len(input.Password) > 8<<10 || (input.LocalPassword != "" && !validLocalPassword(input.LocalPassword)) || len(input.ExpectedHostKey) > 16<<10 || !validEgressPolicy(input.Egress) || (input.AllowInteractiveShell && !input.AllowAllCommands) {
 		return Response{Error: "invalid SSH route details"}
 	}
 	address, err := normalizeSSHAddress(input.Address)
@@ -879,6 +882,7 @@ func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
 		commands, nil, false, input.AllowAllCommands, input.RecordCommands,
 	)
 	sshPolicy.AllowSFTP = input.AllowSFTP
+	sshPolicy.AllowInteractiveShell = input.AllowInteractiveShell
 	route := sshgw.Route{
 		Name: input.Name, Alias: input.Alias, LocalUsername: localUsername,
 		TargetSecretRef:  reference,
@@ -908,6 +912,9 @@ func validLocalPassword(password string) bool {
 func (s *Server) setSSHPolicy(alias string, input *SSHPolicyUpdate) Response {
 	if s.ssh == nil || input == nil || (input.Name != "" && (strings.TrimSpace(input.Name) == "" || len(input.Name) > 80)) || !validEgressPolicy(input.Egress) {
 		return Response{Error: "SSH 路由策略不可用"}
+	}
+	if input.AllowInteractiveShell && !input.AllowAllCommands {
+		return Response{Error: "交互式 Shell 需要开放所有命令"}
 	}
 	commands := []string{input.AllowedCommand}
 	if input.AllowAllCommands {
@@ -940,6 +947,7 @@ func (s *Server) setSSHPolicy(alias string, input *SSHPolicyUpdate) Response {
 	updated.LocalUsername = localUsername
 	updated.Policy = sshgw.NewPolicyWithOptions(commands, fingerprints, false, input.AllowAllCommands, input.RecordCommands)
 	updated.Policy.AllowSFTP = input.AllowSFTP
+	updated.Policy.AllowInteractiveShell = input.AllowInteractiveShell
 	if input.Name != "" {
 		updated.Name = strings.TrimSpace(input.Name)
 	}
@@ -1610,6 +1618,9 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 	if route.Policy.AllowSFTP {
 		permissionSummary += " · SFTP high risk"
 	}
+	if route.Policy.AllowInteractiveShell {
+		permissionSummary += " · interactive shell"
+	}
 	if len(route.KeywordReplacements) > 0 {
 		permissionSummary += fmt.Sprintf(" · %d rewrite rules", len(route.KeywordReplacements))
 	}
@@ -1631,6 +1642,7 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 		AllowAllCommands:             route.Policy.AllowAllCommands,
 		RecordCommands:               route.Policy.RecordCommands,
 		AllowSFTP:                    route.Policy.AllowSFTP,
+		AllowInteractiveShell:        route.Policy.AllowInteractiveShell,
 		AllowedCommand:               allowedCommand,
 		AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
 		KeywordReplacementCount:      len(route.KeywordReplacements),

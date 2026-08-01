@@ -10,7 +10,7 @@ const targets = [
     secureEntry: "airlock-ssh-wizard+native-os-confirmation",
     status: "released",
     artifactName: "Airlock_0.1.4_aarch64.dmg",
-    sha256: "5c2d1e7b67462703feeca0c6b4eed9a021cad49990b5e267b954a01011b916f3",
+    sha256: "aa2e709a50723aa1781c062e9b98eb1478f7f9e0c2ca28b5e011c37c20fa1faa",
   },
   {
     id: "macos-x64",

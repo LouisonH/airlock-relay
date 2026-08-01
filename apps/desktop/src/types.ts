@@ -43,6 +43,7 @@ export interface RouteSummary {
   allowAllCommands: boolean;
   recordCommands: boolean;
   allowSftp: boolean;
+  allowInteractiveShell: boolean;
   allowedCommand?: string;
   provider?: "openai" | "anthropic";
   allowedModels?: string[];

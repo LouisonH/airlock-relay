@@ -391,6 +391,48 @@ func TestGatewayAllowsAllExecAndRecordsCommands(t *testing.T) {
 	}
 }
 
+func TestGatewayInteractiveShellForwardsToUpstream(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	policy := NewPolicyWithOptions(nil, nil, false, true, true)
+	policy.AllowInteractiveShell = true
+	route := testSSHRoute(policy, egress.Direct)
+	target := secrets.SSHTarget{
+		Address: upstream.address(), Username: upstreamUser, Password: []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	gateway := startGateway(t, route, target, egress.NewManager(nil))
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if err := session.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Fatalf("interactive PTY request failed: %v", err)
+	}
+	session.Stdin = strings.NewReader("whoami\n")
+	var output bytes.Buffer
+	session.Stdout = &output
+	if err := session.Shell(); err != nil {
+		t.Fatalf("interactive shell request was refused: %v", err)
+	}
+	if err := session.Wait(); err != nil {
+		t.Fatalf("interactive shell failed: %v", err)
+	}
+	if !bytes.Contains(output.Bytes(), []byte("shell:whoami")) {
+		t.Fatalf("interactive shell output = %q", output.String())
+	}
+	snapshot := upstream.snapshot()
+	if snapshot.shellRequests != 1 || snapshot.lastUser != upstreamUser || snapshot.lastPassword != upstreamPass {
+		t.Fatalf("upstream interactive shell state = %+v", snapshot)
+	}
+	if len(upstream.snapshot().lastStdin) == 0 {
+		t.Fatal("interactive stdin was not forwarded upstream")
+	}
+}
+
 func TestGatewayLocalPublicKeyAndUpstreamPrivateKey(t *testing.T) {
 	_, upstreamPrivate, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -745,6 +787,7 @@ type upstreamSnapshot struct {
 	keyboardInteractiveAuths int
 	publicKeyAuths           int
 	commands                 int
+	shellRequests            int
 	sftpRequests             int
 	lastUser                 string
 	lastPassword             string
@@ -863,6 +906,25 @@ func (h *upstreamHarness) serveConnection(raw net.Conn) {
 func (h *upstreamHarness) serveSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 	defer channel.Close()
 	for request := range requests {
+		if request.Type == "pty-req" || request.Type == "window-change" || request.Type == "env" {
+			if request.WantReply {
+				_ = request.Reply(true, nil)
+			}
+			continue
+		}
+		if request.Type == "shell" {
+			h.mu.Lock()
+			h.state.shellRequests++
+			h.mu.Unlock()
+			_ = request.Reply(true, nil)
+			stdin, _ := io.ReadAll(channel)
+			h.mu.Lock()
+			h.state.lastStdin = string(stdin)
+			h.mu.Unlock()
+			_, _ = channel.Write([]byte("shell:" + string(stdin)))
+			_ = sendExitStatus(channel, 0)
+			return
+		}
 		if request.Type == "subsystem" {
 			var payload struct{ Name string }
 			if ssh.Unmarshal(request.Payload, &payload) != nil || payload.Name != "sftp" {

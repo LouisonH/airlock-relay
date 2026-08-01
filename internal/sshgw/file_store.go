@@ -42,6 +42,7 @@ type persistedRoute struct {
 	AllowAllCommands             bool                 `json:"allow_all_commands,omitempty"`
 	RecordCommands               bool                 `json:"record_commands,omitempty"`
 	AllowSFTP                    bool                 `json:"allow_sftp,omitempty"`
+	AllowInteractiveShell        bool                 `json:"allow_interactive_shell,omitempty"`
 	Egress                       string               `json:"egress"`
 	AuthenticationTimeoutSeconds int                  `json:"authentication_timeout_seconds,omitempty"`
 	KeywordReplacements          []KeywordReplacement `json:"keyword_replacements,omitempty"`
@@ -103,6 +104,7 @@ func (s *FileStore) Load() ([]Route, error) {
 			stored.RecordCommands,
 		)
 		policy.AllowSFTP = stored.AllowSFTP
+		policy.AllowInteractiveShell = stored.AllowInteractiveShell
 		route := Route{
 			Name: stored.Name, Alias: stored.Alias, LocalUsername: stored.LocalUsername,
 			TargetSecretRef:  stored.TargetSecretRef,
@@ -151,6 +153,7 @@ func (s *FileStore) Save(routes []Route) error {
 			AllowAllCommands:             route.Policy.AllowAllCommands,
 			RecordCommands:               route.Policy.RecordCommands,
 			AllowSFTP:                    route.Policy.AllowSFTP,
+			AllowInteractiveShell:        route.Policy.AllowInteractiveShell,
 			AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
 			KeywordReplacements:          append([]KeywordReplacement(nil), route.KeywordReplacements...),
 		})
