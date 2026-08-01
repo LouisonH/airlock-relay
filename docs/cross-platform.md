@@ -49,6 +49,11 @@ and installer checklist below is completed.
   control transport (Unix socket vs named pipe), credential store (Keychain /
   Credential Manager / Secret Service), security profiles, and native risk
   wording.
+- Linux native prompts use `zenity` (GNOME) or `kdialog` (KDE), selected at
+  runtime with a per-session backend probe. They cover protected input, LLM
+  key choice, high-risk SSH confirmation, capability handoff, and
+  security-setting confirmation; desktop bundles expect one of these tools to
+  be installed. Headless servers use the CLI instead.
 - CI runs Rust `cargo check` for the Windows x64, Windows arm64, and Linux x64
   desktop targets on every push, so the ported control client is re-verified
   on real target toolchains before runtime acceptance.
@@ -56,6 +61,9 @@ and installer checklist below is completed.
   Windows x64 and arm64 on GitHub-hosted Windows runners and publishes them as
   downloadable artifacts. The artifacts are unsigned until release signing is
   configured, so SmartScreen may warn on first run.
+- A `desktop-linux` workflow builds `deb` and AppImage installers for Linux x64
+  on an x64 runner and Linux arm64 on a native ARM runner. Packages do not
+  bundle `zenity`/`kdialog`; see the runtime note above.
 - Build targets are explicit and isolated. A target build creates both
   `airlockd` and `airlock`; it does not create a Tauri bundle or alter the
   released npm installer contract.

@@ -15,6 +15,8 @@ use std::{
 mod platform;
 #[cfg(windows)]
 mod native_windows;
+#[cfg(not(any(target_os = "macos", windows)))]
+mod native_linux;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -2182,40 +2184,40 @@ fn prompt_llm_local_api_key() -> Result<(String, bool), String> {
     native_windows::prompt_llm_local_api_key()
 }
 
-#[cfg(all(not(target_os = "macos"), not(windows)))]
-fn prompt_protected_value(_message: &str, _optional: bool) -> Result<String, String> {
-    Err("当前版本暂不支持该平台的原生安全录入".to_string())
+#[cfg(not(any(target_os = "macos", windows)))]
+fn prompt_protected_value(message: &str, optional: bool) -> Result<String, String> {
+    native_linux::prompt_protected_value(message, optional)
 }
 
-#[cfg(all(not(target_os = "macos"), not(windows)))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn prompt_native_value(
-    _message: &str,
-    _optional: bool,
-    _hidden: bool,
-    _default_value: &str,
+    message: &str,
+    optional: bool,
+    hidden: bool,
+    default_value: &str,
 ) -> Result<String, String> {
-    Err("当前版本暂不支持该平台的原生安全录入".to_string())
+    native_linux::prompt_native_value(message, optional, hidden, default_value)
 }
 
-#[cfg(all(not(target_os = "macos"), not(windows)))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn prompt_native_value_with_title(
-    _title: &str,
-    _message: &str,
-    _optional: bool,
-    _hidden: bool,
-    _default_value: &str,
+    title: &str,
+    message: &str,
+    optional: bool,
+    hidden: bool,
+    default_value: &str,
 ) -> Result<String, String> {
-    Err("当前版本暂不支持该平台的原生安全录入".to_string())
+    native_linux::prompt_native_value_with_title(title, message, optional, hidden, default_value)
 }
 
-#[cfg(all(not(target_os = "macos"), not(windows)))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn choose_llm_local_api_key_mode() -> Result<bool, String> {
-    Err("当前版本暂不支持该平台的二次 API Key 设置".to_string())
+    native_linux::choose_llm_local_api_key_mode()
 }
 
-#[cfg(all(not(target_os = "macos"), not(windows)))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn prompt_llm_local_api_key() -> Result<(String, bool), String> {
-    Err("当前版本暂不支持该平台的二次 API Key 设置".to_string())
+    native_linux::prompt_llm_local_api_key()
 }
 
 #[cfg(target_os = "macos")]
@@ -2273,8 +2275,13 @@ fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
 }
 
 #[cfg(all(not(target_os = "macos"), not(windows)))]
-fn confirm_allow_all_commands(_alias: &str) -> Result<(), String> {
-    Err("当前版本暂不支持该平台的原生 SSH 风险确认".to_string())
+fn confirm_allow_all_commands(alias: &str) -> Result<(), String> {
+    let (message, title, _allow) = match ui_locale() {
+        "en" => ("Route “{alias}” will allow callers to run any non-interactive exec command.\n\nShell, PTY, SFTP, and port forwarding remain denied, but commands may read or modify anything available to the upstream account. Use a dedicated least-privilege account.", "High-risk SSH permissions", "Allow all exec"),
+        "ja" => ("ルート「{alias}」は、呼び出し元に任意の非対話 exec コマンドを許可します。\n\nShell、PTY、SFTP、ポート転送は引き続き拒否されますが、コマンドは上流アカウントがアクセスできるデータを読み取りまたは変更できます。専用の最小権限アカウントを使用してください。", "高リスク SSH 権限", "すべての exec を許可"),
+        _ => ("路由 “{alias}” 将允许调用者执行任意非交互 exec 命令。\n\nShell、PTY、SFTP 与端口转发仍会被拒绝，但上游账号能访问的数据和操作都可能被命令读取或修改。请仅配合低权限专用账号使用。", "高风险 SSH 权限", "允许所有 exec"),
+    };
+    native_linux::confirm_yes_no(title, &message.replace("{alias}", alias))
 }
 
 #[cfg(target_os = "macos")]
@@ -2443,18 +2450,57 @@ fn present_llm_access(
 }
 
 #[cfg(all(not(target_os = "macos"), not(windows)))]
-fn present_capability(_endpoint: &str, _capability: &str) -> Result<(), String> {
-    Err("当前版本暂不支持该平台的 Capability 窗口".to_string())
+fn present_capability(endpoint: &str, capability: &str) -> Result<(), String> {
+    native_linux::present_text(
+        &native_text("Airlock 路由已创建"),
+        &native_text("路由已安全保存。Capability 仅显示这一次，请交给需要访问该路由的客户端。"),
+        &format!("{endpoint}\n{capability}"),
+    )
 }
 
 #[cfg(all(not(target_os = "macos"), not(windows)))]
 fn present_llm_access(
-    _provider: &str,
-    _endpoint: &str,
-    _capability: &str,
-    _custom_local_key: bool,
+    provider: &str,
+    endpoint: &str,
+    capability: &str,
+    custom_local_key: bool,
 ) -> Result<(), String> {
-    Err("当前版本暂不支持该平台的 LLM 连接信息窗口".to_string())
+    let (custom_message, random_message, custom_placeholder) = match ui_locale() {
+        "en" => (
+            "The LLM route is enabled. Airlock will not reveal the custom local API key.",
+            "The LLM route is enabled. The random local API key is shown only once.",
+            "<use the local API key set earlier>",
+        ),
+        "ja" => (
+            "LLM ルートが有効になりました。Airlock はカスタムのローカル API Key を再表示しません。",
+            "LLM ルートが有効になりました。ランダム生成されたローカル API Key は一度だけ表示されます。",
+            "<先ほど設定したローカル API Key を使用>",
+        ),
+        _ => (
+            "LLM 路由已启用。Airlock 不会回显自定义的本地 API Key。",
+            "LLM 路由已启用。随机生成的本地 API Key 仅显示这一次。",
+            "<使用刚才设置的本地 API Key>",
+        ),
+    };
+    let openai = provider == "openai";
+    let prefix = if openai { "OPENAI" } else { "ANTHROPIC" };
+    let base_url = if openai {
+        format!("{}/v1", endpoint.trim_end_matches('/'))
+    } else {
+        endpoint.to_string()
+    };
+    let api_key = if custom_local_key {
+        custom_placeholder
+    } else {
+        capability
+    };
+    let details = format!("{prefix}_BASE_URL={base_url}\n{prefix}_API_KEY={api_key}");
+    let message = if custom_local_key {
+        custom_message
+    } else {
+        random_message
+    };
+    native_linux::present_text(&native_text("Airlock LLM 路由已创建"), message, &details)
 }
 
 fn clear_string(value: &mut String) {
@@ -2711,10 +2757,29 @@ fn confirm_security_change(
 
 #[cfg(all(not(target_os = "macos"), not(windows)))]
 fn confirm_security_change(
-    _current: &SecuritySettings,
-    _next: &SecuritySettings,
+    current: &SecuritySettings,
+    next: &SecuritySettings,
 ) -> Result<(), String> {
-    Err("当前版本暂不支持该平台的原生安全设置确认".to_string())
+    let mut risks: Vec<Cow<'_, str>> = Vec::new();
+    if current.network_scope != "lan" && next.network_scope == "lan" {
+        risks.push(native_text(
+            "局域网设备将能连接 Airlock 的 HTTP/SSH 入口，仍需要每条路由的凭据。",
+        ));
+    }
+    if current.secret_store != "local_file" && next.secret_store == "local_file" {
+        risks.push(native_text(
+            "上游地址和凭据将保存在仅当前用户可读的受保护文件中，不再由系统凭据库加密保护。",
+        ));
+    }
+    if risks.is_empty() {
+        return Ok(());
+    }
+    let message = format!(
+        "{}\n\n{}",
+        risks.iter().map(Cow::as_ref).collect::<Vec<_>>().join("\n\n"),
+        native_text("应用设置会短暂重启本地转发核心。")
+    );
+    native_linux::confirm_yes_no(&native_text("Airlock 安全设置"), &message)
 }
 
 fn locate_sidecar(app: &tauri::AppHandle) -> Result<PathBuf, String> {

@@ -36,11 +36,16 @@ Linux 的**核心/CLI 编译基线**，并不表示已经发布 Windows/Linux �
   `Win32_Process` 列出占用者、过滤当前账户，并只对确认的进程使用 `taskkill`。
 - 前端提供平台感知文案与中/英/日翻译，覆盖控制通道（Unix Socket / 命名管道）、凭据存储
   （Keychain / Credential Manager / Secret Service）、安全等级说明与原生风险提示。
+- Linux 原生弹窗使用 `zenity`（GNOME）或 `kdialog`（KDE），按会话探测后端，覆盖安全录入、
+  LLM Key 选择、高风险 SSH 确认、Capability 交接与安全设置确认；桌面包运行时依赖二者之一，
+  无桌面环境的服务器请使用 CLI。
 - CI 会在每次推送时对 Windows x64、Windows arm64 与 Linux x64 桌面目标运行 Rust
   `cargo check`，在真实目标工具链上持续复核已移植的控制客户端，直到进入运行验收阶段。
 - 独立的 `desktop-windows` 工作流会在 GitHub 官方 Windows runner 上构建 Windows x64 与
   arm64 的 NSIS/MSI 安装包，并以可下载产物形式发布。正式签名配置完成前产物不签名，
   SmartScreen 首次运行时可能提示。
+- `desktop-linux` 工作流在 x64 runner 上构建 Linux x64 的 `deb`/AppImage 安装包，并在
+  原生 ARM runner 上构建 Linux arm64 安装包；包内不附带 `zenity`/`kdialog`，见上方运行时说明。
 - 构建目标显式隔离。每次目标构建都会产出 `airlockd` 与 `airlock`，不会生成 Tauri 包，也
   不会改变 npm 安装器的已发布平台范围。
 
