@@ -75,13 +75,7 @@ pub fn prompt_native_value(
     hidden: bool,
     default_value: &str,
 ) -> Result<String, String> {
-    prompt_native_value_with_title(
-        "Airlock 安全录入",
-        message,
-        optional,
-        hidden,
-        default_value,
-    )
+    prompt_native_value_with_title("Airlock 安全录入", message, optional, hidden, default_value)
 }
 
 pub fn prompt_native_value_with_title(
@@ -97,9 +91,9 @@ pub fn prompt_native_value_with_title(
             command
                 .arg("--entry")
                 .arg("--title")
-                .arg(super::native_text(title))
+                .arg(super::native_text(title).as_ref())
                 .arg("--text")
-                .arg(super::native_text(message));
+                .arg(super::native_text(message).as_ref());
             if hidden {
                 command.arg("--hide-text");
             }
@@ -108,18 +102,24 @@ pub fn prompt_native_value_with_title(
             }
             command
                 .arg("--ok-label")
-                .arg(super::native_text(if optional { "保存" } else { "继续" }))
+                .arg(super::native_text(if optional { "保存" } else { "继续" }).as_ref())
                 .arg("--cancel-label")
-                .arg(super::native_text(if optional { "不设置" } else { "取消" }));
+                .arg(super::native_text(if optional { "不设置" } else { "取消" }).as_ref());
             run_with_stdin(&mut command, "")
         }
         DialogBackend::Kdialog => {
             let mut command = Command::new("kdialog");
-            command.arg("--title").arg(super::native_text(title));
+            command
+                .arg("--title")
+                .arg(super::native_text(title).as_ref());
             if hidden {
-                command.arg("--password").arg(super::native_text(message));
+                command
+                    .arg("--password")
+                    .arg(super::native_text(message).as_ref());
             } else {
-                command.arg("--inputbox").arg(super::native_text(message));
+                command
+                    .arg("--inputbox")
+                    .arg(super::native_text(message).as_ref());
                 if !default_value.is_empty() {
                     command.arg(default_value);
                 }
@@ -144,26 +144,26 @@ pub fn choose_llm_local_api_key_mode() -> Result<bool, String> {
             command
                 .arg("--question")
                 .arg("--title")
-                .arg(super::native_text("LLM 设置 3/3 · 二次 API Key"))
+                .arg(super::native_text("LLM 设置 3/3 · 二次 API Key").as_ref())
                 .arg("--text")
                 .arg(super::native_text(
                     "为调用者创建一把独立的二次 API Key。它只用于访问 Airlock，真实上游 Key 不会暴露。\n\n随机生成提供 256-bit 强度并仅显示一次；自定义 Key 会要求隐藏输入两次。",
-                ))
+                ).as_ref())
                 .arg("--ok-label")
-                .arg(super::native_text("自定义"))
+                .arg(super::native_text("自定义").as_ref())
                 .arg("--cancel-label")
-                .arg(super::native_text("随机生成"));
+                .arg(super::native_text("随机生成").as_ref());
             run_with_stdin(&mut command, "")
         }
         DialogBackend::Kdialog => {
             let mut command = Command::new("kdialog");
             command
                 .arg("--title")
-                .arg(super::native_text("LLM 设置 3/3 · 二次 API Key"))
+                .arg(super::native_text("LLM 设置 3/3 · 二次 API Key").as_ref())
                 .arg("--yesno")
                 .arg(super::native_text(
                     "为调用者创建一把独立的二次 API Key。\n\n随机生成提供 256-bit 强度并仅显示一次；自定义 Key 会要求隐藏输入两次。\n\n选择“是”使用自定义 Key，选择“否”随机生成。",
-                ));
+                ).as_ref());
             run_with_stdin(&mut command, "")
         }
     };
@@ -223,9 +223,9 @@ pub fn confirm_yes_no(title: &str, message: &str) -> Result<(), String> {
             command
                 .arg("--question")
                 .arg("--title")
-                .arg(super::native_text(title))
+                .arg(super::native_text(title).as_ref())
                 .arg("--text")
-                .arg(super::native_text(message))
+                .arg(super::native_text(message).as_ref())
                 .arg("--width")
                 .arg("520");
             run_with_stdin(&mut command, "")
@@ -234,9 +234,9 @@ pub fn confirm_yes_no(title: &str, message: &str) -> Result<(), String> {
             let mut command = Command::new("kdialog");
             command
                 .arg("--title")
-                .arg(super::native_text(title))
+                .arg(super::native_text(title).as_ref())
                 .arg("--yesno")
-                .arg(super::native_text(message));
+                .arg(super::native_text(message).as_ref());
             run_with_stdin(&mut command, "")
         }
     };
@@ -255,20 +255,20 @@ pub fn present_text(title: &str, message: &str, text: &str) -> Result<(), String
             command
                 .arg("--text-info")
                 .arg("--title")
-                .arg(super::native_text(title))
+                .arg(super::native_text(title).as_ref())
                 .arg("--width")
                 .arg("680")
                 .arg("--height")
                 .arg("420")
                 .arg("--ok-label")
-                .arg(super::native_text("完成"));
+                .arg(super::native_text("完成").as_ref());
             run_with_stdin(&mut command, &payload).map(|_| ())
         }
         DialogBackend::Kdialog => {
             let mut command = Command::new("kdialog");
             command
                 .arg("--title")
-                .arg(super::native_text(title))
+                .arg(super::native_text(title).as_ref())
                 .arg("--msgbox")
                 .arg(payload);
             run_with_stdin(&mut command, "").map(|_| ())
