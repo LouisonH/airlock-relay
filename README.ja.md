@@ -52,7 +52,7 @@ Airlock は固定ルートリレーであり、オープンプロキシ、VPN、
 - 保護された上流パスワードまたは暗号化秘密鍵と厳密な Host Key 固定。
 - デフォルトはユーザー定義の 1 つの完全一致コマンド。無制限の非対話 `exec` には Airlock 内で明示的な高リスク確認が必要。
 - 複数のルートで同じ上流アドレスを使用可能。異なるローカルユーザー名で、独立した上流アカウントと保護認証情報を選択。
-- 対話 Shell、Agent/X11 Forwarding、ポート転送は引き続き拒否。PTY request は Windows/OpenSSH client 互換のためだけに受理し、上流へは転送しません。SFTP は default で無効で、modern `scp`/SFTP client 向けに route ごとに明示的に有効化できる別の high-risk file access permission です。
+- 対話 Shell は default で無効で、route ごとに有効化できます（`allow_interactive_shell: true`。`allow_all_commands: true` が必須）。有効にすると、PuTTY や `ssh` client は上流 Shell へ直接入り、Airlock は保存済みの上流認証情報を注入します。`su` などの対話ワークフローを扱えます。Agent/X11 Forwarding とポート転送は引き続き拒否され、PTY metadata は対話 Shell が有効なときだけ上流へ転送されます。SFTP は default で無効で、modern `scp`/SFTP client 向けに route ごとに明示的に有効化できる別の high-risk file access permission です。
 - ルートごとのオプションコマンド監査は、現在のユーザー専用の `0600` ローリングファイルに保存。
 
 ### LLM API

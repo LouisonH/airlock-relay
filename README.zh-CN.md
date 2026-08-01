@@ -52,7 +52,7 @@ Airlock 是固定路由转发器，不是开放代理、VPN 或通用供应商�
 - 受保护的上游密码或加密私钥认证，并严格固定 Host Key。
 - 默认只允许用户自定义的一条精确命令；所有非交互 `exec` 需要在 Airlock 内明确确认高风险。
 - 多条路由可以指向同一个上游地址；不同本地用户名选择彼此独立的上游账号与受保护凭据。
-- 仍拒绝交互式 Shell、Agent/X11 Forwarding 与端口转发。PTY 请求只为兼容 Windows/OpenSSH 客户端而确认，绝不会转发给上游。SFTP 默认关闭，可为现代 `scp`/SFTP 客户端按路由显式启用，属于独立的高风险文件访问权限。
+- 交互式 Shell 默认关闭，可按路由开启（`allow_interactive_shell: true`，要求同时开启 `allow_all_commands: true`）。开启后，PuTTY 与 `ssh` 客户端会直接进入上游 Shell，Airlock 仍注入存储的上游凭据，可覆盖 `su` 等交互式工作流。Agent/X11 Forwarding 与端口转发始终拒绝；只有开启交互式 Shell 开关时才会向上游转发 PTY 元数据。SFTP 默认关闭，可为现代 `scp`/SFTP 客户端按路由显式启用，属于独立的高风险文件访问权限。
 - 可选的每路由命令审计，保存在当前用户专属的 `0600` 滚动文件中。
 
 ### LLM API

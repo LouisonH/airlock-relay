@@ -4,6 +4,26 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
+## [Unreleased]
+
+### Added
+
+- Optional per-route interactive SSH shells, disabled by default. Setting
+  `allow_interactive_shell: true` (which requires `allow_all_commands: true`)
+  lets PuTTY and `ssh` clients enter the upstream shell while Airlock still
+  injects the stored upstream credentials; PTY metadata is forwarded only
+  while the switch is enabled.
+- Plain shell requests on non-interactive routes now receive actionable
+  guidance instead of a refused shell, and single-command routes run their
+  exact command when a shell is requested.
+- Protected keyword egress rewrites for SSH commands.
+- Explicit per-route SFTP permission, disabled by default, for modern
+  `scp`/SFTP clients.
+- Windows x64/x86/arm64 and Linux x64/arm64/ARMv7 Core and CLI
+  cross-compilation with owner-only Windows named-pipe control, Credential
+  Manager / Secret Service backends, Linux native prompts, and CI preview
+  installer contracts that fail closed.
+
 ## [0.1.4] - 2026-07-31
 
 ### Security
