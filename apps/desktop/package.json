@@ -1,7 +1,7 @@
 {
   "name": "airlock-desktop",
   "private": true,
-  "version": "0.1.5-328",
+  "version": "0.1.5",
   "author": "LouisonH",
   "license": "Apache-2.0",
   "type": "module",

@@ -4,6 +4,7 @@
 
 ## English
 
+- [v0.1.5 release notes](releases/v0.1.5.md)
 - [v0.1.4 production-readiness security release](releases/v0.1.4.md)
 - [production-readiness security audit](security-audit-2026-07-31.md)
 - [v0.1.3 port recovery release](releases/v0.1.3.md)
@@ -20,6 +21,7 @@
 
 ## 简体中文
 
+- [v0.1.5 发布说明](releases/v0.1.5.zh-CN.md)
 - [v0.1.4 生产安全审计版本说明](releases/v0.1.4.zh-CN.md)
 - [生产就绪安全审计](security-audit-2026-07-31.md)
 - [v0.1.3 端口恢复版本说明](releases/v0.1.3.zh-CN.md)
@@ -36,6 +38,7 @@
 
 ## 日本語
 
+- [v0.1.5 リリースノート](releases/v0.1.5.ja.md)
 - [v0.1.4 本番セキュリティ監査リリースノート](releases/v0.1.4.ja.md)
 - [本番運用準備セキュリティ監査](security-audit-2026-07-31.md)
 - [v0.1.3 ポート復旧リリースノート](releases/v0.1.3.ja.md)

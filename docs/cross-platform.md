@@ -1,6 +1,6 @@
 # Cross-Platform Core Bootstrap
 
-Airlock v0.1.4 publishes a verified Apple Silicon macOS desktop preview only.
+Airlock v0.1.5 publishes a verified Apple Silicon macOS desktop preview only.
 The npm package can be installed without side effects on recognized Windows and
 Linux targets to report a platform contract. Windows x64/x86/arm64 and Linux
 x64/arm64 are CI preview targets: their desktop artifacts are not public,

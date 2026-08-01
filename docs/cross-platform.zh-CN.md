@@ -1,6 +1,6 @@
 # 跨平台核心移植基线
 
-Airlock v0.1.4 目前只发布经过校验的 Apple Silicon macOS 桌面测试版。npm 包可在已识别的
+Airlock v0.1.5 目前只发布经过校验的 Apple Silicon macOS 桌面测试版。npm 包可在已识别的
 Windows/Linux 目标上无副作用安装，用于输出平台契约。Windows x64/x86/arm64 与 Linux
 x64/arm64 属于 CI 预览目标：其桌面构建产物不是公开、带固定校验和的安装器，因此
 `airlock-installer install` 会失败关闭，绝不会下载 CI 工件。桌面 GUI、本地控制通道与原生

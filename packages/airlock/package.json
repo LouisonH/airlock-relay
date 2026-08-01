@@ -1,6 +1,6 @@
 {
   "name": "airlock-relay",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Credential-isolation relay CLI with platform-aware, fail-closed desktop installer contracts",
   "keywords": [
     "airlock",

@@ -1,6 +1,6 @@
 # クロスプラットフォーム Core 移植ベースライン
 
-Airlock v0.1.4 で公開済みなのは検証済み Apple Silicon macOS 向け Desktop preview だけです。
+Airlock v0.1.5 で公開済みなのは検証済み Apple Silicon macOS 向け Desktop preview だけです。
 npm package は認識済み Windows/Linux target に副作用なく導入でき、platform contract を表示します。
 Windows x64/x86/arm64 と Linux x64/arm64 は CI preview target です。Desktop artifact は公開済みの
 checksum 付き installer ではないため、`airlock-installer install` は fail-closed し、CI artifact

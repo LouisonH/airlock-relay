@@ -21,7 +21,7 @@ const releasedMacArtifact = resolveReleasedArtifact("darwin", "arm64");
 export const ASSET_NAME = releasedMacArtifact.artifactName;
 export const ASSET_SHA256 = releasedMacArtifact.sha256;
 export const RELEASE_URL =
-  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4";
+  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const bundledAssetPath = resolve(scriptDirectory, "../dist", ASSET_NAME);

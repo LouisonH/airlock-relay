@@ -4,7 +4,7 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
-## [0.1.5-328] - 2026-08-01
+## [0.1.5] - 2026-08-01
 
 ### Added
 
@@ -23,6 +23,12 @@ technical previews whose interfaces may still change.
   cross-compilation with owner-only Windows named-pipe control, Credential
   Manager / Secret Service backends, Linux native prompts, and CI preview
   installer contracts that fail closed.
+
+### Fixed
+
+- Interactive-shell PTY dimensions were forwarded transposed, causing garbled
+  input display in terminals; the upstream session now receives the client's
+  actual rows and columns.
 
 ## [0.1.4] - 2026-07-31
 
@@ -110,6 +116,7 @@ technical previews whose interfaces may still change.
   production security audit.
 
 [0.1.0]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0
+[0.1.5]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5
 [0.1.4]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4
 [0.1.1]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1
 [0.1.2]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.2

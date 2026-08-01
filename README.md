@@ -11,7 +11,7 @@
     <a href="website/en/index.html">Static website</a>
   </p>
   <p>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4"><img src="https://img.shields.io/badge/release-v0.1.4%20technical%20preview-b26b25" alt="v0.1.4 technical preview" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5"><img src="https://img.shields.io/badge/release-v0.1.5%20technical%20preview-b26b25" alt="v0.1.5 technical preview" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 desktop" />
     <img src="https://img.shields.io/badge/core-Go%201.25%2B-267d5f" alt="Go 1.25 or newer" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -19,7 +19,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.4 is a technical preview that has completed a maintainer-run production-readiness security audit. It has not completed an independent third-party audit, Apple Developer ID signing, or notarization. Read the [audit record](docs/security-audit-2026-07-31.md) before production use.
+> Airlock v0.1.5 is a technical preview that has completed a maintainer-run production-readiness security audit. It has not completed an independent third-party audit, Apple Developer ID signing, or notarization. Read the [audit record](docs/security-audit-2026-07-31.md) before production use.
 
 ## Why Airlock?
 
@@ -107,14 +107,14 @@ The desktop GUI never needs an ordinary TCP management port. Closing the window 
 
 ## Install the Technical Preview
 
-The v0.1.4 download supports Apple Silicon Macs running macOS 12 or newer. Install
+The v0.1.5 download supports Apple Silicon Macs running macOS 12 or newer. Install
 the verified app to `~/Applications` with:
 
 ```bash
 npm install -g airlock-relay && airlock-installer install --open
 ```
 
-Alternatively, get the DMG and checksum from [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4),
+Alternatively, get the DMG and checksum from [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5),
 then follow the [installation guide](docs/installation.md). The package is
 ad-hoc signed but is not Developer ID signed or notarized, so read the
 Gatekeeper instructions before opening it.
@@ -211,7 +211,7 @@ deploy/systemd     Server service examples
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md), [v0.1.4 release notes](docs/releases/v0.1.4.md), [security audit](docs/security-audit-2026-07-31.md), [changelog](CHANGELOG.md), or visit the [Airlock documentation site](https://louisonh.github.io/airlock-relay/). The site supports English, Simplified Chinese, and Japanese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service.
+Start with the [documentation index](docs/README.md), [v0.1.5 release notes](docs/releases/v0.1.5.md), [security audit](docs/security-audit-2026-07-31.md), [changelog](CHANGELOG.md), or visit the [Airlock documentation site](https://louisonh.github.io/airlock-relay/). The site supports English, Simplified Chinese, and Japanese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service.
 
 ## License
 
