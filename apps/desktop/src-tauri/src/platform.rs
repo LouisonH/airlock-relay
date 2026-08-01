@@ -335,6 +335,7 @@ pub fn replace_file(source: &Path, destination: &Path) -> io::Result<()> {
 
 #[cfg(windows)]
 fn restrict_acl(path: &Path) -> io::Result<()> {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
 
     let escaped = path.to_string_lossy().replace('\'', "''");
@@ -343,9 +344,13 @@ fn restrict_acl(path: &Path) -> io::Result<()> {
          & icacls $p /inheritance:r /grant:r \"$($u):F\" | Out-Null; \
          if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}"
     );
-    let status = Command::new("powershell.exe")
+    let mut command = Command::new("powershell.exe");
+    command
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .status()?;
+        // This helper runs during launch. It must never create a console
+        // window alongside the desktop application.
+        .creation_flags(0x08000000); // CREATE_NO_WINDOW
+    let status = command.status()?;
     if !status.success() {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,

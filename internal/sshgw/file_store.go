@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/LouisonH/airlock-relay/internal/capability"
+	"github.com/LouisonH/airlock-relay/internal/securefs"
 )
 
 const (
@@ -57,7 +58,7 @@ func (s *FileStore) Load() ([]Route, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || info.Size() > maxSSHMetadataBytes {
+	if err != nil || !securefs.IsPrivateRegularFile(info) || info.Size() > maxSSHMetadataBytes {
 		return nil, errors.New("invalid SSH route metadata file")
 	}
 	file, err := os.Open(s.path)
@@ -162,7 +163,7 @@ func (s *FileStore) Save(routes []Route) error {
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
+	if err := securefs.PreparePrivateFile(temporary); err != nil {
 		temporary.Close()
 		return errors.New("protect SSH route metadata")
 	}
@@ -182,27 +183,15 @@ func (s *FileStore) Save(routes []Route) error {
 	if err := os.Rename(temporaryPath, s.path); err != nil {
 		return errors.New("install SSH route metadata")
 	}
-	directory, err := os.Open(filepath.Dir(s.path))
-	if err != nil {
-		return errors.New("open SSH route metadata directory")
-	}
-	defer directory.Close()
-	if err := directory.Sync(); err != nil {
+	if err := securefs.SyncDirectory(filepath.Dir(s.path)); err != nil {
 		return errors.New("sync SSH route metadata directory")
 	}
 	return nil
 }
 
 func secureMetadataDirectory(path string) error {
-	if err := os.MkdirAll(path, 0o700); err != nil {
-		return errors.New("create SSH route metadata directory")
-	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("invalid SSH route metadata directory")
-	}
-	if err := os.Chmod(path, 0o700); err != nil {
-		return errors.New("protect SSH route metadata directory")
+	if err := securefs.EnsurePrivateDirectory(path); err != nil {
+		return errors.New("create or protect SSH route metadata directory")
 	}
 	return nil
 }

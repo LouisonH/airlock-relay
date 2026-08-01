@@ -52,6 +52,45 @@ jobs:
           node scripts/build-sidecar.mjs windows-amd64
           node scripts/build-sidecar.mjs windows-arm64
           node scripts/build-sidecar.mjs windows-386
+      - name: Smoke test initial Windows core startup
+        if: matrix.target == 'windows-amd64'
+        shell: pwsh
+        run: |
+          $sidecar = (Resolve-Path "apps/desktop/src-tauri/binaries/airlockd-x86_64-pc-windows-msvc.exe").Path
+          $controlDirectory = Join-Path $env:RUNNER_TEMP "airlock-core-smoke"
+          $token = "airlock_control_windows_smoke_token_0123456789abcdef"
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $sidecar
+          $startInfo.UseShellExecute = $false
+          $startInfo.CreateNoWindow = $true
+          $startInfo.RedirectStandardInput = $true
+          $startInfo.RedirectStandardError = $true
+          foreach ($argument in @("--control-token-stdin", "--control-dir", $controlDirectory, "--listen", "127.0.0.1:4768", "--ssh-listen", "127.0.0.1:4770", "--secret-store", "local_file")) {
+            [void]$startInfo.ArgumentList.Add($argument)
+          }
+          $process = [System.Diagnostics.Process]::Start($startInfo)
+          try {
+            $process.StandardInput.WriteLine($token)
+            $process.StandardInput.Close()
+            for ($attempt = 0; $attempt -lt 50; $attempt++) {
+              if ($process.HasExited) {
+                $stderr = $process.StandardError.ReadToEnd()
+                throw "airlockd exited during initial startup: $stderr"
+              }
+              if (Test-NetConnection -ComputerName "127.0.0.1" -Port 4768 -InformationLevel Quiet) {
+                break
+              }
+              Start-Sleep -Milliseconds 100
+            }
+            if (-not (Test-NetConnection -ComputerName "127.0.0.1" -Port 4768 -InformationLevel Quiet)) {
+              throw "airlockd did not open the HTTP listener"
+            }
+          } finally {
+            if (-not $process.HasExited) {
+              $process.Kill($true)
+              $process.WaitForExit()
+            }
+          }
       - name: Build desktop installer
         working-directory: apps/desktop
         run: npm run tauri build -- --target ${{ matrix.triple }}

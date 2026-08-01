@@ -140,11 +140,12 @@ h2 { font-size: 16px; line-height: 22px; font-weight: 700; }
 h3 { margin-bottom: 18px; font-size: 17px; line-height: 23px; font-weight: 700; }
 
 .app-shell { position: relative; display: grid; grid-template-columns: 218px minmax(0, 1fr); height: 100vh; padding-top: 32px; background: var(--canvas); transition: background-color 220ms ease; }
-.window-chrome { position: absolute; z-index: 20; top: 0; right: 0; left: 0; display: flex; align-items: center; justify-content: space-between; height: 32px; padding-left: 13px; color: var(--text-secondary); background: color-mix(in srgb, var(--canvas) 91%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent); user-select: none; -webkit-app-region: drag; backdrop-filter: blur(16px); }
+.window-chrome { position: absolute; z-index: 20; top: 0; right: 0; left: 0; display: flex; align-items: center; height: 32px; color: var(--text-secondary); background: color-mix(in srgb, var(--canvas) 91%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent); user-select: none; backdrop-filter: blur(16px); }
+.window-chrome-drag { display: flex; flex: 1 1 auto; align-self: stretch; min-width: 0; padding-left: 13px; }
 .window-chrome-brand { display: flex; align-items: center; gap: 6px; height: 100%; color: var(--text-muted); font-size: 10px; letter-spacing: .01em; opacity: .76; }
 .window-chrome-brand strong { color: var(--text-secondary); font-size: 11px; font-weight: 720; }
 .window-chrome-mark { display: grid; place-items: center; width: 18px; height: 18px; color: var(--accent-on-solid); background: var(--accent-solid); border-radius: 5px; box-shadow: 0 2px 7px color-mix(in srgb, var(--accent-solid) 18%, transparent); }
-.window-chrome-actions { display: flex; align-items: stretch; height: 100%; -webkit-app-region: no-drag; }
+.window-chrome-actions { display: flex; flex: 0 0 auto; align-items: stretch; height: 100%; }
 .window-control { display: grid; place-items: center; width: 44px; height: 100%; padding: 0; color: var(--text-muted); background: transparent; border: 0; transition: color 140ms ease, background-color 140ms ease; }
 .window-control:hover { color: var(--text); background: var(--surface-hover); }
 .window-control:active { background: var(--border); }

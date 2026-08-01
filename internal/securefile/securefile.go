@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/LouisonH/airlock-relay/internal/securefs"
 )
 
 const maxTokenBytes = 128
@@ -19,7 +21,7 @@ func Read(path string, maxBytes int64) ([]byte, error) {
 		return nil, errors.New("invalid protected file path")
 	}
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || info.Size() > maxBytes {
+	if err != nil || !securefs.IsPrivateRegularFile(info) || info.Size() > maxBytes {
 		return nil, errors.New("protected file must be a regular 0600 file")
 	}
 	file, err := os.Open(path)
@@ -65,6 +67,11 @@ func CreateToken(path string) (string, error) {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return "", errors.New("create protected token file")
+	}
+	if err := securefs.PreparePrivateFile(file); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", errors.New("protect token file")
 	}
 	if _, err := file.WriteString(token + "\n"); err != nil {
 		_ = file.Close()

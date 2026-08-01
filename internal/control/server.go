@@ -25,6 +25,7 @@ import (
 	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
+	"github.com/LouisonH/airlock-relay/internal/securefs"
 	"github.com/LouisonH/airlock-relay/internal/sshgw"
 	"golang.org/x/crypto/ssh"
 )
@@ -1665,15 +1666,8 @@ func validToken(actual, expected string) bool {
 }
 
 func prepareDirectory(path string) error {
-	if err := os.MkdirAll(path, 0o700); err != nil {
-		return errors.New("create control directory")
-	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("invalid control directory")
-	}
-	if err := os.Chmod(path, 0o700); err != nil {
-		return errors.New("protect control directory")
+	if err := securefs.EnsurePrivateDirectory(path); err != nil {
+		return errors.New("create or protect control directory")
 	}
 	return nil
 }

@@ -1195,8 +1195,10 @@ function WindowChrome() {
   const minimize = () => void window.minimize().catch(() => undefined);
   const toggleMaximize = () => void window.toggleMaximize().catch(() => undefined);
   const close = () => void window.close().catch(() => undefined);
-  return <div className="window-chrome" data-tauri-drag-region onDoubleClick={toggleMaximize}>
-    <div className="window-chrome-brand" data-tauri-drag-region><span className="window-chrome-mark"><LockKeyhole size={12} /></span><strong>Airlock</strong></div>
+  return <div className="window-chrome">
+    <div className="window-chrome-drag" data-tauri-drag-region onDoubleClick={toggleMaximize}>
+      <div className="window-chrome-brand" data-tauri-drag-region><span className="window-chrome-mark"><LockKeyhole size={12} /></span><strong>Airlock</strong></div>
+    </div>
     <div className="window-chrome-actions" aria-label={translate("窗口控制")}>
       <button type="button" className="window-control" onClick={minimize} aria-label={translate("最小化窗口")} title={translate("最小化窗口")}><Minus size={15} /></button>
       <button type="button" className="window-control" onClick={toggleMaximize} aria-label={translate("最大化窗口")} title={translate("最大化窗口")}><Maximize2 size={13} /></button>
