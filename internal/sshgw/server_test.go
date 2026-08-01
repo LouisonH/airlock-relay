@@ -431,6 +431,10 @@ func TestGatewayInteractiveShellForwardsToUpstream(t *testing.T) {
 	if len(upstream.snapshot().lastStdin) == 0 {
 		t.Fatal("interactive stdin was not forwarded upstream")
 	}
+	snapshot = upstream.snapshot()
+	if snapshot.ptyTerm != "xterm" || snapshot.ptyColumns != 80 || snapshot.ptyRows != 24 {
+		t.Fatalf("upstream interactive PTY dimensions = term %q cols %d rows %d; want xterm 80x24", snapshot.ptyTerm, snapshot.ptyColumns, snapshot.ptyRows)
+	}
 }
 
 func TestGatewayLocalPublicKeyAndUpstreamPrivateKey(t *testing.T) {
@@ -789,10 +793,22 @@ type upstreamSnapshot struct {
 	commands                 int
 	shellRequests            int
 	sftpRequests             int
+	ptyTerm                  string
+	ptyColumns               uint32
+	ptyRows                  uint32
 	lastUser                 string
 	lastPassword             string
 	lastCommand              string
 	lastStdin                string
+}
+
+type recordedPTYRequest struct {
+	Term    string
+	Columns uint32
+	Rows    uint32
+	Width   uint32
+	Height  uint32
+	Modes   []byte
 }
 
 type upstreamHarness struct {
@@ -906,7 +922,21 @@ func (h *upstreamHarness) serveConnection(raw net.Conn) {
 func (h *upstreamHarness) serveSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 	defer channel.Close()
 	for request := range requests {
-		if request.Type == "pty-req" || request.Type == "window-change" || request.Type == "env" {
+		if request.Type == "pty-req" {
+			var payload recordedPTYRequest
+			if ssh.Unmarshal(request.Payload, &payload) == nil {
+				h.mu.Lock()
+				h.state.ptyTerm = payload.Term
+				h.state.ptyColumns = payload.Columns
+				h.state.ptyRows = payload.Rows
+				h.mu.Unlock()
+			}
+			if request.WantReply {
+				_ = request.Reply(true, nil)
+			}
+			continue
+		}
+		if request.Type == "window-change" || request.Type == "env" {
 			if request.WantReply {
 				_ = request.Reply(true, nil)
 			}

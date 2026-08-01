@@ -473,7 +473,7 @@ func (s *Server) interactiveShell(local ssh.Channel, request *ssh.Request, route
 	session.Stdout = local
 	session.Stderr = local.Stderr()
 	if pty != nil {
-		if err := session.RequestPty(pty.Term, int(pty.Columns), int(pty.Rows), parseTerminalModes(pty.Modes)); err != nil {
+		if err := session.RequestPty(pty.Term, int(pty.Rows), int(pty.Columns), parseTerminalModes(pty.Modes)); err != nil {
 			if request.WantReply {
 				_ = request.Reply(false, nil)
 			}
