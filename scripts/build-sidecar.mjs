@@ -30,8 +30,21 @@ function detectTarget() {
   throw new Error(`Unsupported host ${platform}/${arch}; set AIRLOCK_TARGET or pass a target argument.`);
 }
 
-const requested = process.argv[2] || process.env.AIRLOCK_TARGET || "";
-const targetName = requested || detectTarget();
+const requested = process.argv[2] || "";
+if (requested === "--help" || requested === "-h") {
+  console.log(`Usage: node scripts/build-sidecar.mjs [target]
+
+Targets:
+${Object.keys(targets).sort().join("\n")}
+
+Without a target, the current host is detected and sidecars are written to
+apps/desktop/src-tauri/binaries with Tauri target-triple names. An explicit
+target writes plain airlockd/airlock names under bin/<target>. Set
+AIRLOCK_OUTPUT_DIR to override the output directory, or AIRLOCK_TARGET to
+choose a target when no argument is given.`);
+  process.exit(0);
+}
+const targetName = requested || process.env.AIRLOCK_TARGET || detectTarget();
 const target = targets[targetName];
 if (!target) {
   throw new Error(`Unsupported Airlock target: ${targetName}`);

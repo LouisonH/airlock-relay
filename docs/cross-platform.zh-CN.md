@@ -57,7 +57,8 @@ node scripts/build-sidecar.mjs linux-armv7
 `scripts/build-sidecar.sh` 保留为同一 Node 驱动的兼容入口。不带参数时，脚本会把桌面开发
 sidecar 按 Tauri 的目标三元组命名写入 `apps/desktop/src-tauri/binaries/`（例如
 `airlockd-aarch64-apple-darwin`）；显式指定目标时，则以普通 `airlockd`/`airlock` 名称写入
-`bin/<target>`。仅支持表中的目标名；未知目标会在写入任何二进制文件前失败。
+`bin/<target>`。仅支持表中的目标名；未知目标会在写入任何二进制文件前失败。运行
+`node scripts/build-sidecar.mjs --help` 可查看全部目标与输出规则。
 
 对于运行 32 位 Raspberry Pi OS 或 Debian `armhf` 的树莓派 3/4，将
 `bin/linux-armv7/airlockd` 与 `bin/linux-armv7/airlock` 复制到设备，再按

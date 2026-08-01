@@ -75,7 +75,8 @@ developer sidecars into `apps/desktop/src-tauri/binaries/` using Tauri's
 target-triple naming (`airlockd-aarch64-apple-darwin` and so on); an explicit
 target writes plain `airlockd`/`airlock` names under `bin/<target>`. The target
 names are deliberately limited to the contract table above; an unknown target
-fails before a binary is written.
+fails before a binary is written. Run `node scripts/build-sidecar.mjs --help`
+to list targets and output rules.
 
 For a Raspberry Pi 3/4 running a 32-bit Raspberry Pi OS or Debian `armhf`
 system, copy `bin/linux-armv7/airlockd` and `bin/linux-armv7/airlock` to the

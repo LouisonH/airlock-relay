@@ -67,6 +67,7 @@ node scripts/build-sidecar.mjs linux-armv7
 `apps/desktop/src-tauri/binaries/` に書き出します（例: `airlockd-aarch64-apple-darwin`）。
 target を明示した場合は `bin/<target>` に `airlockd`/`airlock` の通常名で書き出します。
 table にない target name は binary を作成する前に fail します。
+`node scripts/build-sidecar.mjs --help` で全 target と出力規則を確認できます。
 
 32-bit Raspberry Pi OS または Debian `armhf` の Raspberry Pi 3/4 では、
 `bin/linux-armv7/airlockd` と `bin/linux-armv7/airlock` をコピーし、non-login service
