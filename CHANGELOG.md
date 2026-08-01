@@ -4,7 +4,7 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
-## [Unreleased]
+## [0.1.5-beta] - 2026-08-01
 
 ### Added
 

@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "airlock-desktop"
-version = "0.1.4"
+version = "0.1.5-beta"
 dependencies = [
  "getrandom 0.2.17",
  "libc",
