@@ -11,7 +11,7 @@
     <a href="website/en/index.html">Static website</a>
   </p>
   <p>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4"><img src="https://img.shields.io/badge/release-v0.1.4%20technical%20preview-b26b25" alt="v0.1.4 technical preview" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5"><img src="https://img.shields.io/badge/release-v0.1.5%20technical%20preview-b26b25" alt="v0.1.5 technical preview" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 desktop" />
     <img src="https://img.shields.io/badge/core-Go%201.25%2B-267d5f" alt="Go 1.25 or newer" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -19,7 +19,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.4 is a technical preview that has completed a maintainer-run production-readiness security audit. It has not completed an independent third-party audit, Apple Developer ID signing, or notarization. Read the [audit record](docs/security-audit-2026-07-31.md) before production use.
+> Airlock v0.1.5 is a technical preview that has completed a maintainer-run production-readiness security audit. It has not completed an independent third-party audit, Apple Developer ID signing, or notarization. Read the [audit record](docs/security-audit-2026-07-31.md) before production use.
 
 ## Why Airlock?
 
@@ -54,7 +54,7 @@ Airlock is a fixed-route relay, not an open proxy, VPN, or general provider-mana
   requires explicit high-risk acknowledgement inside Airlock.
 - Multiple routes may share one upstream address; distinct local usernames select
   independent upstream accounts and protected credentials.
-- Shell, PTY, SFTP, agent/X11 forwarding, and port forwarding remain denied.
+- Interactive shells are disabled by default and can be enabled per route (`allow_interactive_shell: true`, which requires `allow_all_commands: true`). With the switch on, PuTTY and `ssh` clients enter the upstream shell directly while Airlock still injects the stored upstream credentials; this covers `su` and other interactive workflows. Agent/X11 and port forwarding remain denied, and PTY metadata is forwarded only when the interactive-shell switch is enabled. SFTP is disabled by default and can be explicitly enabled per route for modern `scp`/SFTP clients; it remains a separate high-risk file access permission.
 - Optional per-route command audit stored in a user-only `0600` rolling file.
 
 ### LLM API
@@ -107,17 +107,24 @@ The desktop GUI never needs an ordinary TCP management port. Closing the window 
 
 ## Install the Technical Preview
 
-The v0.1.4 download supports Apple Silicon Macs running macOS 12 or newer. Install
+The v0.1.5 download supports Apple Silicon Macs running macOS 12 or newer. Install
 the verified app to `~/Applications` with:
 
 ```bash
 npm install -g airlock-relay && airlock-installer install --open
 ```
 
-Alternatively, get the DMG and checksum from [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4),
+Alternatively, get the DMG and checksum from [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5),
 then follow the [installation guide](docs/installation.md). The package is
 ad-hoc signed but is not Developer ID signed or notarized, so read the
 Gatekeeper instructions before opening it.
+
+The npm diagnostic CLI also installs without side effects on Windows x64/x86/ARM64
+and Linux x64/ARM64. Run `airlock-installer status --json` or
+`airlock-installer platform --json` to inspect the current contract. Those
+targets are CI previews, not verified public installers: `install` fails closed
+and never downloads an unverified CI artifact. Linux ARMv7 and macOS x64 remain
+planned.
 
 ## Development Quick Start
 
@@ -198,13 +205,13 @@ deploy/systemd     Server service examples
 - TTL and one-time capabilities.
 - SSH/HTTP capability rotation and per-connection approval.
 - Sanitized HTTP/LLM activity events and persistent quota/cost reporting.
-- Windows and Linux SecretStore and service integration.
+- Windows and Linux desktop runtime acceptance, signing, and service integration.
 - [Cross-platform artifact and security adaptation](docs/cross-platform.md).
 - Release signing, CI secret scanning, and a complete security review.
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md), [v0.1.4 release notes](docs/releases/v0.1.4.md), [security audit](docs/security-audit-2026-07-31.md), [changelog](CHANGELOG.md), or visit the [Airlock documentation site](https://louisonh.github.io/airlock-relay/). The site supports English, Simplified Chinese, and Japanese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service.
+Start with the [documentation index](docs/README.md), [v0.1.5 release notes](docs/releases/v0.1.5.md), [security audit](docs/security-audit-2026-07-31.md), [changelog](CHANGELOG.md), or visit the [Airlock documentation site](https://louisonh.github.io/airlock-relay/). The site supports English, Simplified Chinese, and Japanese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service.
 
 ## License
 

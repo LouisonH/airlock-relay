@@ -95,6 +95,139 @@ func TestGatewayPasswordIsolationAndRestrictedExec(t *testing.T) {
 	}
 }
 
+func TestGatewayAcknowledgesPTYAndMapsSingleCommandShell(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	route := testSSHRoute(NewPolicy([]string{"build --release"}, nil, false), egress.Direct)
+	target := secrets.SSHTarget{
+		Address: upstream.address(), Username: upstreamUser, Password: []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	gateway := startGateway(t, route, target, egress.NewManager(nil))
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if err := session.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Fatalf("PTY compatibility request failed: %v", err)
+	}
+	var output bytes.Buffer
+	session.Stdout = &output
+	if err := session.Shell(); err != nil {
+		t.Fatalf("single-command shell request failed: %v", err)
+	}
+	if err := session.Wait(); err != nil {
+		t.Fatalf("single-command shell wait failed: %v", err)
+	}
+	if !bytes.Contains(output.Bytes(), []byte("ran:build --release")) {
+		t.Fatalf("shell output = %q", output.String())
+	}
+}
+
+func TestGatewayAppliesKeywordReplacementsOnlyAfterCommandPolicyCheck(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	route := testSSHRoute(NewPolicy([]string{"deploy --credential input.user.passwd"}, nil, false), egress.Direct)
+	route.KeywordReplacements = []KeywordReplacement{
+		{From: "input.user", To: "service", Enabled: true},
+		{From: "service.passwd", To: "protected-value", Enabled: true},
+	}
+	target := secrets.SSHTarget{
+		Address:         upstream.address(),
+		Username:        upstreamUser,
+		Password:        []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	gateway := startGateway(t, route, target, egress.NewManager(nil))
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.CombinedOutput("deploy --credential input.user.passwd"); err != nil {
+		t.Fatalf("rewritten command failed: %v", err)
+	}
+	if got := upstream.snapshot().lastCommand; got != "deploy --credential protected-value" {
+		t.Fatalf("upstream command = %q", got)
+	}
+
+	denied, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := denied.Run("deploy --credential protected-value"); err == nil {
+		t.Fatal("transformed command bypassed the original command policy")
+	}
+}
+
+func TestGatewayForwardsOnlyEnabledSFTPSubsystem(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	policy := NewPolicy([]string{"build --release"}, nil, false)
+	policy.AllowSFTP = true
+	route := testSSHRoute(policy, egress.Direct)
+	target := secrets.SSHTarget{
+		Address:         upstream.address(),
+		Username:        upstreamUser,
+		Password:        []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	recorder := activity.NewMemoryRecorder()
+	gateway := startGatewayRoutesWithOptions(t, []Route{route}, map[string]secrets.SSHTarget{route.TargetSecretRef: target}, egress.NewManager(nil), WithActivityRecorder(recorder))
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	unknown, unknownRequests, err := client.OpenChannel("session", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go ssh.DiscardRequests(unknownRequests)
+	if accepted, err := unknown.SendRequest("subsystem", true, ssh.Marshal(struct{ Name string }{Name: "not-sftp"})); err != nil || accepted {
+		t.Fatal("unexpected subsystem was allowed")
+	}
+	_ = unknown.Close()
+	if upstream.snapshot().connections != 0 {
+		t.Fatal("unexpected subsystem reached the upstream host")
+	}
+
+	channel, channelRequests, err := client.OpenChannel("session", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := make(chan uint32, 1)
+	go func() { status <- receiveExitStatus(channelRequests) }()
+	if accepted, err := channel.SendRequest("subsystem", true, ssh.Marshal(struct{ Name string }{Name: "sftp"})); err != nil || !accepted {
+		t.Fatalf("SFTP subsystem failed: accepted=%v, err=%v", accepted, err)
+	}
+	if _, err := io.WriteString(channel, "sanitized-sftp-test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := channel.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	output, err := io.ReadAll(channel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exitCode := <-status; exitCode != 0 {
+		t.Fatalf("SFTP exit status = %d", exitCode)
+	}
+	if string(output) != "sftp:sanitized-sftp-test" {
+		t.Fatalf("SFTP output = %q", output)
+	}
+	snapshot := upstream.snapshot()
+	if snapshot.sftpRequests != 1 || snapshot.lastStdin != "sanitized-sftp-test" {
+		t.Fatalf("upstream SFTP state = %+v", snapshot)
+	}
+	events := recorder.List(10)
+	if len(events) != 1 || events[0].Action != "SFTP subsystem" || events[0].Result != "allowed" || events[0].Caller != "build@loopback" {
+		t.Fatalf("SFTP activity = %+v", events)
+	}
+}
+
 func TestServerResourceLimitsRejectCapacityWithoutBlocking(t *testing.T) {
 	registry, err := NewRegistry(testSSHRoute(NewPolicy([]string{"uptime"}, nil, false), egress.Direct))
 	if err != nil {
@@ -190,9 +323,18 @@ func TestDisabledRouteConnectionAttemptIsRecorded(t *testing.T) {
 	route.Enabled = false
 	recorder := activity.NewMemoryRecorder()
 	gateway := startGatewayRoutesWithOptions(t, []Route{route}, nil, egress.NewManager(nil), WithActivityRecorder(recorder))
-	if client, err := ssh.Dial("tcp", gateway.address, gateway.clientConfig(ssh.Password(localCapability))); err == nil {
+	var banner string
+	config := gateway.clientConfig(ssh.Password(localCapability))
+	config.BannerCallback = func(message string) error {
+		banner += message
+		return nil
+	}
+	if client, err := ssh.Dial("tcp", gateway.address, config); err == nil {
 		_ = client.Close()
 		t.Fatal("disabled route authenticated")
+	}
+	if banner != "Airlock: 路由未开启：access denied\n" {
+		t.Fatalf("disabled route banner = %q", banner)
 	}
 	events := recorder.List(10)
 	if len(events) != 1 || events[0].RouteAlias != route.Alias || events[0].Category != "SSH" || events[0].EventType != "request" || events[0].Result != "blocked" || events[0].Action != "SSH connection to disabled route" || events[0].Caller != "build@loopback" {
@@ -227,6 +369,72 @@ func TestGatewayAllowsAllExecAndRecordsCommands(t *testing.T) {
 		t.Fatalf("command events = %+v", events)
 	}
 	assertRestrictedRequests(t, client)
+
+	shellSession, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shellSession.Close()
+	if err := shellSession.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Fatalf("allow-all PTY compatibility request failed: %v", err)
+	}
+	var shellOutput bytes.Buffer
+	shellSession.Stdout = &shellOutput
+	if err := shellSession.Shell(); err != nil {
+		t.Fatalf("allow-all shell request was refused: %v", err)
+	}
+	if err := shellSession.Wait(); err == nil {
+		t.Fatal("allow-all shell guidance should exit nonzero")
+	}
+	if !bytes.Contains(shellOutput.Bytes(), []byte("interactive shell disabled")) {
+		t.Fatalf("allow-all shell output = %q", shellOutput.String())
+	}
+}
+
+func TestGatewayInteractiveShellForwardsToUpstream(t *testing.T) {
+	upstream := startUpstream(t, upstreamAuth{username: upstreamUser, password: upstreamPass})
+	policy := NewPolicyWithOptions(nil, nil, false, true, true)
+	policy.AllowInteractiveShell = true
+	route := testSSHRoute(policy, egress.Direct)
+	target := secrets.SSHTarget{
+		Address: upstream.address(), Username: upstreamUser, Password: []byte(upstreamPass),
+		ExpectedHostKey: upstream.hostSigner.PublicKey().Marshal(),
+	}
+	gateway := startGateway(t, route, target, egress.NewManager(nil))
+	client := dialGateway(t, gateway, ssh.Password(localCapability))
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if err := session.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Fatalf("interactive PTY request failed: %v", err)
+	}
+	session.Stdin = strings.NewReader("whoami\n")
+	var output bytes.Buffer
+	session.Stdout = &output
+	if err := session.Shell(); err != nil {
+		t.Fatalf("interactive shell request was refused: %v", err)
+	}
+	if err := session.Wait(); err != nil {
+		t.Fatalf("interactive shell failed: %v", err)
+	}
+	if !bytes.Contains(output.Bytes(), []byte("shell:whoami")) {
+		t.Fatalf("interactive shell output = %q", output.String())
+	}
+	snapshot := upstream.snapshot()
+	if snapshot.shellRequests != 1 || snapshot.lastUser != upstreamUser || snapshot.lastPassword != upstreamPass {
+		t.Fatalf("upstream interactive shell state = %+v", snapshot)
+	}
+	if len(upstream.snapshot().lastStdin) == 0 {
+		t.Fatal("interactive stdin was not forwarded upstream")
+	}
+	snapshot = upstream.snapshot()
+	if snapshot.ptyTerm != "xterm" || snapshot.ptyColumns != 80 || snapshot.ptyRows != 24 {
+		t.Fatalf("upstream interactive PTY dimensions = term %q cols %d rows %d; want xterm 80x24", snapshot.ptyTerm, snapshot.ptyColumns, snapshot.ptyRows)
+	}
 }
 
 func TestGatewayLocalPublicKeyAndUpstreamPrivateKey(t *testing.T) {
@@ -425,11 +633,8 @@ func assertRestrictedRequests(t *testing.T, client *ssh.Client) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := session.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err == nil {
-		t.Error("PTY request succeeded")
-	}
-	if err := session.Shell(); err == nil {
-		t.Error("shell request succeeded")
+	if err := session.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Errorf("PTY compatibility request failed: %v", err)
 	}
 	_ = session.Close()
 
@@ -586,10 +791,24 @@ type upstreamSnapshot struct {
 	keyboardInteractiveAuths int
 	publicKeyAuths           int
 	commands                 int
+	shellRequests            int
+	sftpRequests             int
+	ptyTerm                  string
+	ptyColumns               uint32
+	ptyRows                  uint32
 	lastUser                 string
 	lastPassword             string
 	lastCommand              string
 	lastStdin                string
+}
+
+type recordedPTYRequest struct {
+	Term    string
+	Columns uint32
+	Rows    uint32
+	Width   uint32
+	Height  uint32
+	Modes   []byte
 }
 
 type upstreamHarness struct {
@@ -703,6 +922,57 @@ func (h *upstreamHarness) serveConnection(raw net.Conn) {
 func (h *upstreamHarness) serveSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 	defer channel.Close()
 	for request := range requests {
+		if request.Type == "pty-req" {
+			var payload recordedPTYRequest
+			if ssh.Unmarshal(request.Payload, &payload) == nil {
+				h.mu.Lock()
+				h.state.ptyTerm = payload.Term
+				h.state.ptyColumns = payload.Columns
+				h.state.ptyRows = payload.Rows
+				h.mu.Unlock()
+			}
+			if request.WantReply {
+				_ = request.Reply(true, nil)
+			}
+			continue
+		}
+		if request.Type == "window-change" || request.Type == "env" {
+			if request.WantReply {
+				_ = request.Reply(true, nil)
+			}
+			continue
+		}
+		if request.Type == "shell" {
+			h.mu.Lock()
+			h.state.shellRequests++
+			h.mu.Unlock()
+			_ = request.Reply(true, nil)
+			stdin, _ := io.ReadAll(channel)
+			h.mu.Lock()
+			h.state.lastStdin = string(stdin)
+			h.mu.Unlock()
+			_, _ = channel.Write([]byte("shell:" + string(stdin)))
+			_ = sendExitStatus(channel, 0)
+			return
+		}
+		if request.Type == "subsystem" {
+			var payload struct{ Name string }
+			if ssh.Unmarshal(request.Payload, &payload) != nil || payload.Name != "sftp" {
+				_ = request.Reply(false, nil)
+				continue
+			}
+			h.mu.Lock()
+			h.state.sftpRequests++
+			h.mu.Unlock()
+			_ = request.Reply(true, nil)
+			stdin, _ := io.ReadAll(channel)
+			h.mu.Lock()
+			h.state.lastStdin = string(stdin)
+			h.mu.Unlock()
+			_, _ = channel.Write([]byte("sftp:" + string(stdin)))
+			_ = sendExitStatus(channel, 0)
+			return
+		}
 		if request.Type != "exec" {
 			_ = request.Reply(false, nil)
 			continue

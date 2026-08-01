@@ -365,6 +365,7 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 		ExpectedHostKey: base64.StdEncoding.EncodeToString(hostKey.Marshal()),
 		AllowedCommand:  "printf airlock-ok", RecordCommands: true, Egress: egress.Auto,
 		AuthenticationTimeoutSeconds: 37,
+		KeywordReplacements:          []sshgw.KeywordReplacement{{From: "input.secret", To: "protected-value", Enabled: true}},
 	})
 	if !response.OK || response.Created == nil || response.Created.Capability == "" {
 		t.Fatalf("create SSH response = %+v", response)
@@ -378,6 +379,9 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 	if response.Created.Route.AuthenticationTimeoutSeconds != 37 {
 		t.Fatalf("created SSH authentication timeout = %d", response.Created.Route.AuthenticationTimeoutSeconds)
 	}
+	if response.Created.Route.KeywordReplacementCount != 1 {
+		t.Fatalf("created SSH keyword replacement count = %d", response.Created.Route.KeywordReplacementCount)
+	}
 	raw, err := json.Marshal(response)
 	if err != nil {
 		t.Fatal(err)
@@ -387,13 +391,24 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 			t.Fatalf("SSH control response leaked %q: %s", protected, raw)
 		}
 	}
+	if strings.Contains(string(raw), "protected-value") {
+		t.Fatalf("SSH create response leaked a keyword replacement value: %s", raw)
+	}
+	replacements := server.getSSHKeywordReplacements("build")
+	if !replacements.OK || len(replacements.KeywordReplacements) != 1 || replacements.KeywordReplacements[0].To != "protected-value" {
+		t.Fatalf("get SSH keyword replacements = %+v", replacements)
+	}
 	target, err := store.ResolveSSHTarget(t.Context(), "ssh/build")
 	if err != nil || target.Address != "192.0.2.10:22" || target.Username != "upstream-user-sentinel" || string(target.Password) != "upstream-password-sentinel" {
 		t.Fatalf("protected SSH target = %+v, %v", target, err)
 	}
 	loaded, err := sshMetadata.Load()
-	if err != nil || len(loaded) != 1 || loaded[0].TargetSecretRef != "ssh/build" || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || loaded[0].AuthenticationTimeoutSeconds != 37 {
+	if err != nil || len(loaded) != 1 || loaded[0].TargetSecretRef != "ssh/build" || !loaded[0].Policy.AllowsCommand("printf airlock-ok") || loaded[0].AuthenticationTimeoutSeconds != 37 || len(loaded[0].KeywordReplacements) != 1 {
 		t.Fatalf("persisted SSH routes = %+v, %v", loaded, err)
+	}
+	updatedReplacements := server.setSSHKeywordReplacements("build", []sshgw.KeywordReplacement{{From: "input.token", To: "next-protected-value", Enabled: true}})
+	if !updatedReplacements.OK {
+		t.Fatalf("set SSH keyword replacements = %+v", updatedReplacements)
 	}
 	duplicate := server.createSSHRoute(&CreateSSHRoute{
 		Name: "Duplicate", Alias: "duplicate", LocalUsername: "builder", Address: "ssh.private.invalid",
@@ -424,16 +439,16 @@ func TestCreateSSHRoutePersistsOnlyProtectedReference(t *testing.T) {
 		t.Fatalf("delete shared upstream route response = %+v", deleted)
 	}
 
-	updated := server.setSSHPolicy("build", &SSHPolicyUpdate{Name: "Release host", LocalUsername: "release", AllowedCommand: "uname -a", RecordCommands: true, AuthenticationTimeoutSeconds: 45, Egress: egress.Proxy})
-	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].Name != "Release host" || updated.Routes[0].LocalUsername != "release" || updated.Routes[0].LocalEndpoint != "release@127.0.0.1:4770" || updated.Routes[0].AllowedCommand != "uname -a" || updated.Routes[0].AllowAllCommands || updated.Routes[0].Egress != egress.Proxy || updated.Routes[0].AuthenticationTimeoutSeconds != 45 {
+	updated := server.setSSHPolicy("build", &SSHPolicyUpdate{Name: "Release host", LocalUsername: "release", AllowedCommand: "uname -a", RecordCommands: true, AllowSFTP: true, AuthenticationTimeoutSeconds: 45, Egress: egress.Proxy})
+	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].Name != "Release host" || updated.Routes[0].LocalUsername != "release" || updated.Routes[0].LocalEndpoint != "release@127.0.0.1:4770" || updated.Routes[0].AllowedCommand != "uname -a" || updated.Routes[0].AllowAllCommands || !updated.Routes[0].AllowSFTP || updated.Routes[0].Egress != egress.Proxy || updated.Routes[0].AuthenticationTimeoutSeconds != 45 {
 		t.Fatalf("updated exact-command policy response = %+v", updated)
 	}
 	loaded, err = sshMetadata.Load()
-	if err != nil || len(loaded) != 1 || loaded[0].Name != "Release host" || loaded[0].LocalUsername != "release" || loaded[0].Egress != egress.Proxy || loaded[0].AuthenticationTimeoutSeconds != 45 || !loaded[0].Policy.AllowsCommand("uname -a") || loaded[0].Policy.AllowsCommand("printf airlock-ok") {
+	if err != nil || len(loaded) != 1 || loaded[0].Name != "Release host" || loaded[0].LocalUsername != "release" || loaded[0].Egress != egress.Proxy || loaded[0].AuthenticationTimeoutSeconds != 45 || !loaded[0].Policy.AllowsCommand("uname -a") || !loaded[0].Policy.AllowSFTP || loaded[0].Policy.AllowsCommand("printf airlock-ok") {
 		t.Fatalf("persisted exact-command policy = %+v, %v", loaded, err)
 	}
 	updated = server.setSSHPolicy("build", &SSHPolicyUpdate{AllowAllCommands: true, RecordCommands: true})
-	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].LocalUsername != "release" || !updated.Routes[0].AllowAllCommands || !updated.Routes[0].RecordCommands {
+	if !updated.OK || len(updated.Routes) != 1 || updated.Routes[0].LocalUsername != "release" || !updated.Routes[0].AllowAllCommands || !updated.Routes[0].RecordCommands || updated.Routes[0].AllowSFTP {
 		t.Fatalf("updated SSH policy response = %+v", updated)
 	}
 	loaded, err = sshMetadata.Load()

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/LouisonH/airlock-relay/internal/securefs"
 )
 
 const (
@@ -53,7 +55,7 @@ func OpenFileCommandAudit(path string) (*FileCommandAudit, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return store, nil
 	}
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || info.Size() > maxCommandAuditBytes {
+	if err != nil || !securefs.IsPrivateRegularFile(info) || info.Size() > maxCommandAuditBytes {
 		return nil, errors.New("invalid SSH command audit file")
 	}
 	file, err := os.Open(path)
@@ -131,7 +133,7 @@ func (s *FileCommandAudit) save(events []CommandEvent) error {
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
+	if err := securefs.PreparePrivateFile(temporary); err != nil {
 		temporary.Close()
 		return errors.New("protect SSH command audit file")
 	}
@@ -151,12 +153,7 @@ func (s *FileCommandAudit) save(events []CommandEvent) error {
 	if err := os.Rename(temporaryPath, s.path); err != nil {
 		return errors.New("install SSH command audit file")
 	}
-	directory, err := os.Open(filepath.Dir(s.path))
-	if err != nil {
-		return errors.New("open SSH command audit directory")
-	}
-	defer directory.Close()
-	if err := directory.Sync(); err != nil {
+	if err := securefs.SyncDirectory(filepath.Dir(s.path)); err != nil {
 		return errors.New("sync SSH command audit directory")
 	}
 	return nil

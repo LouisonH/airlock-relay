@@ -1,4 +1,4 @@
-export const AIRLOCK_VERSION = "0.1.4";
+export const AIRLOCK_VERSION = "0.1.5";
 
 const targets = [
   {
@@ -9,8 +9,8 @@ const targets = [
     bundles: ["dmg", "app"],
     secureEntry: "airlock-ssh-wizard+native-os-confirmation",
     status: "released",
-    artifactName: "Airlock_0.1.4_aarch64.dmg",
-    sha256: "f137dade553d2ba174e747fb21b041f42d079188efec948b7c55dd0b7bc21d51",
+    artifactName: "Airlock_0.1.5_aarch64.dmg",
+    sha256: "e404c805c8c410012eca0996158c0d69f48f107c4cd81f677c2391e37f3f59c3",
   },
   {
     id: "macos-x64",
@@ -28,7 +28,27 @@ const targets = [
     label: "Windows / x64",
     bundles: ["nsis", "msi"],
     secureEntry: "airlock-ssh-wizard+windows-confirmation",
-    status: "planned",
+    // CI produces unsigned candidate installers. They are deliberately not npm
+    // installable until a public release asset and its pinned checksum exist.
+    status: "preview",
+  },
+  {
+    id: "windows-arm64",
+    platform: "win32",
+    arch: "arm64",
+    label: "Windows / arm64",
+    bundles: ["nsis", "msi"],
+    secureEntry: "airlock-ssh-wizard+windows-confirmation",
+    status: "preview",
+  },
+  {
+    id: "windows-x86",
+    platform: "win32",
+    arch: "ia32",
+    label: "Windows / x86 (i686)",
+    bundles: ["nsis", "msi"],
+    secureEntry: "airlock-ssh-wizard+windows-confirmation",
+    status: "preview",
   },
   {
     id: "linux-x64",
@@ -37,13 +57,31 @@ const targets = [
     label: "Linux / x64",
     bundles: ["appimage", "deb"],
     secureEntry: "airlock-ssh-wizard+secret-service",
-    status: "planned",
+    status: "preview",
   },
   {
     id: "linux-arm64",
     platform: "linux",
     arch: "arm64",
     label: "Linux / arm64",
+    bundles: ["appimage", "deb"],
+    secureEntry: "airlock-ssh-wizard+secret-service",
+    status: "preview",
+  },
+  {
+    id: "linux-x86",
+    platform: "linux",
+    arch: "ia32",
+    label: "Linux / x86 (i686)",
+    bundles: ["appimage", "deb"],
+    secureEntry: "airlock-ssh-wizard+secret-service",
+    status: "planned",
+  },
+  {
+    id: "linux-armv7",
+    platform: "linux",
+    arch: "arm",
+    label: "Linux / ARMv7 (Raspberry Pi)",
     bundles: ["appimage", "deb"],
     secureEntry: "airlock-ssh-wizard+secret-service",
     status: "planned",
@@ -65,7 +103,10 @@ export class UnsupportedPlatformError extends Error {
 
 export class UnreleasedPlatformError extends Error {
   constructor(target) {
-    super(`Airlock ${AIRLOCK_VERSION} does not publish an installer for ${target.label} yet.`);
+    const detail = target.status === "preview"
+      ? "a CI preview exists, but no verified public installer is published"
+      : "no installer is published";
+    super(`Airlock ${AIRLOCK_VERSION} recognizes ${target.label}, but ${detail}.`);
     this.name = "UnreleasedPlatformError";
     this.target = target;
   }
@@ -89,6 +130,7 @@ export function resolveReleasedArtifact(platform = process.platform, arch = proc
 
 export function getPlatformContract(platform = process.platform, arch = process.arch) {
   const target = getPlatformTarget(platform, arch);
+  const installerAvailable = target.status === "released" && Boolean(target.artifactName && target.sha256);
   return Object.freeze({
     version: AIRLOCK_VERSION,
     platform: target.platform,
@@ -99,6 +141,7 @@ export function getPlatformContract(platform = process.platform, arch = process.
     status: target.status,
     artifactName: target.artifactName ?? null,
     sha256: target.sha256 ?? null,
+    installerAvailable,
   });
 }
 
@@ -113,5 +156,6 @@ export function listPlatformContracts() {
     status: target.status,
     artifactName: target.artifactName ?? null,
     sha256: target.sha256 ?? null,
+    installerAvailable: target.status === "released" && Boolean(target.artifactName && target.sha256),
   }));
 }

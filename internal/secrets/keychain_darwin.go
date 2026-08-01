@@ -8,8 +8,6 @@ import (
 	keychain "github.com/keybase/go-keychain"
 )
 
-const keychainService = "io.airlock.relay.targets"
-
 type darwinKeychainBackend struct{}
 
 func NewPlatformStore() (MutableStore, error) {
@@ -17,7 +15,7 @@ func NewPlatformStore() (MutableStore, error) {
 }
 
 func (darwinKeychainBackend) Put(reference string, data []byte) error {
-	item := keychain.NewGenericPassword(keychainService, reference, "Airlock protected target", data, "")
+	item := keychain.NewGenericPassword(platformStoreService, reference, "Airlock protected target", data, "")
 	item.SetSynchronizable(keychain.SynchronizableNo)
 	item.SetAccessible(keychain.AccessibleAfterFirstUnlockThisDeviceOnly)
 	if err := keychain.AddItem(item); !errors.Is(err, keychain.ErrorDuplicateItem) {
@@ -26,7 +24,7 @@ func (darwinKeychainBackend) Put(reference string, data []byte) error {
 
 	query := keychain.NewItem()
 	query.SetSecClass(keychain.SecClassGenericPassword)
-	query.SetService(keychainService)
+	query.SetService(platformStoreService)
 	query.SetAccount(reference)
 	update := keychain.NewItem()
 	update.SetData(data)
@@ -36,7 +34,7 @@ func (darwinKeychainBackend) Put(reference string, data []byte) error {
 func (darwinKeychainBackend) Get(reference string) ([]byte, error) {
 	query := keychain.NewItem()
 	query.SetSecClass(keychain.SecClassGenericPassword)
-	query.SetService(keychainService)
+	query.SetService(platformStoreService)
 	query.SetAccount(reference)
 	query.SetMatchLimit(keychain.MatchLimitOne)
 	query.SetReturnData(true)
@@ -53,7 +51,7 @@ func (darwinKeychainBackend) Get(reference string) ([]byte, error) {
 func (darwinKeychainBackend) Delete(reference string) error {
 	item := keychain.NewItem()
 	item.SetSecClass(keychain.SecClassGenericPassword)
-	item.SetService(keychainService)
+	item.SetService(platformStoreService)
 	item.SetAccount(reference)
 	if err := keychain.DeleteItem(item); err != nil {
 		if errors.Is(err, keychain.ErrorItemNotFound) {

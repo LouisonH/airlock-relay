@@ -8,4 +8,10 @@ require (
 	golang.org/x/net v0.54.0
 )
 
-require golang.org/x/sys v0.45.0 // indirect
+require (
+	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/danieljoos/wincred v1.2.3 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/zalando/go-keyring v0.2.8 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+)

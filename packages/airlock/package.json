@@ -1,7 +1,7 @@
 {
   "name": "airlock-relay",
-  "version": "0.1.4",
-  "description": "Native credential-isolation relay and verified macOS installer for fixed HTTP, SSH, and LLM routes",
+  "version": "0.1.5",
+  "description": "Credential-isolation relay CLI with platform-aware, fail-closed desktop installer contracts",
   "keywords": [
     "airlock",
     "credential-isolation",
@@ -9,7 +9,11 @@
     "proxy",
     "llm",
     "tauri",
-    "macos"
+    "macos",
+    "windows",
+    "linux",
+    "cross-platform",
+    "security"
   ],
   "homepage": "https://github.com/LouisonH/airlock-relay#readme",
   "bugs": {
@@ -51,12 +55,6 @@
   "engines": {
     "node": ">=20"
   },
-  "os": [
-    "darwin"
-  ],
-  "cpu": [
-    "arm64"
-  ],
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

@@ -12,6 +12,14 @@ export interface SecuritySettings {
   sshPort: number;
 }
 
+export interface PlatformInfo {
+  os: "macos" | "windows" | "linux" | "other";
+  arch: string;
+  controlTransport: "unix-socket" | "named-pipe";
+  secretStore: "keychain" | "credential-manager" | "secret-service";
+  desktopRelease: boolean;
+}
+
 export interface PortOwner {
   port: number;
   pid: number;
@@ -34,6 +42,8 @@ export interface RouteSummary {
   currentConnections: number;
   allowAllCommands: boolean;
   recordCommands: boolean;
+  allowSftp: boolean;
+  allowInteractiveShell: boolean;
   allowedCommand?: string;
   provider?: "openai" | "anthropic";
   allowedModels?: string[];
@@ -45,11 +55,18 @@ export interface RouteSummary {
   inputTokens?: number;
   outputTokens?: number;
   authenticationTimeoutSeconds?: number;
+  keywordReplacementCount?: number;
 }
 
 export interface SSHHostKeyProbe {
   hostKey: string;
   fingerprint: string;
+}
+
+export interface KeywordReplacement {
+  from: string;
+  to: string;
+  enabled: boolean;
 }
 
 // The generated local credential is returned once for the Airlock completion
@@ -66,6 +83,7 @@ export interface ActivityEvent {
   routeName: string;
   caller: string;
   action: string;
+  detail?: string;
   result: "allowed" | "blocked" | "failed";
   latency: string;
   egress: "Direct" | "Proxy" | "Auto";

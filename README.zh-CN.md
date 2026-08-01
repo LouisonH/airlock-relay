@@ -11,7 +11,7 @@
     <a href="website/index.html">静态说明网页</a>
   </p>
   <p>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4"><img src="https://img.shields.io/badge/release-v0.1.4%20technical%20preview-b26b25" alt="v0.1.4 技术预览版" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5"><img src="https://img.shields.io/badge/release-v0.1.5%20technical%20preview-b26b25" alt="v0.1.5 技术预览版" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 桌面端" />
     <img src="https://img.shields.io/badge/core-Go%201.25%2B-267d5f" alt="Go 1.25 或更高版本" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -19,7 +19,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.4 是技术预览版，已完成维护者执行的生产就绪安全审计；它尚未完成独立第三方审计、Developer ID 签名或 Apple 公证。生产使用前请阅读[审计记录](docs/security-audit-2026-07-31.md)。
+> Airlock v0.1.5 是技术预览版，已完成维护者执行的生产就绪安全审计；它尚未完成独立第三方审计、Developer ID 签名或 Apple 公证。生产使用前请阅读[审计记录](docs/security-audit-2026-07-31.md)。
 
 ## 为什么需要 Airlock？
 
@@ -52,7 +52,7 @@ Airlock 是固定路由转发器，不是开放代理、VPN 或通用供应商�
 - 受保护的上游密码或加密私钥认证，并严格固定 Host Key。
 - 默认只允许用户自定义的一条精确命令；所有非交互 `exec` 需要在 Airlock 内明确确认高风险。
 - 多条路由可以指向同一个上游地址；不同本地用户名选择彼此独立的上游账号与受保护凭据。
-- 仍拒绝 Shell、PTY、SFTP、Agent/X11 Forwarding 与端口转发。
+- 交互式 Shell 默认关闭，可按路由开启（`allow_interactive_shell: true`，要求同时开启 `allow_all_commands: true`）。开启后，PuTTY 与 `ssh` 客户端会直接进入上游 Shell，Airlock 仍注入存储的上游凭据，可覆盖 `su` 等交互式工作流。Agent/X11 Forwarding 与端口转发始终拒绝；只有开启交互式 Shell 开关时才会向上游转发 PTY 元数据。SFTP 默认关闭，可为现代 `scp`/SFTP 客户端按路由显式启用，属于独立的高风险文件访问权限。
 - 可选的每路由命令审计，保存在当前用户专属的 `0600` 滚动文件中。
 
 ### LLM API
@@ -104,16 +104,21 @@ flowchart LR
 
 ## 安装技术预览版
 
-v0.1.4 下载包支持运行 macOS 12 或更高版本的 Apple Silicon Mac。可用以下命令把已核验的
+v0.1.5 下载包支持运行 macOS 12 或更高版本的 Apple Silicon Mac。可用以下命令把已核验的
 应用安装到 `~/Applications`：
 
 ```bash
 npm install -g airlock-relay && airlock-installer install --open
 ```
 
-也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4)
+也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5)
 下载 DMG 和校验文件，再按照[安装指南](docs/installation.zh-CN.md)操作。安装包已进行
 ad-hoc 签名，但没有 Developer ID 签名与 Apple 公证，请先阅读 Gatekeeper 说明。
+
+npm 诊断 CLI 也可在 Windows x64/x86/ARM64 与 Linux x64/ARM64 无副作用安装。运行
+`airlock-installer status --json` 或 `airlock-installer platform --json` 查看当前平台契约。
+这些目标属于 CI 预览，不是经过公开校验的安装器：`install` 会失败关闭，绝不会下载未验证
+CI 产物。Linux ARMv7 与 macOS x64 仍处于计划阶段。
 
 ## 开发环境快速开始
 
@@ -200,7 +205,7 @@ deploy/systemd     服务端 systemd 示例
 
 ## 文档
 
-可从[文档索引](docs/README.md)、[v0.1.4 安全审计版本说明](docs/releases/v0.1.4.zh-CN.md)、[审计记录](docs/security-audit-2026-07-31.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
+可从[文档索引](docs/README.md)、[v0.1.5 发布说明](docs/releases/v0.1.5.zh-CN.md)、[审计记录](docs/security-audit-2026-07-31.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
 
 ## 许可证
 

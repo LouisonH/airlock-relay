@@ -1,0 +1,133 @@
+name: Desktop Linux installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "codex/**"
+    paths:
+      - "apps/desktop/**"
+      - "scripts/build-sidecar.mjs"
+      - ".github/workflows/desktop-linux.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    name: Build Linux installer (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            triple: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: linux-arm64
+            triple: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Install Linux GUI dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev pkg-config
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Build Tauri sidecar
+        shell: bash
+        env:
+          AIRLOCK_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/src-tauri/binaries
+        run: node scripts/build-sidecar.mjs ${{ matrix.target }}
+      - name: Smoke test Linux sidecar startup and Unix-socket control
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.target }}" in
+            linux-amd64) triple="x86_64-unknown-linux-gnu" ;;
+            linux-arm64) triple="aarch64-unknown-linux-gnu" ;;
+          esac
+          sidecar="apps/desktop/src-tauri/binaries/airlockd-${triple}"
+          cli="apps/desktop/src-tauri/binaries/airlock-${triple}"
+          control_directory="$(mktemp -d)"
+          token_path="$control_directory/control.token"
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            rm -rf "$control_directory"
+          }
+          trap cleanup EXIT
+          "$cli" token generate --output "$token_path"
+          token="$(tr -d '[:space:]' < "$token_path")"
+          if [ "${#token}" -lt 32 ]; then
+            echo "generated control token was unexpectedly short" >&2
+            exit 1
+          fi
+          http_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
+          ssh_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
+          printf '%s\n' "$token" | "$sidecar" \
+            --control-token-stdin \
+            --control-dir "$control_directory" \
+            --listen "127.0.0.1:$http_port" \
+            --ssh-listen "127.0.0.1:$ssh_port" \
+            --secret-store local_file \
+            >"$control_directory/airlockd.log" 2>&1 &
+          pid=$!
+          port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+          for _ in $(seq 1 50); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              cat "$control_directory/airlockd.log" >&2
+              echo "airlockd exited during Linux startup" >&2
+              exit 1
+            fi
+            if port_open "$http_port"; then
+              break
+            fi
+            sleep 0.1
+          done
+          if ! port_open "$http_port"; then
+            cat "$control_directory/airlockd.log" >&2
+            echo "airlockd did not open the Linux HTTP listener" >&2
+            exit 1
+          fi
+          status_output=""
+          for _ in $(seq 1 20); do
+            if status_output="$("$cli" --data-dir "$control_directory" --token-file "$token_path" --timeout 2s status 2>&1)"; then
+              break
+            fi
+            sleep 0.1
+          done
+          if [ -z "$status_output" ]; then
+            echo "airlock CLI could not reach the Linux Unix-socket control channel" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$status_output" | grep -Eq '"running"\s*:\s*true'; then
+            printf '%s\n' "$status_output" >&2
+            echo "airlock control status was not running" >&2
+            exit 1
+          fi
+      - name: Build desktop installer
+        working-directory: apps/desktop
+        run: npm run tauri build -- --target ${{ matrix.triple }} --bundles deb,appimage
+      - name: Collect installer artifacts
+        shell: bash
+        run: |
+          mkdir -p .verify/installer-${{ matrix.target }}
+          find apps/desktop/src-tauri/target/${{ matrix.triple }}/release/bundle -type f \( -name "*.deb" -o -name "*.AppImage" \) -exec cp {} .verify/installer-${{ matrix.target }}/ \;
+      - uses: actions/upload-artifact@v5
+        with:
+          name: airlock-linux-${{ matrix.target }}
+          path: .verify/installer-${{ matrix.target }}/
+          if-no-files-found: error

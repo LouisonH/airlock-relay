@@ -19,6 +19,7 @@ import {
   PLATFORM_TARGETS,
   UnreleasedPlatformError,
   UnsupportedPlatformError,
+  getPlatformContract,
   resolveReleasedArtifact,
 } from "../lib/platform.mjs";
 
@@ -88,18 +89,27 @@ test("platform resolver releases only verified targets", () => {
     () => resolveReleasedArtifact("win32", "x64"),
     UnreleasedPlatformError,
   );
+  assert.equal(getPlatformContract("win32", "arm64").status, "preview");
+  assert.equal(getPlatformContract("linux", "x64").status, "preview");
+  assert.equal(getPlatformContract("linux", "ia32").status, "planned");
+  assert.equal(getPlatformContract("win32", "arm64").installerAvailable, false);
   assert.throws(
     () => resolveReleasedArtifact("freebsd", "x64"),
     UnsupportedPlatformError,
   );
 });
 
-test("reports platform contracts without claiming planned targets are released", () => {
+test("reports platform contracts without claiming preview targets are released", () => {
   const output = execFileSync(process.execPath, [cliPath, "platform", "--json"], { encoding: "utf8" });
   const report = JSON.parse(output);
   assert.equal(report.version, VERSION);
   assert.equal(report.targets.find((target) => target.platform === "darwin" && target.arch === "arm64").status, "released");
-  assert.equal(report.targets.find((target) => target.platform === "win32" && target.arch === "x64").status, "planned");
+  assert.equal(report.targets.find((target) => target.platform === "win32" && target.arch === "x64").status, "preview");
+  assert.equal(report.targets.find((target) => target.platform === "win32" && target.arch === "arm64").status, "preview");
+  assert.equal(report.targets.find((target) => target.platform === "win32" && target.arch === "ia32").status, "preview");
+  assert.equal(report.targets.find((target) => target.platform === "linux" && target.arch === "x64").status, "preview");
+  assert.equal(report.targets.find((target) => target.platform === "linux" && target.arch === "ia32").status, "planned");
+  assert.equal(report.targets.find((target) => target.platform === "linux" && target.arch === "arm").label, "Linux / ARMv7 (Raspberry Pi)");
 });
 
 test("reports the current platform contract without opening the application", () => {
@@ -108,7 +118,14 @@ test("reports the current platform contract without opening the application", ()
   assert.equal(report.package, PACKAGE_NAME);
   assert.equal(report.currentTarget.platform, process.platform);
   assert.equal(report.currentTarget.arch, process.arch);
-  assert.equal(report.installerReleased, process.platform === "darwin" && process.arch === "arm64");
+  assert.equal(report.installerAvailable, process.platform === "darwin" && process.arch === "arm64");
+  assert.equal(report.currentTarget.installerAvailable, report.installerAvailable);
+});
+
+test("package metadata allows npm to install the diagnostic CLI on every supported OS", async () => {
+  const manifest = JSON.parse(await readFile(resolve(packageDirectory, "package.json"), "utf8"));
+  assert.equal(manifest.os, undefined);
+  assert.equal(manifest.cpu, undefined);
 });
 
 test("installs the verified app bundle without opening it", { skip: sourceOnly || !runInstallerIntegration }, async () => {

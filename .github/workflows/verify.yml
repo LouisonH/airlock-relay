@@ -25,6 +25,55 @@ jobs:
       - name: Test
         run: go test ./...
 
+  cross-compile-core:
+    name: Core cross-compile (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x64
+            goos: windows
+            goarch: amd64
+            extension: .exe
+          - target: windows-arm64
+            goos: windows
+            goarch: arm64
+            extension: .exe
+          - target: windows-386
+            goos: windows
+            goarch: 386
+            extension: .exe
+          - target: linux-x64
+            goos: linux
+            goarch: amd64
+            extension: ""
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+            extension: ""
+          - target: linux-armv7
+            goos: linux
+            goarch: arm
+            goarm: "7"
+            extension: ""
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Build core and CLI
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p .verify/${{ matrix.target }}
+          go build -buildvcs=false -trimpath -o .verify/${{ matrix.target }}/airlockd${{ matrix.extension }} ./cmd/airlockd
+          go build -buildvcs=false -trimpath -o .verify/${{ matrix.target }}/airlock${{ matrix.extension }} ./cmd/airlock
+
   desktop:
     name: Desktop frontend
     runs-on: ubuntu-latest
@@ -40,6 +89,70 @@ jobs:
         run: |
           npm ci
           npm run build
+
+  desktop-rust-windows:
+    name: Desktop Rust check (Windows ${{ matrix.target }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-amd64
+            triple: x86_64-pc-windows-msvc
+          - target: windows-arm64
+            triple: aarch64-pc-windows-msvc
+          - target: windows-386
+            triple: i686-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc, aarch64-pc-windows-msvc, i686-pc-windows-msvc
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Build Tauri sidecars
+        shell: bash
+        env:
+          AIRLOCK_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/src-tauri/binaries
+        run: |
+          node scripts/build-sidecar.mjs windows-amd64
+          node scripts/build-sidecar.mjs windows-arm64
+          node scripts/build-sidecar.mjs windows-386
+      - name: Cargo check
+        shell: bash
+        working-directory: apps/desktop/src-tauri
+        run: cargo check --target ${{ matrix.triple }}
+
+  desktop-rust-linux:
+    name: Desktop Rust check (Linux ${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-latest
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Install Linux GUI dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev pkg-config
+      - name: Build Tauri sidecar
+        shell: bash
+        env:
+          AIRLOCK_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/src-tauri/binaries
+        run: node scripts/build-sidecar.mjs ${{ matrix.target }}
+      - name: Cargo check
+        working-directory: apps/desktop/src-tauri
+        run: cargo check
 
   package-and-site:
     name: Installer source and documentation

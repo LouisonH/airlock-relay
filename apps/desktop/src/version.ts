@@ -1,4 +1,4 @@
-export const APP_VERSION = "0.1.4";
+export const APP_VERSION = "0.1.5";
 export const RELEASES_URL = "https://github.com/LouisonH/airlock-relay/releases";
 
 const latestReleaseEndpoint = "https://api.github.com/repos/LouisonH/airlock-relay/releases/latest";

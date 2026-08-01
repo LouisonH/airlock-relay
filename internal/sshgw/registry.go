@@ -23,7 +23,37 @@ const (
 	DefaultAuthenticationTimeoutSeconds = 20
 	MinAuthenticationTimeoutSeconds     = 3
 	MaxAuthenticationTimeoutSeconds     = 120
+	MaxKeywordReplacements              = 64
+	MaxKeywordFromBytes                 = 256
+	MaxKeywordToBytes                   = 1024
 )
+
+type KeywordReplacement struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Enabled bool   `json:"enabled"`
+}
+
+func ValidateKeywordReplacements(replacements []KeywordReplacement) error {
+	if len(replacements) > MaxKeywordReplacements {
+		return fmt.Errorf("%w: too many keyword replacements", ErrInvalidRoute)
+	}
+	for _, replacement := range replacements {
+		if replacement.From == "" || len(replacement.From) > MaxKeywordFromBytes || len(replacement.To) > MaxKeywordToBytes || strings.ContainsAny(replacement.From+replacement.To, "\x00\r\n") {
+			return fmt.Errorf("%w: invalid keyword replacement", ErrInvalidRoute)
+		}
+	}
+	return nil
+}
+
+func ApplyKeywordReplacements(command string, replacements []KeywordReplacement) string {
+	for _, replacement := range replacements {
+		if replacement.Enabled && replacement.From != "" {
+			command = strings.ReplaceAll(command, replacement.From, replacement.To)
+		}
+	}
+	return command
+}
 
 // NormalizeAuthenticationTimeoutSeconds supplies the secure default for
 // metadata written by older Airlock versions and bounds new user input.
@@ -43,6 +73,8 @@ type Policy struct {
 	AllowStdin                 bool
 	AllowAllCommands           bool
 	RecordCommands             bool
+	AllowSFTP                  bool
+	AllowInteractiveShell      bool
 }
 
 func NewPolicy(commands, fingerprints []string, allowStdin bool) Policy {
@@ -90,6 +122,7 @@ type Route struct {
 	Policy                       Policy
 	Egress                       string
 	AuthenticationTimeoutSeconds int
+	KeywordReplacements          []KeywordReplacement
 	Enabled                      bool
 }
 
@@ -121,6 +154,9 @@ func (r Route) Validate() error {
 		return fmt.Errorf("%w: capability is required", ErrInvalidRoute)
 	}
 	if _, err := NormalizeAuthenticationTimeoutSeconds(r.AuthenticationTimeoutSeconds); err != nil {
+		return err
+	}
+	if err := ValidateKeywordReplacements(r.KeywordReplacements); err != nil {
 		return err
 	}
 	if !r.Policy.AllowAllCommands && len(r.Policy.AllowedCommands) == 0 {
@@ -300,6 +336,7 @@ func (r *Registry) DisableAll() {
 func cloneRoute(route Route) Route {
 	route.Policy.AllowedCommands = cloneStringSet(route.Policy.AllowedCommands)
 	route.Policy.LocalPublicKeyFingerprints = cloneStringSet(route.Policy.LocalPublicKeyFingerprints)
+	route.KeywordReplacements = append([]KeywordReplacement(nil), route.KeywordReplacements...)
 	return route
 }
 

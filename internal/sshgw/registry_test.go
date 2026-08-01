@@ -140,3 +140,26 @@ func TestAllowAllCommandPolicyStillRejectsMalformedExec(t *testing.T) {
 		t.Fatalf("allow-all route validation failed: %v", err)
 	}
 }
+
+func TestKeywordReplacementsAreOrderedAndValidated(t *testing.T) {
+	rules := []KeywordReplacement{
+		{From: "input.user", To: "service", Enabled: true},
+		{From: "service.passwd", To: "protected-value", Enabled: true},
+		{From: "unused", To: "ignored", Enabled: false},
+	}
+	if err := ValidateKeywordReplacements(rules); err != nil {
+		t.Fatalf("ValidateKeywordReplacements() error = %v", err)
+	}
+	if got := ApplyKeywordReplacements("login input.user.passwd unused", rules); got != "login protected-value unused" {
+		t.Fatalf("ApplyKeywordReplacements() = %q", got)
+	}
+	for _, rules := range [][]KeywordReplacement{
+		{{From: "", To: "value", Enabled: true}},
+		{{From: "line\nbreak", To: "value", Enabled: true}},
+		{{From: "key", To: "value\x00", Enabled: true}},
+	} {
+		if err := ValidateKeywordReplacements(rules); !errors.Is(err, ErrInvalidRoute) {
+			t.Fatalf("ValidateKeywordReplacements(%+v) error = %v", rules, err)
+		}
+	}
+}

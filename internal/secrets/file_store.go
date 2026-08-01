@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/LouisonH/airlock-relay/internal/securefs"
 )
 
 const (
@@ -84,7 +86,7 @@ func (b *fileBackend) load() (fileBackendDocument, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return document, nil
 	}
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || info.Size() > maxFileBackendBytes {
+	if err != nil || !securefs.IsPrivateRegularFile(info) || info.Size() > maxFileBackendBytes {
 		return fileBackendDocument{}, errors.New("invalid local secret file")
 	}
 	file, err := os.Open(b.path)
@@ -120,7 +122,7 @@ func (b *fileBackend) save(document fileBackendDocument) error {
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
+	if err := securefs.PreparePrivateFile(temporary); err != nil {
 		temporary.Close()
 		return errors.New("protect local secret file")
 	}
@@ -140,27 +142,15 @@ func (b *fileBackend) save(document fileBackendDocument) error {
 	if err := os.Rename(temporaryPath, b.path); err != nil {
 		return errors.New("install local secret file")
 	}
-	directory, err := os.Open(filepath.Dir(b.path))
-	if err != nil {
-		return errors.New("open local secret directory")
-	}
-	defer directory.Close()
-	if err := directory.Sync(); err != nil {
+	if err := securefs.SyncDirectory(filepath.Dir(b.path)); err != nil {
 		return errors.New("sync local secret directory")
 	}
 	return nil
 }
 
 func secureFileBackendDirectory(path string) error {
-	if err := os.MkdirAll(path, 0o700); err != nil {
-		return errors.New("create local secret directory")
-	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("invalid local secret directory")
-	}
-	if err := os.Chmod(path, 0o700); err != nil {
-		return errors.New("protect local secret directory")
+	if err := securefs.EnsurePrivateDirectory(path); err != nil {
+		return errors.New("create or protect local secret directory")
 	}
 	return nil
 }

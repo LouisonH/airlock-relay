@@ -21,7 +21,7 @@ const releasedMacArtifact = resolveReleasedArtifact("darwin", "arm64");
 export const ASSET_NAME = releasedMacArtifact.artifactName;
 export const ASSET_SHA256 = releasedMacArtifact.sha256;
 export const RELEASE_URL =
-  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4";
+  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const bundledAssetPath = resolve(scriptDirectory, "../dist", ASSET_NAME);
@@ -56,8 +56,9 @@ Options:
   --json    Emit machine-readable status or platform data.
   --help    Show this help.
 
-Airlock v0.1.4 supports Apple Silicon Macs running macOS 12 or newer.
-The app is ad-hoc signed and is not Apple-notarized. Read the release notes:
+The verified npm installer is currently published for Apple Silicon Macs running macOS 12 or newer.
+Windows and Linux targets are recognized for diagnostics; install fails closed until each target has a public artifact and pinned SHA-256.
+The macOS app is ad-hoc signed and is not Apple-notarized. Read the release notes:
 ${RELEASE_URL}
 `;
 
@@ -255,7 +256,10 @@ function status(options) {
     version: VERSION,
     releaseUrl: RELEASE_URL,
     currentTarget: target,
-    installerReleased: target.status === "released",
+    installerAvailable: target.installerAvailable,
+    installAction: target.installerAvailable
+      ? "verified-installer-available"
+      : "no-verified-installer-published",
   };
   if (options.json) {
     writeJson(report);
@@ -264,6 +268,7 @@ function status(options) {
   console.log(`${PACKAGE_NAME} v${VERSION}`);
   console.log(`Platform: ${target.label} (${target.platform}/${target.arch})`);
   console.log(`Release status: ${target.status}`);
+  console.log(`Verified installer: ${target.installerAvailable ? "available" : "not published"}`);
   console.log(`Artifact: ${target.artifactName ?? "not published"}`);
   console.log(`Release page: ${RELEASE_URL}`);
 }
@@ -302,6 +307,7 @@ export async function main(argv = process.argv.slice(2)) {
       console.log(`${PACKAGE_NAME} v${VERSION}`);
       return;
     case "path":
+      assertSupportedPlatform();
       await verifyFile(bundledAssetPath);
       console.log(bundledAssetPath);
       return;
@@ -318,6 +324,7 @@ export async function main(argv = process.argv.slice(2)) {
       console.log(RELEASE_URL);
       return;
     case "verify": {
+      assertSupportedPlatform();
       const digest = await verifyFile(bundledAssetPath);
       console.log(`Verified ${ASSET_NAME}`);
       console.log(`SHA-256: ${digest}`);

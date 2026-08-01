@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -26,6 +25,7 @@ import (
 	"github.com/LouisonH/airlock-relay/internal/egress"
 	"github.com/LouisonH/airlock-relay/internal/routes"
 	"github.com/LouisonH/airlock-relay/internal/secrets"
+	"github.com/LouisonH/airlock-relay/internal/securefs"
 	"github.com/LouisonH/airlock-relay/internal/sshgw"
 	"golang.org/x/crypto/ssh"
 )
@@ -43,16 +43,13 @@ type Paths struct {
 	Socket    string
 }
 
-func DefaultPaths() (Paths, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return Paths{}, errors.New("locate user configuration directory")
+// ValidatePaths rejects control endpoint descriptions that do not belong to
+// the current platform's owner-only transport.
+func ValidatePaths(paths Paths) error {
+	if !validControlPaths(paths) {
+		return errors.New("invalid control paths")
 	}
-	directory := filepath.Join(configDir, "io.airlock.relay")
-	return Paths{
-		Directory: directory,
-		Socket:    filepath.Join(directory, "control.sock"),
-	}, nil
+	return nil
 }
 
 type Server struct {
@@ -79,19 +76,20 @@ type routeHealthState struct {
 type SecretStoreFactory func(mode string) (secrets.MutableStore, error)
 
 type Request struct {
-	Version    int              `json:"version"`
-	Token      string           `json:"token"`
-	Action     string           `json:"action"`
-	Create     *CreateHTTPRoute `json:"create,omitempty"`
-	CreateSSH  *CreateSSHRoute  `json:"create_ssh,omitempty"`
-	ProbeSSH   *ProbeSSHHostKey `json:"probe_ssh,omitempty"`
-	SSHPolicy  *SSHPolicyUpdate `json:"ssh_policy,omitempty"`
-	Alias      string           `json:"alias,omitempty"`
-	Enabled    bool             `json:"enabled,omitempty"`
-	ProxyURL   string           `json:"proxy_url,omitempty"`
-	Capability string           `json:"capability,omitempty"`
-	Command    string           `json:"command,omitempty"`
-	SecretMode string           `json:"secret_store_mode,omitempty"`
+	Version             int                        `json:"version"`
+	Token               string                     `json:"token"`
+	Action              string                     `json:"action"`
+	Create              *CreateHTTPRoute           `json:"create,omitempty"`
+	CreateSSH           *CreateSSHRoute            `json:"create_ssh,omitempty"`
+	ProbeSSH            *ProbeSSHHostKey           `json:"probe_ssh,omitempty"`
+	SSHPolicy           *SSHPolicyUpdate           `json:"ssh_policy,omitempty"`
+	Alias               string                     `json:"alias,omitempty"`
+	Enabled             bool                       `json:"enabled,omitempty"`
+	ProxyURL            string                     `json:"proxy_url,omitempty"`
+	Capability          string                     `json:"capability,omitempty"`
+	Command             string                     `json:"command,omitempty"`
+	SecretMode          string                     `json:"secret_store_mode,omitempty"`
+	KeywordReplacements []sshgw.KeywordReplacement `json:"keyword_replacements,omitempty"`
 }
 
 type CreateHTTPRoute struct {
@@ -110,19 +108,22 @@ type CreateHTTPRoute struct {
 }
 
 type CreateSSHRoute struct {
-	Name                         string `json:"name"`
-	Alias                        string `json:"alias"`
-	LocalUsername                string `json:"local_username,omitempty"`
-	Address                      string `json:"address"`
-	Username                     string `json:"username"`
-	Password                     string `json:"password"`
-	LocalPassword                string `json:"local_password,omitempty"`
-	ExpectedHostKey              string `json:"expected_host_key"`
-	AllowedCommand               string `json:"allowed_command"`
-	AllowAllCommands             bool   `json:"allow_all_commands"`
-	RecordCommands               bool   `json:"record_commands"`
-	AuthenticationTimeoutSeconds int    `json:"authentication_timeout_seconds,omitempty"`
-	Egress                       string `json:"egress,omitempty"`
+	Name                         string                     `json:"name"`
+	Alias                        string                     `json:"alias"`
+	LocalUsername                string                     `json:"local_username,omitempty"`
+	Address                      string                     `json:"address"`
+	Username                     string                     `json:"username"`
+	Password                     string                     `json:"password"`
+	LocalPassword                string                     `json:"local_password,omitempty"`
+	ExpectedHostKey              string                     `json:"expected_host_key"`
+	AllowedCommand               string                     `json:"allowed_command"`
+	AllowAllCommands             bool                       `json:"allow_all_commands"`
+	RecordCommands               bool                       `json:"record_commands"`
+	AllowSFTP                    bool                       `json:"allow_sftp"`
+	AllowInteractiveShell        bool                       `json:"allow_interactive_shell"`
+	AuthenticationTimeoutSeconds int                        `json:"authentication_timeout_seconds,omitempty"`
+	Egress                       string                     `json:"egress,omitempty"`
+	KeywordReplacements          []sshgw.KeywordReplacement `json:"keyword_replacements,omitempty"`
 }
 
 type SSHPolicyUpdate struct {
@@ -131,6 +132,8 @@ type SSHPolicyUpdate struct {
 	AllowedCommand               string `json:"allowed_command"`
 	AllowAllCommands             bool   `json:"allow_all_commands"`
 	RecordCommands               bool   `json:"record_commands"`
+	AllowSFTP                    bool   `json:"allow_sftp"`
+	AllowInteractiveShell        bool   `json:"allow_interactive_shell"`
 	AuthenticationTimeoutSeconds int    `json:"authentication_timeout_seconds,omitempty"`
 	Egress                       string `json:"egress,omitempty"`
 }
@@ -153,17 +156,18 @@ type SSHConfiguration struct {
 }
 
 type Response struct {
-	OK              bool                `json:"ok"`
-	Error           string              `json:"error,omitempty"`
-	Warning         string              `json:"warning,omitempty"`
-	Running         bool                `json:"running"`
-	Routes          []RouteSummary      `json:"routes,omitempty"`
-	Created         *CreatedRoute       `json:"created,omitempty"`
-	ProxyConfigured bool                `json:"proxy_configured"`
-	SSHReady        bool                `json:"ssh_ready"`
-	SSHHostKeyProbe *SSHHostKeyProbe    `json:"ssh_host_key_probe,omitempty"`
-	HealthCheck     *HealthCheckSummary `json:"health_check,omitempty"`
-	Activity        []ActivitySummary   `json:"activity,omitempty"`
+	OK                  bool                       `json:"ok"`
+	Error               string                     `json:"error,omitempty"`
+	Warning             string                     `json:"warning,omitempty"`
+	Running             bool                       `json:"running"`
+	Routes              []RouteSummary             `json:"routes,omitempty"`
+	Created             *CreatedRoute              `json:"created,omitempty"`
+	ProxyConfigured     bool                       `json:"proxy_configured"`
+	SSHReady            bool                       `json:"ssh_ready"`
+	SSHHostKeyProbe     *SSHHostKeyProbe           `json:"ssh_host_key_probe,omitempty"`
+	HealthCheck         *HealthCheckSummary        `json:"health_check,omitempty"`
+	Activity            []ActivitySummary          `json:"activity,omitempty"`
+	KeywordReplacements []sshgw.KeywordReplacement `json:"keyword_replacements,omitempty"`
 }
 
 type SSHHostKeyProbe struct {
@@ -199,6 +203,8 @@ type RouteSummary struct {
 	CurrentConnections           int      `json:"currentConnections"`
 	AllowAllCommands             bool     `json:"allowAllCommands"`
 	RecordCommands               bool     `json:"recordCommands"`
+	AllowSFTP                    bool     `json:"allowSftp"`
+	AllowInteractiveShell        bool     `json:"allowInteractiveShell"`
 	AllowedCommand               string   `json:"allowedCommand,omitempty"`
 	Provider                     string   `json:"provider,omitempty"`
 	AllowedModels                []string `json:"allowedModels,omitempty"`
@@ -210,6 +216,7 @@ type RouteSummary struct {
 	InputTokens                  uint64   `json:"inputTokens,omitempty"`
 	OutputTokens                 uint64   `json:"outputTokens,omitempty"`
 	AuthenticationTimeoutSeconds int      `json:"authenticationTimeoutSeconds,omitempty"`
+	KeywordReplacementCount      int      `json:"keywordReplacementCount,omitempty"`
 }
 
 type ActivitySummary struct {
@@ -218,6 +225,7 @@ type ActivitySummary struct {
 	RouteName string `json:"routeName"`
 	Caller    string `json:"caller"`
 	Action    string `json:"action"`
+	Detail    string `json:"detail,omitempty"`
 	Result    string `json:"result"`
 	Latency   string `json:"latency"`
 	Egress    string `json:"egress"`
@@ -250,19 +258,12 @@ func listen(paths Paths, token string, registry *routes.Registry, store secrets.
 	if egressManager == nil {
 		return nil, nil, errors.New("egress manager is required")
 	}
-	if err := prepareDirectory(paths.Directory); err != nil {
+	if err := ValidatePaths(paths); err != nil {
 		return nil, nil, err
 	}
-	if err := removeStaleSocket(paths.Socket); err != nil {
-		return nil, nil, err
-	}
-	listener, err := net.Listen("unix", paths.Socket)
+	listener, err := listenControlEndpoint(paths)
 	if err != nil {
-		return nil, nil, fmt.Errorf("listen on control socket: %w", err)
-	}
-	if err := os.Chmod(paths.Socket, 0o600); err != nil {
-		_ = listener.Close()
-		return nil, nil, errors.New("protect control socket")
+		return nil, nil, fmt.Errorf("listen on control endpoint: %w", err)
 	}
 	httpAddress := "127.0.0.1:4768"
 	if sshConfiguration != nil && sshConfiguration.HTTPAddress != "" {
@@ -331,6 +332,10 @@ func (s *Server) dispatch(request Request) Response {
 		return s.createSSHRoute(request.CreateSSH)
 	case "set_ssh_policy":
 		return s.setSSHPolicy(request.Alias, request.SSHPolicy)
+	case "get_ssh_replacements":
+		return s.getSSHKeywordReplacements(request.Alias)
+	case "set_ssh_replacements":
+		return s.setSSHKeywordReplacements(request.Alias, request.KeywordReplacements)
 	case "update_ssh_target":
 		return s.updateSSHTarget(request.Alias, request.CreateSSH)
 	case "rotate_ssh_credential":
@@ -805,7 +810,7 @@ func hostIsLocal(host string) bool {
 }
 
 func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
-	if s.ssh == nil || input == nil || strings.TrimSpace(input.Name) == "" || len(input.Name) > 80 || len(input.Address) > 512 || input.Username == "" || len(input.Username) > 255 || len(input.Password) == 0 || len(input.Password) > 8<<10 || (input.LocalPassword != "" && !validLocalPassword(input.LocalPassword)) || len(input.ExpectedHostKey) > 16<<10 || !validEgressPolicy(input.Egress) {
+	if s.ssh == nil || input == nil || strings.TrimSpace(input.Name) == "" || len(input.Name) > 80 || len(input.Address) > 512 || input.Username == "" || len(input.Username) > 255 || len(input.Password) == 0 || len(input.Password) > 8<<10 || (input.LocalPassword != "" && !validLocalPassword(input.LocalPassword)) || len(input.ExpectedHostKey) > 16<<10 || !validEgressPolicy(input.Egress) || (input.AllowInteractiveShell && !input.AllowAllCommands) {
 		return Response{Error: "invalid SSH route details"}
 	}
 	address, err := normalizeSSHAddress(input.Address)
@@ -873,14 +878,18 @@ func (s *Server) createSSHRoute(input *CreateSSHRoute) Response {
 	if input.AllowAllCommands {
 		commands = nil
 	}
+	sshPolicy := sshgw.NewPolicyWithOptions(
+		commands, nil, false, input.AllowAllCommands, input.RecordCommands,
+	)
+	sshPolicy.AllowSFTP = input.AllowSFTP
+	sshPolicy.AllowInteractiveShell = input.AllowInteractiveShell
 	route := sshgw.Route{
 		Name: input.Name, Alias: input.Alias, LocalUsername: localUsername,
 		TargetSecretRef:  reference,
 		CapabilityDigest: digest,
-		Policy: sshgw.NewPolicyWithOptions(
-			commands, nil, false, input.AllowAllCommands, input.RecordCommands,
-		),
-		Egress: policy, AuthenticationTimeoutSeconds: authenticationTimeout, Enabled: false,
+		Policy:           sshPolicy,
+		Egress:           policy, AuthenticationTimeoutSeconds: authenticationTimeout,
+		KeywordReplacements: append([]sshgw.KeywordReplacement(nil), input.KeywordReplacements...), Enabled: false,
 	}
 	if err := s.ssh.Registry.Upsert(route); err != nil {
 		_ = s.secrets.DeleteTarget(context.Background(), reference)
@@ -903,6 +912,9 @@ func validLocalPassword(password string) bool {
 func (s *Server) setSSHPolicy(alias string, input *SSHPolicyUpdate) Response {
 	if s.ssh == nil || input == nil || (input.Name != "" && (strings.TrimSpace(input.Name) == "" || len(input.Name) > 80)) || !validEgressPolicy(input.Egress) {
 		return Response{Error: "SSH 路由策略不可用"}
+	}
+	if input.AllowInteractiveShell && !input.AllowAllCommands {
+		return Response{Error: "交互式 Shell 需要开放所有命令"}
 	}
 	commands := []string{input.AllowedCommand}
 	if input.AllowAllCommands {
@@ -934,6 +946,8 @@ func (s *Server) setSSHPolicy(alias string, input *SSHPolicyUpdate) Response {
 	}
 	updated.LocalUsername = localUsername
 	updated.Policy = sshgw.NewPolicyWithOptions(commands, fingerprints, false, input.AllowAllCommands, input.RecordCommands)
+	updated.Policy.AllowSFTP = input.AllowSFTP
+	updated.Policy.AllowInteractiveShell = input.AllowInteractiveShell
 	if input.Name != "" {
 		updated.Name = strings.TrimSpace(input.Name)
 	}
@@ -949,6 +963,41 @@ func (s *Server) setSSHPolicy(alias string, input *SSHPolicyUpdate) Response {
 	if err := s.ssh.Persistence.Save(s.ssh.Registry.List()); err != nil {
 		_ = s.ssh.Registry.Upsert(previous)
 		return Response{Error: "无法保存 SSH 映射策略"}
+	}
+	return s.successResponse()
+}
+
+func (s *Server) getSSHKeywordReplacements(alias string) Response {
+	if s.ssh == nil || strings.TrimSpace(alias) == "" || len(alias) > 63 {
+		return Response{Error: "SSH 出口替换不可用"}
+	}
+	route, err := s.ssh.Registry.Get(alias)
+	if err != nil {
+		return Response{Error: "未找到 SSH 路由"}
+	}
+	response := s.successResponse()
+	response.KeywordReplacements = append([]sshgw.KeywordReplacement(nil), route.KeywordReplacements...)
+	return response
+}
+
+func (s *Server) setSSHKeywordReplacements(alias string, replacements []sshgw.KeywordReplacement) Response {
+	if s.ssh == nil || strings.TrimSpace(alias) == "" || len(alias) > 63 || sshgw.ValidateKeywordReplacements(replacements) != nil {
+		return Response{Error: "SSH 出口替换规则无效"}
+	}
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	previous, err := s.ssh.Registry.Get(alias)
+	if err != nil {
+		return Response{Error: "未找到 SSH 路由"}
+	}
+	updated := previous
+	updated.KeywordReplacements = append([]sshgw.KeywordReplacement(nil), replacements...)
+	if err := s.ssh.Registry.Upsert(updated); err != nil {
+		return Response{Error: "SSH 出口替换规则无效"}
+	}
+	if err := s.ssh.Persistence.Save(s.ssh.Registry.List()); err != nil {
+		_ = s.ssh.Registry.Upsert(previous)
+		return Response{Error: "无法保存 SSH 出口替换规则"}
 	}
 	return s.successResponse()
 }
@@ -1428,7 +1477,7 @@ func (s *Server) recentActivities() []ActivitySummary {
 			result = append(result, ActivitySummary{
 				ID: event.ID, Time: event.Time.Local().Format("01-02 15:04:05"),
 				RouteName: s.routeDisplayName(event.RouteAlias), Caller: event.Caller,
-				Action: event.Action, Result: event.Result,
+				Action: event.Action, Detail: event.Action, Result: event.Result,
 				Latency: fmt.Sprintf("%d ms", event.DurationMS), Egress: effectiveEgress(event.Egress),
 				Category: event.Category, EventType: event.EventType, when: event.Time,
 			})
@@ -1439,7 +1488,7 @@ func (s *Server) recentActivities() []ActivitySummary {
 			result = append(result, ActivitySummary{
 				ID: event.ID, Time: event.Time.Local().Format("01-02 15:04:05"),
 				RouteName: s.routeDisplayName(event.RouteAlias), Caller: event.RouteAlias + "@loopback",
-				Action: commandPreview(event.Command), Result: event.Result,
+				Action: commandPreview(event.Command), Detail: event.Command, Result: event.Result,
 				Latency: fmt.Sprintf("%d ms", event.DurationMS), Egress: effectiveEgress(event.Egress),
 				Category: "SSH", EventType: "command", when: event.Time,
 			})
@@ -1566,6 +1615,15 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 	if route.Policy.RecordCommands {
 		permissionSummary += " · recorded"
 	}
+	if route.Policy.AllowSFTP {
+		permissionSummary += " · SFTP high risk"
+	}
+	if route.Policy.AllowInteractiveShell {
+		permissionSummary += " · interactive shell"
+	}
+	if len(route.KeywordReplacements) > 0 {
+		permissionSummary += fmt.Sprintf(" · %d rewrite rules", len(route.KeywordReplacements))
+	}
 	allowedCommands := make([]string, 0, len(route.Policy.AllowedCommands))
 	for command := range route.Policy.AllowedCommands {
 		allowedCommands = append(allowedCommands, command)
@@ -1583,8 +1641,11 @@ func summarizeSSH(route sshgw.Route, listenAddress string) RouteSummary {
 		Egress:            egressPolicy, Health: "unknown", LastUsed: "从未", CurrentConnections: 0,
 		AllowAllCommands:             route.Policy.AllowAllCommands,
 		RecordCommands:               route.Policy.RecordCommands,
+		AllowSFTP:                    route.Policy.AllowSFTP,
+		AllowInteractiveShell:        route.Policy.AllowInteractiveShell,
 		AllowedCommand:               allowedCommand,
 		AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
+		KeywordReplacementCount:      len(route.KeywordReplacements),
 	}
 }
 
@@ -1617,15 +1678,8 @@ func validToken(actual, expected string) bool {
 }
 
 func prepareDirectory(path string) error {
-	if err := os.MkdirAll(path, 0o700); err != nil {
-		return errors.New("create control directory")
-	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("invalid control directory")
-	}
-	if err := os.Chmod(path, 0o700); err != nil {
-		return errors.New("protect control directory")
+	if err := securefs.EnsurePrivateDirectory(path); err != nil {
+		return errors.New("create or protect control directory")
 	}
 	return nil
 }

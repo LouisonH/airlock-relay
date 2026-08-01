@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/LouisonH/airlock-relay/internal/capability"
+	"github.com/LouisonH/airlock-relay/internal/securefs"
 )
 
 const (
@@ -30,19 +31,22 @@ type metadataDocument struct {
 }
 
 type persistedRoute struct {
-	Name                         string   `json:"name"`
-	Alias                        string   `json:"alias"`
-	LocalUsername                string   `json:"local_username,omitempty"`
-	TargetSecretRef              string   `json:"target_secret_ref"`
-	CapabilityDigest             string   `json:"capability_digest"`
-	AllowedCommands              []string `json:"allowed_commands"`
-	LocalPublicKeyFingerprints   []string `json:"local_public_key_fingerprints,omitempty"`
-	AllowStdin                   bool     `json:"allow_stdin"`
-	AllowAllCommands             bool     `json:"allow_all_commands,omitempty"`
-	RecordCommands               bool     `json:"record_commands,omitempty"`
-	Egress                       string   `json:"egress"`
-	AuthenticationTimeoutSeconds int      `json:"authentication_timeout_seconds,omitempty"`
-	Enabled                      bool     `json:"enabled"`
+	Name                         string               `json:"name"`
+	Alias                        string               `json:"alias"`
+	LocalUsername                string               `json:"local_username,omitempty"`
+	TargetSecretRef              string               `json:"target_secret_ref"`
+	CapabilityDigest             string               `json:"capability_digest"`
+	AllowedCommands              []string             `json:"allowed_commands"`
+	LocalPublicKeyFingerprints   []string             `json:"local_public_key_fingerprints,omitempty"`
+	AllowStdin                   bool                 `json:"allow_stdin"`
+	AllowAllCommands             bool                 `json:"allow_all_commands,omitempty"`
+	RecordCommands               bool                 `json:"record_commands,omitempty"`
+	AllowSFTP                    bool                 `json:"allow_sftp,omitempty"`
+	AllowInteractiveShell        bool                 `json:"allow_interactive_shell,omitempty"`
+	Egress                       string               `json:"egress"`
+	AuthenticationTimeoutSeconds int                  `json:"authentication_timeout_seconds,omitempty"`
+	KeywordReplacements          []KeywordReplacement `json:"keyword_replacements,omitempty"`
+	Enabled                      bool                 `json:"enabled"`
 }
 
 func NewFileStore(path string) *FileStore { return &FileStore{path: path} }
@@ -55,7 +59,7 @@ func (s *FileStore) Load() ([]Route, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || info.Size() > maxSSHMetadataBytes {
+	if err != nil || !securefs.IsPrivateRegularFile(info) || info.Size() > maxSSHMetadataBytes {
 		return nil, errors.New("invalid SSH route metadata file")
 	}
 	file, err := os.Open(s.path)
@@ -92,18 +96,22 @@ func (s *FileStore) Load() ([]Route, error) {
 		var digest capability.Digest
 		copy(digest[:], digestBytes)
 		clear(digestBytes)
+		policy := NewPolicyWithOptions(
+			stored.AllowedCommands,
+			stored.LocalPublicKeyFingerprints,
+			stored.AllowStdin,
+			stored.AllowAllCommands,
+			stored.RecordCommands,
+		)
+		policy.AllowSFTP = stored.AllowSFTP
+		policy.AllowInteractiveShell = stored.AllowInteractiveShell
 		route := Route{
 			Name: stored.Name, Alias: stored.Alias, LocalUsername: stored.LocalUsername,
 			TargetSecretRef:  stored.TargetSecretRef,
 			CapabilityDigest: digest,
-			Policy: NewPolicyWithOptions(
-				stored.AllowedCommands,
-				stored.LocalPublicKeyFingerprints,
-				stored.AllowStdin,
-				stored.AllowAllCommands,
-				stored.RecordCommands,
-			),
-			Egress: stored.Egress, AuthenticationTimeoutSeconds: stored.AuthenticationTimeoutSeconds, Enabled: stored.Enabled,
+			Policy:           policy,
+			Egress:           stored.Egress, AuthenticationTimeoutSeconds: stored.AuthenticationTimeoutSeconds, Enabled: stored.Enabled,
+			KeywordReplacements: append([]KeywordReplacement(nil), stored.KeywordReplacements...),
 		}
 		if route.AuthenticationTimeoutSeconds == 0 {
 			route.AuthenticationTimeoutSeconds = DefaultAuthenticationTimeoutSeconds
@@ -144,7 +152,10 @@ func (s *FileStore) Save(routes []Route) error {
 			AllowStdin:                 route.Policy.AllowStdin, Egress: route.Egress, Enabled: route.Enabled,
 			AllowAllCommands:             route.Policy.AllowAllCommands,
 			RecordCommands:               route.Policy.RecordCommands,
+			AllowSFTP:                    route.Policy.AllowSFTP,
+			AllowInteractiveShell:        route.Policy.AllowInteractiveShell,
 			AuthenticationTimeoutSeconds: route.EffectiveAuthenticationTimeoutSeconds(),
+			KeywordReplacements:          append([]KeywordReplacement(nil), route.KeywordReplacements...),
 		})
 	}
 	sort.Slice(document.Routes, func(i, j int) bool { return document.Routes[i].Alias < document.Routes[j].Alias })
@@ -155,7 +166,7 @@ func (s *FileStore) Save(routes []Route) error {
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
+	if err := securefs.PreparePrivateFile(temporary); err != nil {
 		temporary.Close()
 		return errors.New("protect SSH route metadata")
 	}
@@ -175,27 +186,15 @@ func (s *FileStore) Save(routes []Route) error {
 	if err := os.Rename(temporaryPath, s.path); err != nil {
 		return errors.New("install SSH route metadata")
 	}
-	directory, err := os.Open(filepath.Dir(s.path))
-	if err != nil {
-		return errors.New("open SSH route metadata directory")
-	}
-	defer directory.Close()
-	if err := directory.Sync(); err != nil {
+	if err := securefs.SyncDirectory(filepath.Dir(s.path)); err != nil {
 		return errors.New("sync SSH route metadata directory")
 	}
 	return nil
 }
 
 func secureMetadataDirectory(path string) error {
-	if err := os.MkdirAll(path, 0o700); err != nil {
-		return errors.New("create SSH route metadata directory")
-	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("invalid SSH route metadata directory")
-	}
-	if err := os.Chmod(path, 0o700); err != nil {
-		return errors.New("protect SSH route metadata directory")
+	if err := securefs.EnsurePrivateDirectory(path); err != nil {
+		return errors.New("create or protect SSH route metadata directory")
 	}
 	return nil
 }

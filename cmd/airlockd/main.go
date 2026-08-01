@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/LouisonH/airlock-relay/internal/activity"
@@ -38,6 +37,7 @@ func main() {
 	networkScope := flag.String("network-scope", "loopback", "ingress network scope: loopback or lan")
 	secretStoreMode := flag.String("secret-store", "", "secret store: keychain or local_file (mode default applies)")
 	controlTokenStdin := flag.Bool("control-token-stdin", false, "read the ephemeral desktop control token from stdin")
+	controlDir := flag.String("control-dir", "", "absolute protected desktop control directory (desktop mode only)")
 	dataDir := flag.String("data-dir", "", "absolute protected state directory (required in server mode)")
 	controlTokenFile := flag.String("control-token-file", "", "protected 0600 control token file (required in server mode)")
 	webListen := flag.String("web-listen", "", "optional loopback Web UI listen address")
@@ -61,18 +61,18 @@ func main() {
 		}
 		config.ControlToken, err = readControlToken(os.Stdin)
 		if err == nil {
-			config.ControlPaths, err = control.DefaultPaths()
+			config.ControlPaths, err = desktopControlPaths(*controlDir)
 		}
 		if config.SecretStoreMode == "" {
 			config.SecretStoreMode = secrets.StoreModeKeychain
 		}
 	case "server":
-		if *controlTokenStdin || *dataDir == "" || *controlTokenFile == "" || !filepath.IsAbs(*dataDir) || (*webListen == "") != (*webTokenFile == "") {
+		if *controlTokenStdin || *controlDir != "" || *dataDir == "" || *controlTokenFile == "" || !filepath.IsAbs(*dataDir) || (*webListen == "") != (*webTokenFile == "") {
 			slog.Error("server mode requires absolute --data-dir and --control-token-file; --web-listen and --web-token-file must be supplied together")
 			os.Exit(2)
 		}
 		config.ControlToken, err = securefile.ReadToken(*controlTokenFile)
-		config.ControlPaths = control.Paths{Directory: *dataDir, Socket: filepath.Join(*dataDir, "control.sock")}
+		config.ControlPaths, err = control.PathsForDirectory(*dataDir)
 		if *webTokenFile != "" && err == nil {
 			config.WebToken, err = securefile.ReadToken(*webTokenFile)
 		}
@@ -99,6 +99,16 @@ func main() {
 		slog.Error("airlockd stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func desktopControlPaths(directory string) (control.Paths, error) {
+	if directory == "" {
+		return control.DefaultPaths()
+	}
+	if !filepath.IsAbs(directory) {
+		return control.Paths{}, errors.New("desktop control directory must be absolute")
+	}
+	return control.PathsForDirectory(directory)
 }
 
 type runtimeConfig struct {
@@ -138,8 +148,8 @@ func runWithConfig(config runtimeConfig) error {
 	if err := requireAllowedListen(sshAddress, allowLAN); err != nil {
 		return fmt.Errorf("invalid SSH listener: %w", err)
 	}
-	if controlPaths.Directory == "" || controlPaths.Socket == "" || !filepath.IsAbs(controlPaths.Directory) || !filepath.IsAbs(controlPaths.Socket) || filepath.Dir(controlPaths.Socket) != controlPaths.Directory {
-		return errors.New("invalid control paths")
+	if err := control.ValidatePaths(controlPaths); err != nil {
+		return err
 	}
 	if len(controlToken) < 32 || len(controlToken) > 128 {
 		return errors.New("invalid control token")
@@ -232,7 +242,7 @@ func runWithConfig(config runtimeConfig) error {
 	}
 	defer func() {
 		_ = controlListener.Close()
-		_ = os.Remove(controlPaths.Socket)
+		control.Cleanup(controlPaths)
 	}()
 
 	mux := http.NewServeMux()
@@ -301,7 +311,7 @@ func runWithConfig(config runtimeConfig) error {
 		sshErrors <- sshGateway.Serve(sshListener)
 	}()
 
-	shutdownContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	shutdownContext, stop := signal.NotifyContext(context.Background(), shutdownSignals()...)
 	defer stop()
 	select {
 	case <-shutdownContext.Done():

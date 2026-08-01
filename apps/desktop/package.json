@@ -1,12 +1,12 @@
 {
   "name": "airlock-desktop",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "author": "LouisonH",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "sidecar:build": "sh ../../scripts/build-sidecar.sh",
+    "sidecar:build": "node ../../scripts/build-sidecar.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
