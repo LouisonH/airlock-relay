@@ -45,8 +45,9 @@ Desktop GUI、local control transport、native prompt フローはコードレ�
   Secret Service）、security profile、native risk 表記を切り替えます。
 - Linux の native prompt は `zenity`（GNOME）または `kdialog`（KDE）を session ごとの
   backend probe で選択します。protected input、LLM Key 選択、高リスク SSH 確認、
-  Capability の受け渡し、security setting 確認に対応し、Desktop bundle の実行時には
-  どちらかのツールが必要です。headless server では CLI を使用してください。
+  Capability の受け渡し、security setting 確認に対応します。Linux の port 所有者管理は
+  `/proc` を直接読み取るため `lsof` は不要です。Desktop bundle では prompt backend のいずれかが
+  必要で、headless server では CLI を使用します。
 - CI は push のたびに Windows x64、Windows arm64、Linux x64 の Desktop ターゲットで
   Rust `cargo check` を実行し、移植済みの control client を実機 acceptance 前に
   継続的に検証します。

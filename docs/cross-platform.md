@@ -52,8 +52,9 @@ and installer checklist below is completed.
 - Linux native prompts use `zenity` (GNOME) or `kdialog` (KDE), selected at
   runtime with a per-session backend probe. They cover protected input, LLM
   key choice, high-risk SSH confirmation, capability handoff, and
-  security-setting confirmation; desktop bundles expect one of these tools to
-  be installed. Headless servers use the CLI instead.
+  security-setting confirmation. Linux port-ownership management reads
+  `/proc` directly and needs no external `lsof`; desktop bundles still expect
+  one prompt backend. Headless servers use the CLI instead.
 - CI runs Rust `cargo check` for the Windows x64, Windows arm64, and Linux x64
   desktop targets on every push, so the ported control client is re-verified
   on real target toolchains before runtime acceptance.

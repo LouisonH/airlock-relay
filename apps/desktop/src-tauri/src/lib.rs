@@ -3152,7 +3152,7 @@ fn append_port_owner(
     });
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "linux")))]
 fn listening_port_owners(port: u16, managed_pid: Option<u32>) -> Result<Vec<PortOwner>, String> {
     let selection = format!("-iTCP:{port}");
     let output = Command::new("/usr/sbin/lsof")
@@ -3187,6 +3187,102 @@ fn listening_port_owners(port: u16, managed_pid: Option<u32>) -> Result<Vec<Port
         }
     }
     append_port_owner(&mut owners, &raw, port, current_uid, managed_pid);
+    owners.sort_by_key(|owner| owner.pid);
+    owners.dedup_by_key(|owner| owner.pid);
+    Ok(owners)
+}
+
+#[cfg(target_os = "linux")]
+fn listening_port_owners(port: u16, managed_pid: Option<u32>) -> Result<Vec<PortOwner>, String> {
+    use std::{collections::HashSet, os::unix::fs::MetadataExt};
+
+    let current_uid = unsafe { libc::geteuid() } as u32;
+    let expected_port = format!("{port:04X}");
+    let mut socket_inodes = HashSet::new();
+    let mut loaded_table = false;
+    for table in ["/proc/net/tcp", "/proc/net/tcp6"] {
+        let contents = match std::fs::read_to_string(table) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err("无法读取 Linux 端口占用情况".to_string()),
+        };
+        loaded_table = true;
+        if contents.len() > 8 << 20 {
+            return Err("端口占用信息异常".to_string());
+        }
+        for line in contents.lines().skip(1) {
+            let columns = line.split_whitespace().collect::<Vec<_>>();
+            if columns.len() < 10 || columns[3] != "0A" {
+                continue;
+            }
+            let Some((_, local_port)) = columns[1].rsplit_once(':') else {
+                continue;
+            };
+            if !local_port.eq_ignore_ascii_case(&expected_port)
+                || columns[7].parse::<u32>().ok() != Some(current_uid)
+            {
+                continue;
+            }
+            socket_inodes.insert(columns[9].to_string());
+        }
+    }
+    if !loaded_table {
+        return Err("当前 Linux 环境没有可用的 TCP 监听表".to_string());
+    }
+    if socket_inodes.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut owners = Vec::new();
+    let processes = std::fs::read_dir("/proc")
+        .map_err(|_| "无法读取 Linux 进程信息".to_string())?;
+    for process in processes.flatten() {
+        let Some(pid) = process
+            .file_name()
+            .to_str()
+            .and_then(|value| value.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if Some(pid) == managed_pid
+            || process.metadata().map(|value| value.uid()).ok() != Some(current_uid)
+        {
+            continue;
+        }
+        let Ok(descriptors) = std::fs::read_dir(process.path().join("fd")) else {
+            continue;
+        };
+        let owns_listener = descriptors.flatten().any(|descriptor| {
+            let Ok(target) = std::fs::read_link(descriptor.path()) else {
+                return false;
+            };
+            let Some(target) = target.to_str() else {
+                return false;
+            };
+            target
+                .strip_prefix("socket:[")
+                .and_then(|value| value.strip_suffix(']'))
+                .is_some_and(|inode| socket_inodes.contains(inode))
+        });
+        if !owns_listener {
+            continue;
+        }
+        let command = std::fs::read_to_string(process.path().join("comm"))
+            .unwrap_or_default()
+            .chars()
+            .filter(|character| !character.is_control())
+            .take(96)
+            .collect::<String>();
+        owners.push(PortOwner {
+            port,
+            pid,
+            command: if command.is_empty() {
+                "unknown".to_string()
+            } else {
+                command
+            },
+        });
+    }
     owners.sort_by_key(|owner| owner.pid);
     owners.dedup_by_key(|owner| owner.pid);
     Ok(owners)

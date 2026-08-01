@@ -38,7 +38,7 @@ Linux 的**核心/CLI 编译基线**，并不表示已经发布 Windows/Linux �
   （Keychain / Credential Manager / Secret Service）、安全等级说明与原生风险提示。
 - Linux 原生弹窗使用 `zenity`（GNOME）或 `kdialog`（KDE），按会话探测后端，覆盖安全录入、
   LLM Key 选择、高风险 SSH 确认、Capability 交接与安全设置确认；桌面包运行时依赖二者之一，
-  无桌面环境的服务器请使用 CLI。
+  Linux 端口占用管理直接读取 `/proc`，不需要额外的 `lsof`。无桌面环境的服务器请使用 CLI。
 - CI 会在每次推送时对 Windows x64、Windows arm64 与 Linux x64 桌面目标运行 Rust
   `cargo check`，在真实目标工具链上持续复核已移植的控制客户端，直到进入运行验收阶段。
 - 独立的 `desktop-windows` 工作流会在 GitHub 官方 Windows runner 上构建 Windows x64 与
