@@ -111,7 +111,7 @@ artifact and checksum are published.
 Bundled asset: `Airlock_0.1.4_aarch64.dmg`
 
 ```text
-SHA-256 aa2e709a50723aa1781c062e9b98eb1478f7f9e0c2ca28b5e011c37c20fa1faa
+SHA-256 628dbd59cba6b3cb6a68c8866dbd53543540c02cc77565e69540e7701211f832
 ```
 
 ## License

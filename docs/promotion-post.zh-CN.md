@@ -24,7 +24,7 @@ Airlock 面向的正是这些“想授权，但不想裸奔”的场景。
 ## 目前已经支持
 
 - **HTTP / Wget**：固定上游地址，可限制方法、路径和 Query；支持 Range 下载、受控重定向，以及 Direct/Proxy/Auto 出口。
-- **SSH**：本地与上游 SSH 会话分离；可固定 Host Key、限制精确命令，并默认拒绝 Shell、PTY、SFTP 和端口转发。
+- **SSH**：本地与上游 SSH 会话分离；可固定 Host Key、限制精确命令，并默认拒绝 Shell；交互式 Shell 与 SFTP 可按路由选择性开启，端口转发始终拒绝。
 - **LLM API**：兼容 OpenAI 的 `/v1/responses`、`/v1/chat/completions` 与 Anthropic 的 `/v1/messages`；可配置模型白名单、输出 Token、速率和并发限制。
 - **桌面控制台**：管理路由、凭据、Host Key、代理和监听端口。关闭窗口后，转发服务仍可以继续运行。
 - **服务端模式**：不依赖桌面环境，可用 `airlockd --mode server` 与本地 Unix Socket CLI 管理固定路由。

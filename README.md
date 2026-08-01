@@ -54,7 +54,7 @@ Airlock is a fixed-route relay, not an open proxy, VPN, or general provider-mana
   requires explicit high-risk acknowledgement inside Airlock.
 - Multiple routes may share one upstream address; distinct local usernames select
   independent upstream accounts and protected credentials.
-- Interactive shells, agent/X11 forwarding, and port forwarding remain denied. PTY requests are acknowledged only for Windows/OpenSSH client compatibility and are never forwarded upstream. SFTP is disabled by default and can be explicitly enabled per route for modern `scp`/SFTP clients; it remains a separate high-risk file access permission.
+- Interactive shells are disabled by default and can be enabled per route (`allow_interactive_shell: true`, which requires `allow_all_commands: true`). With the switch on, PuTTY and `ssh` clients enter the upstream shell directly while Airlock still injects the stored upstream credentials; this covers `su` and other interactive workflows. Agent/X11 and port forwarding remain denied, and PTY metadata is forwarded only when the interactive-shell switch is enabled. SFTP is disabled by default and can be explicitly enabled per route for modern `scp`/SFTP clients; it remains a separate high-risk file access permission.
 - Optional per-route command audit stored in a user-only `0600` rolling file.
 
 ### LLM API

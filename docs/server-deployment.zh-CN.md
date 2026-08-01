@@ -190,6 +190,7 @@ airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token ssh 
   "allowed_command": "uptime",
   "record_commands": true,
   "allow_sftp": false,
+  "allow_interactive_shell": false,
   "egress": "Auto"
 }
 ```
@@ -206,7 +207,7 @@ airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token rout
 airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token routes enable build-host
 ```
 
-健康检查会在该路由的认证预算内验证固定 Host Key 与上游密码，默认 20 秒，可设为 3-120 秒。`allowed_command` 是精确匹配。若确实需要非交互任意 `exec`，规格中设置 `allow_all_commands: true`，并额外传入 `--allow-all-confirmed`；这接近对上游账户的远程代码执行，应使用最小权限专用账号。Shell、PTY、端口转发和 Agent/X11 转发始终被拒绝。SFTP 默认关闭；在规格中显式设置 `allow_sftp: true` 后，现代 OpenSSH 的 `scp` 才能通过 SFTP 子系统工作。该开关允许上游账号可访问文件的列出、读取、写入、重命名和删除，请仅对专用低权限账号启用。
+健康检查会在该路由的认证预算内验证固定 Host Key 与上游密码，默认 20 秒，可设为 3-120 秒。`allowed_command` 是精确匹配。若确实需要非交互任意 `exec`，规格中设置 `allow_all_commands: true`，并额外传入 `--allow-all-confirmed`；这接近对上游账户的远程代码执行，应使用最小权限专用账号。交互式 Shell 默认关闭；设置 `allow_interactive_shell: true`（要求同时开启 `allow_all_commands: true`）后，PuTTY 与 `ssh` 会直接进入上游交互式 Shell，可运行 `su` 等交互操作，上游凭据仍由 Airlock 注入。Agent/X11 与端口转发始终拒绝；只有开启交互式 Shell 时才会向上游转发 PTY 元数据。SFTP 默认关闭；在规格中显式设置 `allow_sftp: true` 后，现代 OpenSSH 的 `scp` 才能通过 SFTP 子系统工作。该开关允许上游账号可访问文件的列出、读取、写入、重命名和删除，请仅对专用低权限账号启用。
 
 ## 代理出口与故障处理
 

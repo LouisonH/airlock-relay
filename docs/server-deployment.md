@@ -182,6 +182,7 @@ Copy the returned `host_key` exactly into a protected spec. `local_username` sel
   "allowed_command": "uptime",
   "record_commands": true,
   "allow_sftp": false,
+  "allow_interactive_shell": false,
   "egress": "Auto"
 }
 ```
@@ -198,7 +199,7 @@ airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token rout
 airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token routes enable build-host
 ```
 
-The health check verifies the pinned Host Key and upstream password within the route authentication budget (20 seconds by default; 3-120 seconds). `allowed_command` is an exact match. `allow_all_commands: true` additionally requires `--allow-all-confirmed`; unrestricted non-interactive exec is close to remote code execution, so use a dedicated least-privilege account. Shells, PTYs, port forwarding, and Agent/X11 forwarding remain denied. SFTP is disabled by default; set `allow_sftp: true` explicitly in the route spec to support modern OpenSSH `scp`/SFTP clients through the SFTP subsystem. This permits listing, reading, writing, renaming, and deleting files available to the upstream account, so enable it only for a dedicated least-privilege account.
+The health check verifies the pinned Host Key and upstream password within the route authentication budget (20 seconds by default; 3-120 seconds). `allowed_command` is an exact match. `allow_all_commands: true` additionally requires `--allow-all-confirmed`; unrestricted non-interactive exec is close to remote code execution, so use a dedicated least-privilege account. Interactive shells are disabled by default. Setting `allow_interactive_shell: true` (which requires `allow_all_commands: true`) forwards the client's terminal and shell upstream, so PuTTY and `ssh` sessions can run `su` and other interactive workflows while Airlock still injects the stored upstream credentials. Agent/X11 and port forwarding remain denied; PTY metadata is forwarded only when the interactive-shell switch is enabled. SFTP is disabled by default; set `allow_sftp: true` explicitly in the route spec to support modern OpenSSH `scp`/SFTP clients through the SFTP subsystem. This permits listing, reading, writing, renaming, and deleting files available to the upstream account, so enable it only for a dedicated least-privilege account.
 
 ## Proxy Egress and Lifecycle
 

@@ -105,7 +105,7 @@ airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token rout
 airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token routes enable build-host
 ```
 
-health check は route の認証 budget 内で固定 Host Key と上流 password を検証します。default は 20 秒、範囲は 3-120 秒です。`allow_all_commands: true` は `--allow-all-confirmed` も必須で、専用最小権限アカウント以外では使わないでください。shell、PTY、port forwarding、Agent/X11 forwarding は拒否されます。SFTP は default で無効です。route spec に `allow_sftp: true` を明示すると、最新 OpenSSH の `scp`/SFTP client が SFTP subsystem 経由で動作します。上流アカウントがアクセスできる file の一覧、読み取り、書き込み、名前変更、削除が可能になるため、専用の最小権限 account だけで有効にしてください。
+health check は route の認証 budget 内で固定 Host Key と上流 password を検証します。default は 20 秒、範囲は 3-120 秒です。`allow_all_commands: true` は `--allow-all-confirmed` も必須で、専用最小権限アカウント以外では使わないでください。対話型 shell は default で無効です。`allow_interactive_shell: true`（`allow_all_commands: true` が必要）を設定すると、クライアントの端末と shell が上流へ転送され、`su` などの対話操作が可能になります。Agent/X11 forwarding と port forwarding は引き続き拒否され、PTY は対話型 shell が有効なときだけ転送されます。SFTP は default で無効です。route spec に `allow_sftp: true` を明示すると、最新 OpenSSH の `scp`/SFTP client が SFTP subsystem 経由で動作します。上流アカウントがアクセスできる file の一覧、読み取り、書き込み、名前変更、削除が可能になるため、専用の最小権限 account だけで有効にしてください。
 
 Clash 互換 HTTP CONNECT/HTTPS CONNECT/SOCKS5/SOCKS5H を使うには `0600` の proxy JSON に `{ "url": "socks5://127.0.0.1:7890" }` を書きます。
 
