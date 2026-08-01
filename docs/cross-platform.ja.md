@@ -43,6 +43,9 @@ Desktop GUI、local control transport、native prompt フローはコードレ�
 - Frontend は platform に応じたラベルと zh/en/ja 翻訳を提供します。control transport
   （Unix Socket / Named Pipe）、credential store（Keychain / Credential Manager /
   Secret Service）、security profile、native risk 表記を切り替えます。
+- CI は push のたびに Windows x64、Windows arm64、Linux x64 の Desktop ターゲットで
+  Rust `cargo check` を実行し、移植済みの control client を実機 acceptance 前に
+  継続的に検証します。
 - Target build は明示的に分離され、`airlockd` と `airlock` の両方を生成します。Tauri bundle
   を作らず、npm installer が公開済みとする対象範囲も変更しません。
 

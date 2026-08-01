@@ -520,6 +520,25 @@ function platformNativeConfirmText(platform: PlatformInfo): string {
       : "该模式接近远程命令执行权限。保存时还会出现一次 macOS 原生风险确认。";
 }
 
+function platformOsLabel(platform: PlatformInfo): string {
+  const arch = platform.arch || "unknown";
+  return platform.os === "windows"
+    ? `Windows · ${arch}`
+    : platform.os === "linux"
+      ? `Linux · ${arch}`
+      : platform.os === "macos"
+        ? `macOS · ${arch}`
+        : `未知系统 · ${arch}`;
+}
+
+function platformStoreLabel(platform: PlatformInfo): string {
+  return platform.secretStore === "credential-manager"
+    ? "Windows 凭据管理器"
+    : platform.secretStore === "secret-service"
+      ? "Secret Service"
+      : "macOS Keychain";
+}
+
 function Overview({ control, platform, onRoutes, onAdd, onRetry, onManagePorts, retrying }: { control: ControlState; platform: PlatformInfo; onRoutes: () => void; onAdd: () => void; onRetry: () => void; onManagePorts: () => void; retrying: boolean }) {
   const enabled = control.routes.filter((route) => route.status === "enabled").length;
   const connections = control.routes.reduce((sum, route) => sum + route.currentConnections, 0);
@@ -674,6 +693,7 @@ function SettingsPage({ platform, language, onLanguage, theme, onTheme, accent, 
     <section className="settings-section"><div><h2>外观</h2><p>主题偏好保存在本机</p></div><div className="settings-controls"><div className="setting-row"><span>显示模式</span><ThemeControl value={theme} onChange={onTheme} /></div><div className="setting-row"><span>配色风格</span><AccentControl value={accent} onChange={onAccent} /></div></div></section>
     <section className="settings-section"><div><h2>界面行为</h2><p>调整刷新节奏、密度与动画</p></div><div className="settings-controls"><PreferenceRow label="界面语言" detail="跟随系统语言，或固定一种语言"><div className="language-control"><Languages size={14} /><PreferenceSegment value={language} options={[{ value: "system", label: "跟随系统" }, { value: "zh-CN", label: "简体中文" }, { value: "en", label: "English" }, { value: "ja", label: "日本語" }]} onChange={onLanguage} /></div></PreferenceRow><PreferenceRow label="自动刷新" detail="控制状态轮询频率"><PreferenceSegment value={refreshInterval} options={[{ value: 2000, label: "2 秒" }, { value: 5000, label: "5 秒" }, { value: 15000, label: "15 秒" }]} onChange={onRefreshInterval} /></PreferenceRow><PreferenceRow label="信息密度" detail="影响表格行高与页面间距"><PreferenceSegment value={density} options={[{ value: "comfortable", label: "舒适" }, { value: "compact", label: "紧凑" }]} onChange={onDensity} /></PreferenceRow><PreferenceRow label="界面动效" detail="精简模式会关闭循环和位移动画"><PreferenceSegment value={motion} options={[{ value: "system", label: "跟随系统" }, { value: "standard", label: "标准" }, { value: "reduced", label: "精简" }]} onChange={onMotion} /></PreferenceRow></div></section>
     <section className="settings-section"><div><h2>版本与文档</h2><p>只检查公开发布信息，不上传本机配置</p></div><div className="settings-controls update-controls"><div className="update-summary"><span className={`update-symbol ${updateCheck?.status ?? "idle"}`}><Sparkles size={16} /></span><div><strong>Airlock v{APP_VERSION}</strong><p>{updateSummary}</p></div><div className="inline-actions"><button className="secondary-button compact" onClick={() => void onCheckUpdates()} disabled={checkingUpdate}>{checkingUpdate ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}{checkingUpdate ? "检查中" : "检查更新"}</button><button className="secondary-button compact" onClick={onOpenGuide}><BookOpen size={14} />打开指南</button></div></div><p className="update-note">版本检查不会下载、安装或自动打开外部页面；更新始终由你手动下载并核验。</p></div></section>
+    <section className="settings-section"><div><h2>平台状态</h2><p>按当前操作系统同步的本地能力</p></div><div className="settings-controls"><ReadOnlyField label="操作系统" value={platformOsLabel(platform)} tone="success" /><ReadOnlyField label="控制通道" value={platformControlTransportName(platform)} tone="success" /><ReadOnlyField label="凭据存储" value={platformStoreLabel(platform)} tone="success" /><ReadOnlyField label="桌面发行版" value={platform.desktopRelease ? "已发布" : "本分支 · 未发布"} tone={platform.desktopRelease ? "success" : "warning"} /></div></section>
     <section className="settings-section security-settings"><div><h2>安全方案</h2><p>新安装默认标准；迁移会先验证再切换</p></div><div className="settings-controls security-controls">
       <div className="security-heading"><div><span>{dirty ? "待应用方案" : "当前方案"}</span><strong>{presetLabel}</strong></div><span className={`security-level level-${preset}`}>{levelLabel}</span></div>
       <div className="security-profile-grid" role="radiogroup" aria-label="安全等级">{profiles.map((profile) => <SecurityProfile key={profile.id} {...profile} selected={preset === profile.id} recommended={profile.id === "standard"} risk={profile.id === "convenient"} onSelect={() => choosePreset(profile.id)} />)}</div>

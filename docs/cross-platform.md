@@ -49,6 +49,9 @@ and installer checklist below is completed.
   control transport (Unix socket vs named pipe), credential store (Keychain /
   Credential Manager / Secret Service), security profiles, and native risk
   wording.
+- CI runs Rust `cargo check` for the Windows x64, Windows arm64, and Linux x64
+  desktop targets on every push, so the ported control client is re-verified
+  on real target toolchains before runtime acceptance.
 - Build targets are explicit and isolated. A target build creates both
   `airlockd` and `airlock`; it does not create a Tauri bundle or alter the
   released npm installer contract.

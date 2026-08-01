@@ -192,6 +192,14 @@ const translations: Record<string, Record<Exclude<AppLocale, "zh-CN">, string>> 
   "HTTP 入口": { en: "HTTP endpoint", ja: "HTTP 入口" },
   "SSH 入口": { en: "SSH endpoint", ja: "SSH 入口" },
   "控制通道": { en: "Control channel", ja: "制御チャネル" },
+  "平台状态": { en: "Platform status", ja: "プラットフォーム状態" },
+  "按当前操作系统同步的本地能力": { en: "Local capabilities synced to the current operating system", ja: "現在の OS に同期したローカル機能" },
+  "操作系统": { en: "Operating system", ja: "オペレーティングシステム" },
+  "桌面发行版": { en: "Desktop release", ja: "Desktop リリース" },
+  "已发布": { en: "Released", ja: "公開済み" },
+  "本分支 · 未发布": { en: "This branch · not released", ja: "この branch · 未公開" },
+  "未知系统": { en: "Unknown OS", ja: "不明な OS" },
+  "macOS Keychain": { en: "macOS Keychain", ja: "macOS Keychain" },
   "更换": { en: "Change", ja: "変更" },
   "配置": { en: "Configure", ja: "設定" },
   "已配置": { en: "Configured", ja: "設定済み" },
@@ -560,6 +568,7 @@ function translateValue(source: string): string {
     [/^(Keychain|凭据管理器|Secret Service|0600 文件|ACL 文件) · 已配置$/, (m) => `${translateValue(m[1])} · ${translateValue("已配置")}`],
     [/^(\d+) 分钟前$/, (m) => activeLocale === "ja" ? `${m[1]} 分前` : `${m[1]} min ago`],
     [/^(\d+) 小时前$/, (m) => activeLocale === "ja" ? `${m[1]} 時間前` : `${m[1]} hr ago`],
+    [/^(Windows|Linux|macOS|未知系统) · (.+)$/, (m) => `${translateValue(m[1])} · ${m[2]}`],
   ];
   for (const [pattern, render] of patterns) {
     const match = source.match(pattern);
