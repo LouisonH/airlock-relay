@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -355,20 +357,24 @@ func (s *Server) handleSession(connection *ssh.ServerConn, local ssh.Channel, re
 			case "shell":
 				// A plain `ssh user@airlock` asks for an interactive shell. Do
 				// not create one; for the common single-command route, run its
-				// configured exact command and close the session cleanly.
-				if route.Policy.AllowAllCommands || len(route.Policy.AllowedCommands) != 1 {
-					if request.WantReply {
-						_ = request.Reply(false, nil)
+				// configured exact command and close the session cleanly. Other
+				// routes accept the channel and return guidance so clients like
+				// PuTTY do not report a refused shell.
+				if !route.Policy.AllowAllCommands && len(route.Policy.AllowedCommands) == 1 {
+					var command string
+					for allowed := range route.Policy.AllowedCommands {
+						command = allowed
 					}
-					_ = sendExitStatus(local, 126)
-					_ = local.Close()
-					return
+					startCommand(request, route, command)
+					continue
 				}
-				var command string
-				for allowed := range route.Policy.AllowedCommands {
-					command = allowed
+				if request.WantReply {
+					_ = request.Reply(true, nil)
 				}
-				startCommand(request, route, command)
+				writeShellUnavailable(local, route)
+				_ = sendExitStatus(local, 1)
+				_ = local.Close()
+				return
 			case "subsystem":
 				var payload struct{ Name string }
 				if ssh.Unmarshal(request.Payload, &payload) != nil || payload.Name != "sftp" {
@@ -595,4 +601,23 @@ func exitStatus(err error) uint32 {
 func sendExitStatus(channel ssh.Channel, status uint32) error {
 	_, err := channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{Status: status}))
 	return err
+}
+
+func writeShellUnavailable(channel ssh.Channel, route Route) {
+	var message strings.Builder
+	message.WriteString("Airlock: 该路由不允许交互式 Shell（interactive shell disabled）。\n")
+	if route.Policy.AllowAllCommands {
+		message.WriteString("该路由只允许非交互 exec 命令；请在 PuTTY 登录命令或 ssh 参数中填写要执行的命令，或配置单条精确命令。\n")
+	} else {
+		commands := make([]string, 0, len(route.Policy.AllowedCommands))
+		for command := range route.Policy.AllowedCommands {
+			commands = append(commands, command)
+		}
+		sort.Strings(commands)
+		message.WriteString("允许的命令：\n")
+		for _, command := range commands {
+			message.WriteString("  " + command + "\n")
+		}
+	}
+	_, _ = channel.Write([]byte(message.String()))
 }

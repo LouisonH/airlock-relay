@@ -369,6 +369,26 @@ func TestGatewayAllowsAllExecAndRecordsCommands(t *testing.T) {
 		t.Fatalf("command events = %+v", events)
 	}
 	assertRestrictedRequests(t, client)
+
+	shellSession, err := client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shellSession.Close()
+	if err := shellSession.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Fatalf("allow-all PTY compatibility request failed: %v", err)
+	}
+	var shellOutput bytes.Buffer
+	shellSession.Stdout = &shellOutput
+	if err := shellSession.Shell(); err != nil {
+		t.Fatalf("allow-all shell request was refused: %v", err)
+	}
+	if err := shellSession.Wait(); err == nil {
+		t.Fatal("allow-all shell guidance should exit nonzero")
+	}
+	if !bytes.Contains(shellOutput.Bytes(), []byte("interactive shell disabled")) {
+		t.Fatalf("allow-all shell output = %q", shellOutput.String())
+	}
 }
 
 func TestGatewayLocalPublicKeyAndUpstreamPrivateKey(t *testing.T) {
