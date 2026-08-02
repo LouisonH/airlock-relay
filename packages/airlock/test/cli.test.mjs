@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { access, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -14,6 +14,7 @@ import {
   VERSION,
   parseArguments,
   sha256,
+  verifyApplicationBundle,
 } from "../bin/airlock.js";
 import {
   PLATFORM_TARGETS,
@@ -81,6 +82,39 @@ test("ships the verified release artifact", { skip: sourceOnly }, async () => {
 test("ships the Airlock package icon", async () => {
   await access(logoPath);
   assert.match(await readFile(logoPath, "utf8"), /<title id="title">Airlock logo<\/title>/);
+});
+
+test("verifies the Tauri 2 macOS bundle layout", async () => {
+  const temporaryDirectory = await mkdtemp(resolve(tmpdir(), "airlock-bundle-ok-"));
+  try {
+    const macos = resolve(temporaryDirectory, "Airlock.app", "Contents", "MacOS");
+    await mkdir(macos, { recursive: true });
+    const desktop = resolve(macos, "airlock-desktop");
+    const sidecar = resolve(macos, "airlockd");
+    await writeFile(desktop, "binary");
+    await writeFile(sidecar, "binary");
+    await chmod(desktop, 0o755);
+    await chmod(sidecar, 0o755);
+    await verifyApplicationBundle(resolve(temporaryDirectory, "Airlock.app"));
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test("rejects an incomplete macOS bundle", async () => {
+  const temporaryDirectory = await mkdtemp(resolve(tmpdir(), "airlock-bundle-bad-"));
+  try {
+    const macos = resolve(temporaryDirectory, "Airlock.app", "Contents", "MacOS");
+    await mkdir(macos, { recursive: true });
+    await writeFile(resolve(macos, "airlock-desktop"), "binary");
+    await chmod(resolve(macos, "airlock-desktop"), 0o755);
+    await assert.rejects(
+      verifyApplicationBundle(resolve(temporaryDirectory, "Airlock.app")),
+      /incomplete or its local core is not executable/,
+    );
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
 });
 
 test("platform resolver releases only verified targets", () => {

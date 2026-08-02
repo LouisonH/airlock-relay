@@ -195,14 +195,31 @@ async function fetchVerifiedAsset(target) {
 
 async function verifyApplicationBundle(applicationPath) {
   const desktopBinary = join(applicationPath, "Contents", "MacOS", "airlock-desktop");
-  const sidecar = join(applicationPath, "Contents", "Resources", "airlockd");
+  const sidecarCandidates = [
+    join(applicationPath, "Contents", "MacOS", "airlockd"),
+    join(applicationPath, "Contents", "Resources", "airlockd"),
+  ];
   try {
     await access(desktopBinary, constants.X_OK);
-    await access(sidecar, constants.X_OK);
+    let sidecarFound = false;
+    for (const candidate of sidecarCandidates) {
+      try {
+        await access(candidate, constants.X_OK);
+        sidecarFound = true;
+        break;
+      } catch {
+        // Try the next legacy location.
+      }
+    }
+    if (!sidecarFound) {
+      throw new Error("local core sidecar is missing");
+    }
   } catch {
     throw new Error("The Airlock.app bundle is incomplete or its local core is not executable.");
   }
 }
+
+export { verifyApplicationBundle };
 
 async function mountDiskImage(filePath) {
   const mountDirectory = await mkdtemp(join(tmpdir(), "airlock-mount-"));
