@@ -188,8 +188,19 @@ async function fetchVerifiedAsset(target) {
     await verifyFile(destination, target.sha256);
     return { directory, destination };
   } catch (error) {
-    await rm(directory, { recursive: true, force: true });
+    await cleanupTempDirectory(directory);
     throw error;
+  }
+}
+
+async function cleanupTempDirectory(directory) {
+  if (!directory) return;
+  try {
+    await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch (error) {
+    // The installer or antivirus software may briefly lock the file on
+    // Windows. Cleanup must never turn a successful install into an error.
+    console.warn(`Warning: could not remove temporary installer files (${error.message}).`);
   }
 }
 
@@ -357,9 +368,7 @@ async function install(options) {
         throw new Error(`Unsupported installer type: ${target.installType}`);
     }
   } finally {
-    if (downloaded) {
-      await rm(downloaded.directory, { recursive: true, force: true });
-    }
+    await cleanupTempDirectory(downloaded?.directory);
   }
 }
 
@@ -419,9 +428,7 @@ async function doctor() {
     console.log(`SHA-256: ${digest}`);
     console.log("No application was opened or installed.");
   } finally {
-    if (downloaded) {
-      await rm(downloaded.directory, { recursive: true, force: true });
-    }
+    await cleanupTempDirectory(downloaded?.directory);
   }
 }
 
@@ -471,7 +478,7 @@ export async function main(argv = process.argv.slice(2)) {
           console.log(`Verified ${target.artifactName}`);
           console.log(`SHA-256: ${target.sha256}`);
         } finally {
-          await rm(downloaded.directory, { recursive: true, force: true });
+          await cleanupTempDirectory(downloaded?.directory);
         }
       }
       return;
