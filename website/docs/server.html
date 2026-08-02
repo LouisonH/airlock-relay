@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Deploy Airlock Server Core on Linux with a service account, systemd, CLI, and optional Web UI." />
+    <title>Airlock - Server Core</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="server">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+    </header>
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group"><span>指南</span><a class="docs-chapter-link" href="getting-started.html">从零开始</a><a class="docs-chapter-link" href="install.html">安装与校验</a><a class="docs-chapter-link" href="desktop.html">桌面控制台</a></div>
+            <div class="docs-chapter-group"><span>参考</span><a class="docs-chapter-link" href="security.html">安全模型</a><a class="docs-chapter-link" href="routes.html">路由与策略</a><a class="docs-chapter-link active" href="server.html">Server Core</a><a class="docs-chapter-link" href="operations.html">运维与排障</a><a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a><a class="docs-chapter-link" href="cli.html">CLI 参考</a></div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>Server Core 部署</h1>
+            <p class="docs-lead" data-reveal>在 Linux 服务器上以独立服务账号运行 <code>airlockd</code>，用 <code>airlock</code> CLI 管理固定路由，可选的 Web UI 仅 loopback 且脱敏。</p>
+
+            <section data-reveal><span>01</span><div><h2>服务账号与目录</h2><div class="docs-terminal"><b>准备账号、目录与 token</b><button class="docs-copy" data-copy="srv-account" title="Copy">⧉</button><pre><code id="code-srv-account">sudo useradd --system --create-home --shell /usr/sbin/nologin airlock
+sudo install -d -o airlock -g airlock -m 0700 /var/lib/airlock /etc/airlock
+sudo -u airlock /usr/local/bin/airlock token generate --output /etc/airlock/control.token
+sudo -u airlock /usr/local/bin/airlock token generate --output /etc/airlock/web.token</code></pre></div><p>control token 与 web token 分开存放；两者都是 <code>0600</code> 文件，任何 Secret 都不得写入命令行。</p></div></section>
+
+            <section data-reveal><span>02</span><div><h2>获取二进制</h2><p>从仓库构建（Go 1.25+），或从 Release 的 core-kit 归档获取当前架构二进制：</p><div class="docs-terminal"><b>构建</b><button class="docs-copy" data-copy="srv-build" title="Copy">⧉</button><pre><code id="code-srv-build">git clone https://github.com/LouisonH/airlock-relay.git
+cd airlock-relay
+go build -trimpath -o ./bin/airlockd ./cmd/airlockd
+go build -trimpath -o ./bin/airlock ./cmd/airlock
+sudo install -m 0755 ./bin/airlockd /usr/local/bin/airlockd
+sudo install -m 0755 ./bin/airlock /usr/local/bin/airlock</code></pre></div></div></section>
+
+            <section data-reveal><span>03</span><div><h2>启动核心与 Web UI</h2><div class="docs-terminal"><b>前台验证</b><button class="docs-copy" data-copy="srv-run" title="Copy">⧉</button><pre><code id="code-srv-run">sudo -u airlock /usr/local/bin/airlockd --mode server \
+  --data-dir /var/lib/airlock \
+  --control-token-file /etc/airlock/control.token \
+  --listen 127.0.0.1:4768 --ssh-listen 127.0.0.1:4770 \
+  --web-listen 127.0.0.1:4769 --web-token-file /etc/airlock/web.token</code></pre></div><p>确认 <code>airlock status</code> 正常后再配置 systemd。</p></div></section>
+
+            <section data-reveal><span>04</span><div><h2>systemd 服务</h2><p>复制仓库中的 <code>deploy/systemd/airlock.service.example</code> 到 <code>/etc/systemd/system/airlock.service</code>，按注释填写 token 与监听参数，然后：</p><div class="docs-terminal"><b>启用</b><button class="docs-copy" data-copy="srv-systemd" title="Copy">⧉</button><pre><code id="code-srv-systemd">sudo systemctl daemon-reload
+sudo systemctl enable --now airlock
+sudo systemctl status airlock</code></pre></div><p>服务应以 <code>airlock</code> 非登录账号运行，<code>ProtectSystem</code>/<code>PrivateTmp</code> 等加固项已包含在示例单元中。</p></div></section>
+
+            <section data-reveal><span>05</span><div><h2>Web UI 远程管理</h2><p>Web UI 只监听 loopback，使用独立 bearer token，可查看脱敏状态、健康检查、启停路由与全停；不能创建/删除路由或查看 Secret。远程访问使用 SSH 隧道：</p><div class="docs-terminal"><b>运维工作站</b><button class="docs-copy" data-copy="srv-tunnel" title="Copy">⧉</button><pre><code id="code-srv-tunnel">ssh -L 4769:127.0.0.1:4769 operator@example-server</code></pre></div><p>然后打开 <code>http://127.0.0.1:4769</code>，token 保存在标签页级 <code>sessionStorage</code>。</p></div></section>
+
+            <section data-reveal><span>06</span><div><h2>升级与备份</h2><p>升级前：停止服务 → 离线备份 <code>/var/lib/airlock</code> 与两个 token 文件 → 替换二进制 → 启动 → <code>status</code> + 关键路由 <code>routes health</code>。备份按 Secret 处理。</p></div></section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>Server Core deployment</h1>
+            <p class="docs-lead" data-reveal>Run <code>airlockd</code> on a Linux server under a dedicated service account, administer fixed routes with the <code>airlock</code> CLI, and optionally expose a loopback-only sanitized Web UI.</p>
+            <section data-reveal><span>01</span><div><h2>Service account and directories</h2><div class="docs-terminal"><b>Account, directories, and tokens</b><button class="docs-copy" data-copy="srv-account" title="Copy">⧉</button><pre><code id="code-srv-account">sudo useradd --system --create-home --shell /usr/sbin/nologin airlock
+sudo install -d -o airlock -g airlock -m 0700 /var/lib/airlock /etc/airlock
+sudo -u airlock /usr/local/bin/airlock token generate --output /etc/airlock/control.token
+sudo -u airlock /usr/local/bin/airlock token generate --output /etc/airlock/web.token</code></pre></div><p>Control and web tokens are separate <code>0600</code> files. Secrets never belong in command arguments.</p></div></section>
+            <section data-reveal><span>02</span><div><h2>Obtain the binaries</h2><p>Build from the repository (Go 1.25+) or take the matching core-kit archive from the release:</p><div class="docs-terminal"><b>Build</b><button class="docs-copy" data-copy="srv-build" title="Copy">⧉</button><pre><code id="code-srv-build">git clone https://github.com/LouisonH/airlock-relay.git
+cd airlock-relay
+go build -trimpath -o ./bin/airlockd ./cmd/airlockd
+go build -trimpath -o ./bin/airlock ./cmd/airlock
+sudo install -m 0755 ./bin/airlockd /usr/local/bin/airlockd
+sudo install -m 0755 ./bin/airlock /usr/local/bin/airlock</code></pre></div></div></section>
+            <section data-reveal><span>03</span><div><h2>Start the core and Web UI</h2><div class="docs-terminal"><b>Foreground verification</b><button class="docs-copy" data-copy="srv-run" title="Copy">⧉</button><pre><code id="code-srv-run">sudo -u airlock /usr/local/bin/airlockd --mode server \
+  --data-dir /var/lib/airlock \
+  --control-token-file /etc/airlock/control.token \
+  --listen 127.0.0.1:4768 --ssh-listen 127.0.0.1:4770 \
+  --web-listen 127.0.0.1:4769 --web-token-file /etc/airlock/web.token</code></pre></div><p>Confirm <code>airlock status</code> before installing systemd.</p></div></section>
+            <section data-reveal><span>04</span><div><h2>systemd service</h2><p>Copy <code>deploy/systemd/airlock.service.example</code> to <code>/etc/systemd/system/airlock.service</code>, fill in the token and listener settings, then:</p><div class="docs-terminal"><b>Enable</b><button class="docs-copy" data-copy="srv-systemd" title="Copy">⧉</button><pre><code id="code-srv-systemd">sudo systemctl daemon-reload
+sudo systemctl enable --now airlock
+sudo systemctl status airlock</code></pre></div><p>The service runs as the non-login <code>airlock</code> account; the example unit includes standard hardening options.</p></div></section>
+            <section data-reveal><span>05</span><div><h2>Remote Web UI management</h2><p>The Web UI listens on loopback only and uses a separate bearer token for sanitized status, health checks, enable/disable, and stop-all. Reach it over an SSH tunnel:</p><div class="docs-terminal"><b>Operator workstation</b><button class="docs-copy" data-copy="srv-tunnel" title="Copy">⧉</button><pre><code id="code-srv-tunnel">ssh -L 4769:127.0.0.1:4769 operator@example-server</code></pre></div><p>Open <code>http://127.0.0.1:4769</code>; the token lives in tab-scoped <code>sessionStorage</code>.</p></div></section>
+            <section data-reveal><span>06</span><div><h2>Upgrades and backups</h2><p>Before upgrading: stop the service, back up <code>/var/lib/airlock</code> and both token files offline, replace binaries, start, then run <code>status</code> and <code>routes health</code> for critical routes. Treat backups as secrets.</p></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

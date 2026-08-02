@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Airlock documentation: getting started, installation, desktop console, security model, routes, server deployment, operations, and platform support." />
+    <title>Airlock 文档中心</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page docs-hub" data-chapter="index">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="../index.html">主页</a></div>
+      <div class="docs-actions">
+        <div class="language-switch" role="group" aria-label="Language">
+          <button type="button" data-language-button="zh">中</button>
+          <button type="button" data-language-button="en">EN</button>
+        </div>
+        <button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button>
+        <a class="docs-source" href="https://github.com/LouisonH/airlock-relay/tree/main/docs" target="_blank" rel="noreferrer">GitHub 文档 ↗</a>
+      </div>
+    </header>
+
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group">
+              <span>指南</span>
+              <a class="docs-chapter-link" href="getting-started.html">从零开始</a>
+              <a class="docs-chapter-link" href="install.html">安装与校验</a>
+              <a class="docs-chapter-link" href="desktop.html">桌面控制台</a>
+            </div>
+            <div class="docs-chapter-group">
+              <span>参考</span>
+              <a class="docs-chapter-link" href="security.html">安全模型</a>
+              <a class="docs-chapter-link" href="routes.html">路由与策略</a>
+              <a class="docs-chapter-link" href="server.html">Server Core</a>
+              <a class="docs-chapter-link" href="operations.html">运维与排障</a>
+              <a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a>
+              <a class="docs-chapter-link" href="cli.html">CLI 参考</a>
+            </div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <header class="docs-hero" data-reveal>
+              <div>
+                <p class="eyebrow">AIRLOCK DOCUMENTATION</p>
+                <h1>生产级使用文档</h1>
+                <p class="docs-lead">从第一次安装到生产部署，按章节逐步阅读。建议从"从零开始"进入，它覆盖了安装、创建第一条路由和验证的完整路径。</p>
+                <div class="docs-hero-actions">
+                  <a class="docs-primary-link" href="getting-started.html">开始教程 →</a>
+                  <a class="docs-secondary-link" href="../downloads.html">下载安装包</a>
+                </div>
+              </div>
+              <aside class="docs-hero-signal" aria-hidden="true"><img src="../assets/airlock-logo.svg" alt="" width="72" height="72" /><span class="signal-label">TUTORIAL</span><strong>安装 → 路由 → 验证</strong><i></i><span class="signal-label">PRODUCTION</span><strong>部署 → 运维 → 排障</strong></aside>
+            </header>
+
+            <section>
+              <span>指南</span>
+              <div>
+                <h2>章节导航</h2>
+                <div class="docs-chapter-grid">
+                  <a href="getting-started.html"><strong>从零开始</strong><p>安装 Airlock，创建并验证第一条 HTTP、SSH 与 LLM 路由，轮换与撤销凭据。</p></a>
+                  <a href="install.html"><strong>安装与校验</strong><p>各平台安装方式、SHA-256 与 GPG 校验、升级与卸载。</p></a>
+                  <a href="desktop.html"><strong>桌面控制台</strong><p>路由向导、SSH 交互式 Shell、SFTP、活动审计、健康检查与端口管理。</p></a>
+                  <a href="security.html"><strong>安全模型</strong><p>威胁边界、固定路由、Secret 生命周期与策略边界。</p></a>
+                  <a href="routes.html"><strong>路由与策略</strong><p>HTTP/SSH/LLM 路由规格、允许列表、限流与 Host Key 探测。</p></a>
+                  <a href="server.html"><strong>Server Core</strong><p>服务账号、systemd、CLI 与 Web UI 的无桌面部署。</p></a>
+                  <a href="operations.html"><strong>运维与排障</strong><p>日常检查、升级备份、常见故障与紧急处置。</p></a>
+                  <a href="platforms.html"><strong>跨平台与树莓派</strong><p>macOS/Windows/Linux 支持矩阵与 Raspberry Pi 构建路径。</p></a>
+                  <a href="cli.html"><strong>CLI 参考</strong><p>全局选项、命令、JSON 输出与退出码速查。</p></a>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <span>链接</span>
+              <div>
+                <h2>相关资源</h2>
+                <ul>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/server-deployment.md" target="_blank" rel="noreferrer">Server Core 完整部署指南（仓库文档）</a></li>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/cross-platform.md" target="_blank" rel="noreferrer">跨平台验收边界</a></li>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/security-audit-2026-07-31.md" target="_blank" rel="noreferrer">生产就绪安全审计记录</a></li>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/blob/main/SECURITY.md" target="_blank" rel="noreferrer">安全策略与漏洞报告</a></li>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer">v0.1.6 Release 与校验文件</a></li>
+                </ul>
+              </div>
+            </section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <header class="docs-hero" data-reveal>
+              <div>
+                <p class="eyebrow">AIRLOCK DOCUMENTATION</p>
+                <h1>Production-oriented documentation</h1>
+                <p class="docs-lead">Read chapter by chapter, from first install to production deployment. Start with Getting started, which covers installation, creating your first route, and verification end to end.</p>
+                <div class="docs-hero-actions">
+                  <a class="docs-primary-link" href="getting-started.html">Start the tutorial →</a>
+                  <a class="docs-secondary-link" href="../downloads.html">Download installers</a>
+                </div>
+              </div>
+              <aside class="docs-hero-signal" aria-hidden="true"><img src="../assets/airlock-logo.svg" alt="" width="72" height="72" /><span class="signal-label">TUTORIAL</span><strong>Install → Routes → Verify</strong><i></i><span class="signal-label">PRODUCTION</span><strong>Deploy → Operate → Troubleshoot</strong></aside>
+            </header>
+
+            <section>
+              <span>Guides</span>
+              <div>
+                <h2>Chapter index</h2>
+                <div class="docs-chapter-grid">
+                  <a href="getting-started.html"><strong>Getting started</strong><p>Install Airlock, create and verify your first HTTP, SSH, and LLM routes, then rotate and revoke credentials.</p></a>
+                  <a href="install.html"><strong>Install and verify</strong><p>Per-platform installation, SHA-256 and GPG verification, upgrades, and removal.</p></a>
+                  <a href="desktop.html"><strong>Desktop console</strong><p>Route wizard, interactive SSH shell, SFTP, activity audit, health checks, and port management.</p></a>
+                  <a href="security.html"><strong>Security model</strong><p>Threat boundary, fixed routes, secret lifecycle, and policy boundaries.</p></a>
+                  <a href="routes.html"><strong>Routes and policies</strong><p>HTTP/SSH/LLM route specifications, allowlists, limits, and host-key probing.</p></a>
+                  <a href="server.html"><strong>Server Core</strong><p>Service account, systemd, CLI, and Web UI deployment without a desktop.</p></a>
+                  <a href="operations.html"><strong>Operations</strong><p>Daily checks, upgrades, backups, common failures, and emergency response.</p></a>
+                  <a href="platforms.html"><strong>Platforms and Pi</strong><p>macOS/Windows/Linux support matrix and the Raspberry Pi build path.</p></a>
+                  <a href="cli.html"><strong>CLI reference</strong><p>Global options, commands, JSON output, and exit codes.</p></a>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <span>Links</span>
+              <div>
+                <h2>Related resources</h2>
+                <ul>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/server-deployment.md" target="_blank" rel="noreferrer">Full Server Core deployment guide (repository docs)</a></li>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/cross-platform.md" target="_blank" rel="noreferrer">Cross-platform acceptance boundary</a></li>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/security-audit-2026-07-31.md" target="_blank" rel="noreferrer">Production-readiness security audit</a></li>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/blob/main/SECURITY.md" target="_blank" rel="noreferrer">Security policy and vulnerability reporting</a></li>
+                  <li><a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer">v0.1.6 release and checksums</a></li>
+                </ul>
+              </div>
+            </section>
+          </article>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

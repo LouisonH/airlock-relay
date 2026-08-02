@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Airlock security model: threat boundary, fixed routes, secret lifecycle, and policy boundaries for HTTP, SSH, and LLM." />
+    <title>Airlock - 安全模型</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="security">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+    </header>
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group"><span>指南</span><a class="docs-chapter-link" href="getting-started.html">从零开始</a><a class="docs-chapter-link" href="install.html">安装与校验</a><a class="docs-chapter-link" href="desktop.html">桌面控制台</a></div>
+            <div class="docs-chapter-group"><span>参考</span><a class="docs-chapter-link active" href="security.html">安全模型</a><a class="docs-chapter-link" href="routes.html">路由与策略</a><a class="docs-chapter-link" href="server.html">Server Core</a><a class="docs-chapter-link" href="operations.html">运维与排障</a><a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a><a class="docs-chapter-link" href="cli.html">CLI 参考</a></div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>安全模型</h1>
+            <p class="docs-lead" data-reveal>理解 Airlock 保护什么、不保护什么，是正确部署的前提。本节描述威胁边界、固定路由、Secret 生命周期与策略边界。</p>
+
+            <section data-reveal><span>01</span><div><h2>威胁边界</h2><p><strong>保护对象</strong>：不可信的 LLM、Agent、脚本与自动化调用方。它们只能看到本地入口与本地凭据，无法读取真实目标地址、上游账号、密码、私钥或 API Key，也无法把请求转发到任意目的地。</p><p><strong>不保护对象</strong>：本机管理员/root、能够调试 Airlock 进程或已控制操作系统的攻击者、以及可读取进程内存的同一用户进程。Airlock 不是沙箱，也不是通用 VPN 或防火墙。</p></div></section>
+
+            <section data-reveal><span>02</span><div><h2>固定路由与能力</h2><p>每条路由在创建时绑定一个上游与最小权限策略：HTTP 限定方法/路径/查询，SSH 限定命令与交互能力，LLM 限定模型/输出/频率/并发。调用方持有可撤销的本地能力（capability token、二次 API Key 或本地 SSH 身份），能力与真实 Secret 完全分离。</p><div class="docs-note"><strong>固定目标原则</strong><p>Airlock 不是开放代理：调用方永远不能指定上游 URL、SSH 地址或模型之外的目标。</p></div></div></section>
+
+            <section data-reveal><span>03</span><div><h2>Secret 生命周期</h2><ol><li><strong>录入</strong>：仅通过原生受保护输入（桌面）或 <code>0600</code> JSON 规格文件（Server Core）；不进入命令行、日志或 WebView。</li><li><strong>存储</strong>：默认本地 <code>0600</code> 文件；可选 Keychain / Credential Manager / Secret Service。路由摘要与活动记录不返回 Secret。</li><li><strong>使用</strong>：策略校验通过后，在发起上游请求/会话时才注入；响应与错误经过脱敏。</li><li><strong>轮换与删除</strong>：本地凭据可独立轮换；删除路由同时删除相关 Secret，文件删除采用安全覆写。</li></ol></div></section>
+
+            <section data-reveal><span>04</span><div><h2>策略边界</h2><div class="docs-ops-grid"><div><span>HTTP</span><strong>方法/路径/查询</strong><p>GET/HEAD 白名单、路径逃逸防护、同源重定向控制、Range 下载。</p></div><div><span>SSH</span><strong>命令与交互</strong><p>精确命令或受控完整 exec；Shell/SFTP/PTY 由独立开关控制，Agent/X11 与端口转发始终拒绝。</p></div><div><span>LLM</span><strong>模型与用量</strong><p>模型白名单、最大输出、RPM 与并发；统计只保留数字。</p></div></div></div></section>
+
+            <section data-reveal><span>05</span><div><h2>控制面与审计</h2><p>桌面控制通道使用当前用户专属 Unix 套接字（Windows 命名管道），不开放 TCP 管理端口；Server Core 的 CLI 通过 <code>0600</code> token 文件认证，Web UI 仅 loopback 且只呈现脱敏状态。所有活动默认脱敏，命令审计需显式开启并受滚动上限约束。</p></div></section>
+
+            <section data-reveal><span>06</span><div><h2>部署建议</h2><ul><li>使用专用最小权限上游账号；SSH"所有命令"与 SFTP 只对隔离账号开放。</li><li>保持入口 loopback；开放私有局域网前评估同网段威胁。</li><li>Server Core 使用独立服务账号、分离的 control/web token，并通过 SSH 隧道管理 Web UI。</li><li>定期轮换本地凭据与上游密码，备份视为 Secret 处理。</li></ul><p>完整审计记录见<a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/security-audit-2026-07-31.md" target="_blank" rel="noreferrer">生产就绪安全审计</a>。</p></div></section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>Security model</h1>
+            <p class="docs-lead" data-reveal>Understanding what Airlock protects (and does not protect) is a prerequisite for correct deployment.</p>
+            <section data-reveal><span>01</span><div><h2>Threat boundary</h2><p><strong>Protected:</strong> untrusted LLMs, agents, scripts, and automation. They see only local endpoints and local credentials, cannot read upstream targets or secrets, and cannot reach arbitrary destinations.</p><p><strong>Not protected:</strong> local administrators/root, anyone who can debug Airlock or control the OS, and same-user processes that can read process memory. Airlock is not a sandbox, VPN, or firewall.</p></div></section>
+            <section data-reveal><span>02</span><div><h2>Fixed routes and capabilities</h2><p>Each route binds one upstream and a least-privilege policy: HTTP methods/paths/query keys, SSH commands and interaction, LLM models/output/rate/concurrency. Callers hold revocable local capabilities (capability token, secondary API key, or local SSH identity) that stay separate from real secrets.</p><div class="docs-note"><strong>Fixed-target principle</strong><p>Airlock is not an open proxy: callers can never choose upstream URLs, SSH addresses, or models outside the policy.</p></div></div></section>
+            <section data-reveal><span>03</span><div><h2>Secret lifecycle</h2><ol><li><strong>Entry</strong>: protected native prompts (desktop) or <code>0600</code> JSON spec files (Server Core); never command arguments, logs, or the WebView.</li><li><strong>Storage</strong>: local <code>0600</code> file by default; optional Keychain/Credential Manager/Secret Service. Summaries and activity never return secrets.</li><li><strong>Use</strong>: injected only after policy approval, at the upstream request; responses and errors are sanitized.</li><li><strong>Rotation and deletion</strong>: local credentials rotate independently; deleting a route deletes its secrets with secure file erasure.</li></ol></div></section>
+            <section data-reveal><span>04</span><div><h2>Policy boundaries</h2><div class="docs-ops-grid"><div><span>HTTP</span><strong>Methods/paths/queries</strong><p>GET/HEAD allowlists, path-traversal protection, same-origin redirects, Range downloads.</p></div><div><span>SSH</span><strong>Commands and interaction</strong><p>Exact commands or controlled exec; Shell/SFTP/PTY are independent switches; Agent/X11 and port forwarding stay denied.</p></div><div><span>LLM</span><strong>Models and usage</strong><p>Model allowlist, output cap, RPM and concurrency; numbers-only statistics.</p></div></div></div></section>
+            <section data-reveal><span>05</span><div><h2>Control plane and audit</h2><p>The desktop control channel is a current-user Unix socket (named pipe on Windows) with no TCP management port; the server CLI authenticates with <code>0600</code> token files; the Web UI is loopback-only and sanitized. Activity is sanitized by default; command audit is explicit and bounded.</p></div></section>
+            <section data-reveal><span>06</span><div><h2>Deployment recommendations</h2><ul><li>Use dedicated least-privilege upstream accounts; reserve all-commands and SFTP for isolated accounts.</li><li>Keep ingress loopback; assess same-subnet threats before exposing a private LAN.</li><li>Server Core: dedicated service account, separate control/web tokens, SSH-tunneled Web UI.</li><li>Rotate local and upstream credentials regularly; treat backups as secrets.</li></ul><p>See the <a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/security-audit-2026-07-31.md" target="_blank" rel="noreferrer">production-readiness security audit</a>.</p></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

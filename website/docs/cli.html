@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Airlock CLI reference: global options, route commands, host-key probing, proxy egress, tokens, JSON output, and exit codes." />
+    <title>Airlock - CLI 参考</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="cli">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+    </header>
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group"><span>指南</span><a class="docs-chapter-link" href="getting-started.html">从零开始</a><a class="docs-chapter-link" href="install.html">安装与校验</a><a class="docs-chapter-link" href="desktop.html">桌面控制台</a></div>
+            <div class="docs-chapter-group"><span>参考</span><a class="docs-chapter-link" href="security.html">安全模型</a><a class="docs-chapter-link" href="routes.html">路由与策略</a><a class="docs-chapter-link" href="server.html">Server Core</a><a class="docs-chapter-link" href="operations.html">运维与排障</a><a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a><a class="docs-chapter-link active" href="cli.html">CLI 参考</a></div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>CLI 参考</h1>
+            <p class="docs-lead" data-reveal>Server Core 运维 CLI 默认输出 JSON，适合人与自动化。命令前缀固定为 <code>airlock --data-dir ... --token-file ...</code>。</p>
+
+            <section data-reveal><span>01</span><div><h2>全局选项</h2><div class="docs-reference-table"><div><strong>数据目录</strong><code>--data-dir &lt;path&gt;</code><p>路由与状态存储；服务器上为 /var/lib/airlock。</p></div><div><strong>控制令牌</strong><code>--token-file &lt;path&gt;</code><p>0600 token 文件，用于 Unix 套接字认证。</p></div><div><strong>超时</strong><code>--timeout 5s</code><p>控制请求超时，默认数秒。</p></div></div></div></section>
+
+            <section data-reveal><span>02</span><div><h2>状态与健康</h2><div class="docs-reference-table"><div><strong>服务状态</strong><code>status</code><p>核心、监听器与脱敏路由摘要。</p></div><div><strong>路由健康</strong><code>routes health &lt;alias&gt;</code><p>在路由预算内验证上游。</p></div><div><strong>全部路由</strong><code>routes list</code><p>列出脱敏摘要，不包含 Secret。</p></div></div></div></section>
+
+            <section data-reveal><span>03</span><div><h2>路由生命周期</h2><div class="docs-reference-table"><div><strong>创建</strong><code>routes create &lt;http|ssh|llm&gt; --file &lt;spec&gt;</code><p>SSH 路由默认停用；创建输出一次性本地凭据。</p></div><div><strong>启停</strong><code>routes enable|disable &lt;alias&gt;</code><p>停用保留配置。</p></div><div><strong>删除</strong><code>routes delete &lt;alias&gt;</code><p>删除路由与相关 Secret。</p></div><div><strong>轮换</strong><code>routes rotate-credential &lt;alias&gt;</code><p>立即作废旧本地凭据并输出新凭据。</p></div><div><strong>紧急全停</strong><code>routes stop-all --yes</code><p>禁用全部路由。</p></div></div></div></section>
+
+            <section data-reveal><span>04</span><div><h2>SSH 与代理</h2><div class="docs-reference-table"><div><strong>Host Key 探测</strong><code>ssh probe --address host:22 [--egress Auto]</code><p>认证前停止，返回 host_key。</p></div><div><strong>代理出口</strong><code>proxy set|clear --file &lt;path&gt;</code><p>HTTP CONNECT / HTTPS CONNECT / SOCKS5 / SOCKS5H。</p></div><div><strong>Token</strong><code>token generate --output &lt;path&gt;</code><p>生成 control 或 Web UI token（0600）。</p></div></div></div></section>
+
+            <section data-reveal><span>05</span><div><h2>JSON 输出示例</h2><div class="docs-terminal"><b>airlock ... status</b><button class="docs-copy" data-copy="cli-json" title="Copy">⧉</button><pre><code id="code-cli-json">{
+  "running": true,
+  "http_listen": "127.0.0.1:4768",
+  "ssh_listen": "127.0.0.1:4770",
+  "routes": [{ "alias": "releases", "enabled": true, "kind": "HTTP" }]
+}</code></pre></div><p>任何失败都会返回非零退出码并输出 JSON 错误；供脚本判断的稳定字段以 <code>ok</code>/<code>error</code> 顶层键为准（以实际命令输出为准）。</p></div></section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>CLI reference</h1>
+            <p class="docs-lead" data-reveal>The Server Core operations CLI emits JSON by default for humans and automation. Commands share the prefix <code>airlock --data-dir ... --token-file ...</code>.</p>
+            <section data-reveal><span>01</span><div><h2>Global options</h2><div class="docs-reference-table"><div><strong>Data directory</strong><code>--data-dir &lt;path&gt;</code><p>Route and state storage; /var/lib/airlock on servers.</p></div><div><strong>Control token</strong><code>--token-file &lt;path&gt;</code><p>0600 token file for Unix-socket authentication.</p></div><div><strong>Timeout</strong><code>--timeout 5s</code><p>Control request timeout.</p></div></div></div></section>
+            <section data-reveal><span>02</span><div><h2>Status and health</h2><div class="docs-reference-table"><div><strong>Service status</strong><code>status</code><p>Core, listeners, and sanitized route summaries.</p></div><div><strong>Route health</strong><code>routes health &lt;alias&gt;</code><p>Verify the upstream within the route budget.</p></div><div><strong>List routes</strong><code>routes list</code><p>Sanitized summaries, no secrets.</p></div></div></div></section>
+            <section data-reveal><span>03</span><div><h2>Route lifecycle</h2><div class="docs-reference-table"><div><strong>Create</strong><code>routes create &lt;http|ssh|llm&gt; --file &lt;spec&gt;</code><p>SSH routes start disabled; creation prints the one-time local credential.</p></div><div><strong>Enable/disable</strong><code>routes enable|disable &lt;alias&gt;</code><p>Disable retains configuration.</p></div><div><strong>Delete</strong><code>routes delete &lt;alias&gt;</code><p>Removes the route and its secrets.</p></div><div><strong>Rotate</strong><code>routes rotate-credential &lt;alias&gt;</code><p>Invalidates the old local credential and prints a new one.</p></div><div><strong>Emergency stop</strong><code>routes stop-all --yes</code><p>Disables every route.</p></div></div></div></section>
+            <section data-reveal><span>04</span><div><h2>SSH and proxy</h2><div class="docs-reference-table"><div><strong>Host-key probe</strong><code>ssh probe --address host:22 [--egress Auto]</code><p>Stops before authentication; returns host_key.</p></div><div><strong>Proxy egress</strong><code>proxy set|clear --file &lt;path&gt;</code><p>HTTP CONNECT / HTTPS CONNECT / SOCKS5 / SOCKS5H.</p></div><div><strong>Token</strong><code>token generate --output &lt;path&gt;</code><p>Creates a control or Web UI token (0600).</p></div></div></div></section>
+            <section data-reveal><span>05</span><div><h2>JSON output example</h2><div class="docs-terminal"><b>airlock ... status</b><button class="docs-copy" data-copy="cli-json" title="Copy">⧉</button><pre><code id="code-cli-json">{
+  "running": true,
+  "http_listen": "127.0.0.1:4768",
+  "ssh_listen": "127.0.0.1:4770",
+  "routes": [{ "alias": "releases", "enabled": true, "kind": "HTTP" }]
+}</code></pre></div><p>Failures return a non-zero exit code with JSON output; rely on the command's documented stable fields for scripting.</p></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

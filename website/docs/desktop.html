@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Airlock desktop console guide: routes, SSH wizard, interactive shell, SFTP, activity audit, health checks, and settings." />
+    <title>Airlock - 桌面控制台</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="desktop">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+    </header>
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group"><span>指南</span><a class="docs-chapter-link" href="getting-started.html">从零开始</a><a class="docs-chapter-link" href="install.html">安装与校验</a><a class="docs-chapter-link active" href="desktop.html">桌面控制台</a></div>
+            <div class="docs-chapter-group"><span>参考</span><a class="docs-chapter-link" href="security.html">安全模型</a><a class="docs-chapter-link" href="routes.html">路由与策略</a><a class="docs-chapter-link" href="server.html">Server Core</a><a class="docs-chapter-link" href="operations.html">运维与排障</a><a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a><a class="docs-chapter-link" href="cli.html">CLI 参考</a></div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>桌面控制台</h1>
+            <p class="docs-lead" data-reveal>桌面端是本地运维界面：创建与编辑路由、轮换凭据、查看脱敏活动、管理端口与代理。它从不显示真实上游目标或 Secret。</p>
+
+            <section data-reveal><span>01</span><div><h2>路由管理</h2><p>路由页支持搜索与组合筛选（名称、别名、本地用户名、本地入口、类型、状态、健康、出口）。批量健康检查只作用于当前筛选结果，不发送应用层请求正文。</p><p>编辑操作包括：启用/停用、编辑策略、轮换本地凭据、更换上游目标（Secret 只能替换、不能回读）。删除路由会同时清除相关 Secret。</p></div></section>
+
+            <section data-reveal><span>02</span><div><h2>SSH 向导</h2><p>创建 SSH 路由时，向导在本机完成：上游地址与账号、上游密码或私钥、本地用户名与本地密码、Host Key 确认。本地用户名在当前机器上必须唯一，多个路由可共享同一上游地址。</p><ul><li><strong>命令范围</strong>：默认"单条精确命令"；"所有命令"需在 Airlock 内明确确认高风险。</li><li><strong>交互式 Shell</strong>：默认关闭；开启后 PuTTY/ssh 直接进入上游 Shell，PTY 元数据仅在开启时转发。</li><li><strong>SFTP</strong>：默认关闭；为现代 scp/SFTP 客户端按路由显式开启（高风险文件权限）。</li><li><strong>关键字改写</strong>：可在命令中把受保护关键字替换为真实值，仅在策略校验通过后应用。</li></ul></div></section>
+
+            <section data-reveal><span>03</span><div><h2>活动与审计</h2><p>活动页默认只保留脱敏类别、结果、耗时与本地调用者。开启命令审计后，完整 SSH 命令保存在当前用户专属的 <code>0600</code> 滚动文件（最多 100 条事件），可在详情中查看。</p><p>LLM 使用统计默认关闭；开启后只记录调用次数与上游报告的 token 数，不保存提示词或响应正文，进程重启后清零。</p></div></section>
+
+            <section data-reveal><span>04</span><div><h2>健康检查与端口管理</h2><p>路由可单独执行健康检查：HTTP 验证连通性，SSH 在认证预算内验证固定 Host Key 与上游密码（默认 20 秒，可配 3–120 秒）。</p><p>设置页可查看 HTTP/SSH 监听端口占用者（仅当前用户进程），确认后优雅结束占用进程，或切换到其他非特权端口；Airlock 不会强制终止其他用户的进程。</p></div></section>
+
+            <section data-reveal><span>05</span><div><h2>设置</h2><ul><li><strong>网络范围</strong>：默认仅本机；开放私有局域网需要原生确认。</li><li><strong>Secret 存储</strong>：默认无弹窗的 <code>0600</code> 文件；macOS 可选 Keychain、Windows Credential Manager、Linux Secret Service，切换有双向验证与回滚。</li><li><strong>代理出口</strong>：Direct / Proxy / Auto，兼容 Clash HTTP CONNECT 与 SOCKS5/SOCKS5H。</li><li><strong>外观</strong>：深浅主题、三套强调色、密度、刷新频率与动效偏好。</li><li><strong>更新检查</strong>：只读取官方公开 Release 元数据，不会自动下载或安装。</li></ul></div></section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>Desktop console</h1>
+            <p class="docs-lead" data-reveal>The desktop app is the local operations surface: create and edit routes, rotate credentials, review sanitized activity, and manage ports and proxy egress. It never displays real upstream targets or secrets.</p>
+            <section data-reveal><span>01</span><div><h2>Route management</h2><p>Routes supports search and combined filters (name, alias, local username, local endpoint, kind, status, health, egress). Batch health checks run only against the current filter and never send an application body.</p><p>Actions include enable/disable, policy editing, local credential rotation, and replacing the upstream target (secrets are replace-only, never readable). Deleting a route also clears its secrets.</p></div></section>
+            <section data-reveal><span>02</span><div><h2>SSH wizard</h2><p>The wizard handles upstream address and account, upstream password or private key, local username and password, and host-key confirmation entirely on-device. Local usernames must be unique; multiple routes may share one upstream.</p><ul><li><strong>Command scope</strong>: one exact command by default; all-commands requires an explicit high-risk acknowledgement.</li><li><strong>Interactive shell</strong>: off by default; when enabled, PuTTY/ssh enter the upstream shell and PTY metadata is forwarded.</li><li><strong>SFTP</strong>: off by default; enable per route for modern scp/SFTP clients (high-risk file access).</li><li><strong>Keyword rewrites</strong>: replace protected keywords in commands after policy approval.</li></ul></div></section>
+            <section data-reveal><span>03</span><div><h2>Activity and audit</h2><p>Activity is sanitized by default. With command audit enabled, full SSH commands are stored in a user-only <code>0600</code> rolling file (up to 100 events) and viewable in details.</p><p>LLM usage tracking is off by default; when enabled it keeps call counts and upstream token numbers only, never prompts or responses, and resets on restart.</p></div></section>
+            <section data-reveal><span>04</span><div><h2>Health checks and ports</h2><p>Routes can be health-checked individually: HTTP verifies connectivity; SSH verifies the pinned host key and upstream password within the authentication budget (20s default, 3–120s configurable).</p><p>Settings lists current-user processes owning the HTTP/SSH listener ports; you can confirm a graceful termination or switch to another unprivileged port. Airlock never force-kills other users' processes.</p></div></section>
+            <section data-reveal><span>05</span><div><h2>Settings</h2><ul><li><strong>Network scope</strong>: loopback by default; private-LAN exposure requires a native confirmation.</li><li><strong>Secret store</strong>: prompt-free <code>0600</code> file by default; optional Keychain/Credential Manager/Secret Service with validated migration.</li><li><strong>Proxy egress</strong>: Direct / Proxy / Auto, compatible with Clash HTTP CONNECT and SOCKS5/SOCKS5H.</li><li><strong>Appearance</strong>: light/dark, three accents, density, refresh cadence, and motion preferences.</li><li><strong>Updates</strong>: reads public release metadata only; never auto-downloads or installs.</li></ul></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Install and verify Airlock on macOS, Windows, Linux, and Raspberry Pi with SHA-256 and GPG checks." />
+    <title>Airlock - 安装与校验</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="install">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions">
+        <div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div>
+        <button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button>
+        <a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a>
+      </div>
+    </header>
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group"><span>指南</span><a class="docs-chapter-link" href="getting-started.html">从零开始</a><a class="docs-chapter-link active" href="install.html">安装与校验</a><a class="docs-chapter-link" href="desktop.html">桌面控制台</a></div>
+            <div class="docs-chapter-group"><span>参考</span><a class="docs-chapter-link" href="security.html">安全模型</a><a class="docs-chapter-link" href="routes.html">路由与策略</a><a class="docs-chapter-link" href="server.html">Server Core</a><a class="docs-chapter-link" href="operations.html">运维与排障</a><a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a><a class="docs-chapter-link" href="cli.html">CLI 参考</a></div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>安装与校验</h1>
+            <p class="docs-lead" data-reveal>无论从哪个平台开始，安装路径都遵循同一原则：从官方渠道获取、核对 SHA-256（Linux 另有 GPG 签名）、失败即拒绝。</p>
+
+            <section data-reveal><span>01</span><div><h2>系统要求</h2><ul><li>macOS 12 Monterey 或更高（Apple Silicon 与 Intel）。</li><li>Windows 10 或更高（x64、x86/i686、arm64）。</li><li>Linux x64 或 arm64 桌面发行版（AppImage）；64 位树莓派系统可直接安装。</li><li>Linux ARMv7（32 位树莓派）需在设备端构建，见<a href="platforms.html">跨平台章节</a>。</li></ul></div></section>
+
+            <section data-reveal><span>02</span><div><h2>通过 npm 安装（推荐）</h2><p><code>npm install</code> 本身无副作用：不会下载、启动应用或修改系统设置。安装命令由 <code>airlock-installer</code> 执行，它先下载当前平台的固定校验和产物并核验。</p><div class="docs-terminal"><b>全平台通用</b><button class="docs-copy" data-copy="inst-npm" title="Copy">⧉</button><pre><code id="code-inst-npm">npm install -g airlock-relay
+airlock-installer install --open</code></pre></div><p>行为分平台：macOS 安装到 <code>~/Applications</code>；Windows 静默运行 NSIS（出现 UAC 提示）；Linux 安装 AppImage 到 <code>~/.local/bin/Airlock.AppImage</code>。可用 <code>--output &lt;目录&gt;</code> 指定 Linux 安装目录。</p></div></section>
+
+            <section data-reveal><span>03</span><div><h2>校验安装包</h2><p>从 <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer">Release</a> 下载 <code>SHA256SUMS-v0.1.6.txt</code> 与对应产物后：</p><div class="docs-terminal"><b>SHA-256 校验（macOS/Linux）</b><button class="docs-copy" data-copy="inst-sha" title="Copy">⧉</button><pre><code id="code-inst-sha">shasum -a 256 -c SHA256SUMS-v0.1.6.txt</code></pre></div><div class="docs-terminal"><b>GPG 校验（Linux AppImage/deb）</b><button class="docs-copy" data-copy="inst-gpg" title="Copy">⧉</button><pre><code id="code-inst-gpg">gpg --import Airlock-gpg-pubkey.asc
+gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage</code></pre></div><p>公钥指纹：<code>6DE9B706 DF0FBFD8 43F43FE0 A6C7913E B32FAD7E</code>（Airlock Release Signing）。</p></div></section>
+
+            <section data-reveal><span>04</span><div><h2>升级</h2><ol><li>检查当前版本：<code>airlock-installer version</code>。</li><li>执行 <code>npm install -g airlock-relay@latest</code> 更新包。</li><li>再次执行 <code>airlock-installer install</code>：macOS 原子替换应用；Windows 运行新版安装器；Linux 覆盖 AppImage。</li><li>升级后核对 <code>airlock-installer doctor</code> 与路由健康检查。</li></ol><div class="docs-note"><strong>数据保留</strong><p>升级不会删除路由配置与 Secret；Server Core 升级请先备份，见<a href="operations.html">运维章节</a>。</p></div></div></section>
+
+            <section data-reveal><span>05</span><div><h2>卸载</h2><ul><li>macOS：删除 <code>~/Applications/Airlock.app</code>；可选删除 <code>~/Library/Application Support/io.airlock.relay</code> 等数据目录。</li><li>Windows：设置 → 应用 → Airlock → 卸载（或 MSI 卸载命令）。</li><li>Linux：删除 <code>~/.local/bin/Airlock.AppImage</code>；若使用 deb 安装，执行 <code>sudo dpkg -r airlock</code>。</li><li>全局 CLI：<code>npm uninstall -g airlock-relay</code>。</li></ul></div></section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>Install and verify</h1>
+            <p class="docs-lead" data-reveal>Every platform follows the same principle: obtain from the official channel, verify the SHA-256 (plus GPG on Linux), and fail closed on any mismatch.</p>
+            <section data-reveal><span>01</span><div><h2>Requirements</h2><ul><li>macOS 12 Monterey or newer (Apple Silicon and Intel).</li><li>Windows 10 or newer (x64, x86/i686, arm64).</li><li>Linux x64 or arm64 desktop distributions (AppImage); 64-bit Raspberry Pi OS installs directly.</li><li>Linux ARMv7 (32-bit Pi) builds on-device; see <a href="platforms.html">platforms</a>.</li></ul></div></section>
+            <section data-reveal><span>02</span><div><h2>Install via npm (recommended)</h2><p><code>npm install</code> itself has no side effects. <code>airlock-installer</code> downloads and verifies the pinned artifact for your platform before installing.</p><div class="docs-terminal"><b>All platforms</b><button class="docs-copy" data-copy="inst-npm" title="Copy">⧉</button><pre><code id="code-inst-npm">npm install -g airlock-relay
+airlock-installer install --open</code></pre></div><p>Behavior by platform: macOS installs to <code>~/Applications</code>; Windows runs the NSIS installer silently (UAC prompt); Linux installs the AppImage to <code>~/.local/bin/Airlock.AppImage</code>. Use <code>--output &lt;dir&gt;</code> to choose the Linux destination.</p></div></section>
+            <section data-reveal><span>03</span><div><h2>Verify the package</h2><p>Download <code>SHA256SUMS-v0.1.6.txt</code> and the matching artifact from the <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer">release</a>:</p><div class="docs-terminal"><b>SHA-256 (macOS/Linux)</b><button class="docs-copy" data-copy="inst-sha" title="Copy">⧉</button><pre><code id="code-inst-sha">shasum -a 256 -c SHA256SUMS-v0.1.6.txt</code></pre></div><div class="docs-terminal"><b>GPG (Linux AppImage/deb)</b><button class="docs-copy" data-copy="inst-gpg" title="Copy">⧉</button><pre><code id="code-inst-gpg">gpg --import Airlock-gpg-pubkey.asc
+gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage</code></pre></div><p>Public key fingerprint: <code>6DE9B706 DF0FBFD8 43F43FE0 A6C7913E B32FAD7E</code> (Airlock Release Signing).</p></div></section>
+            <section data-reveal><span>04</span><div><h2>Upgrade</h2><ol><li>Check the current version: <code>airlock-installer version</code>.</li><li>Run <code>npm install -g airlock-relay@latest</code>.</li><li>Run <code>airlock-installer install</code> again: macOS replaces the app atomically; Windows runs the new installer; Linux overwrites the AppImage.</li><li>Re-run <code>airlock-installer doctor</code> and route health checks.</li></ol><div class="docs-note"><strong>Data retention</strong><p>Upgrades never delete route configuration or secrets. For Server Core, back up first; see <a href="operations.html">operations</a>.</p></div></div></section>
+            <section data-reveal><span>05</span><div><h2>Uninstall</h2><ul><li>macOS: delete <code>~/Applications/Airlock.app</code>; optionally remove <code>~/Library/Application Support/io.airlock.relay</code>.</li><li>Windows: Settings → Apps → Airlock → Uninstall (or the MSI uninstall command).</li><li>Linux: delete <code>~/.local/bin/Airlock.AppImage</code>; for deb installs run <code>sudo dpkg -r airlock</code>.</li><li>CLI: <code>npm uninstall -g airlock-relay</code>.</li></ul></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

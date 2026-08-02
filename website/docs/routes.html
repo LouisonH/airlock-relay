@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Airlock route specifications and policies: HTTP, SSH, and LLM route fields, allowlists, limits, and host-key probing." />
+    <title>Airlock - 路由与策略</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="routes">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+    </header>
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group"><span>指南</span><a class="docs-chapter-link" href="getting-started.html">从零开始</a><a class="docs-chapter-link" href="install.html">安装与校验</a><a class="docs-chapter-link" href="desktop.html">桌面控制台</a></div>
+            <div class="docs-chapter-group"><span>参考</span><a class="docs-chapter-link" href="security.html">安全模型</a><a class="docs-chapter-link active" href="routes.html">路由与策略</a><a class="docs-chapter-link" href="server.html">Server Core</a><a class="docs-chapter-link" href="operations.html">运维与排障</a><a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a><a class="docs-chapter-link" href="cli.html">CLI 参考</a></div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>路由与策略</h1>
+            <p class="docs-lead" data-reveal>规格文件是 Server Core 的唯一输入方式：绝对路径、常规文件、非符号链接、<code>0600</code> 权限。绝不要把 URL、密码或 Key 放进命令行参数。</p>
+
+            <section data-reveal><span>01</span><div><h2>HTTP 路由规格</h2><div class="docs-terminal"><b>releases.json</b><button class="docs-copy" data-copy="rt-http" title="Copy">⧉</button><pre><code id="code-rt-http">{
+  "name": "Release mirror",
+  "alias": "releases",
+  "base_url": "https://upstream.example/releases/",
+  "authorization": "Bearer upstream-secret",
+  "methods": ["GET", "HEAD"],
+  "query_keys": ["version", "platform"],
+  "egress": "Auto"
+}</code></pre></div><ul><li><code>methods</code>：允许的 HTTP 方法白名单。</li><li><code>query_keys</code>：允许透传的查询参数；未列出的一律拒绝。</li><li><code>egress</code>：<code>Direct</code> / <code>Proxy</code> / <code>Auto</code>。</li></ul></div></section>
+
+            <section data-reveal><span>02</span><div><h2>SSH 路由规格</h2><div class="docs-terminal"><b>build.json</b><button class="docs-copy" data-copy="rt-ssh" title="Copy">⧉</button><pre><code id="code-rt-ssh">{
+  "name": "Build server",
+  "alias": "build",
+  "local_username": "build",
+  "upstream": "build.example:22",
+  "username": "deploy",
+  "password": "upstream-password",
+  "host_key": "ssh-ed25519 AAAA...",
+  "allowed_command": "deploy --release",
+  "allow_all_commands": false,
+  "allow_interactive_shell": false,
+  "allow_sftp": false,
+  "record_commands": true,
+  "keyword_replacements": [
+    { "from": "%%TOKEN%%", "to": "protected-value", "enabled": true }
+  ],
+  "egress": "Auto"
+}</code></pre></div><ul><li><code>allowed_command</code>：完整字符串精确匹配（默认模式）。</li><li><code>allow_all_commands</code>：需要 CLI 的 <code>--allow-all-confirmed</code> 或桌面高风险确认。</li><li><code>allow_interactive_shell</code>：要求同时开启 all-commands；开启后转发 PTY。</li><li><code>allow_sftp</code>：为现代 scp/SFTP 客户端启用（高风险）。</li><li><code>keyword_replacements</code>：命令策略通过后才应用替换，防止把敏感值写死在命令里。</li></ul></div></section>
+
+            <section data-reveal><span>03</span><div><h2>LLM 路由规格</h2><div class="docs-terminal"><b>coding.json</b><button class="docs-copy" data-copy="rt-llm" title="Copy">⧉</button><pre><code id="code-rt-llm">{
+  "name": "Coding",
+  "alias": "coding",
+  "base_url": "https://api.example.com/v1",
+  "authorization": "upstream-key",
+  "provider": "openai",
+  "models": ["model-a"],
+  "max_output_tokens": 4096,
+  "requests_per_minute": 60,
+  "max_concurrent": 4,
+  "track_usage": true
+}</code></pre></div><ul><li><code>provider</code>：<code>openai</code>（/v1/responses、/v1/chat/completions）或 <code>anthropic</code>（/v1/messages）。</li><li><code>models</code>：白名单，请求中模型必须匹配。</li><li><code>max_output_tokens</code>：请求不能超过该上限，缺失时自动填充。</li><li><code>requests_per_minute</code> / <code>max_concurrent</code>：频率与并发上限。</li><li><code>track_usage</code>：只记录数字统计。</li></ul></div></section>
+
+            <section data-reveal><span>04</span><div><h2>创建与启用流程</h2><p>SSH 路由创建后默认处于停用状态，必须：探测 Host Key → 写入规格 → 创建 → 健康检查 → 启用。HTTP 与 LLM 路由同样建议按此顺序验证。</p><div class="docs-terminal"><b>标准流程</b><button class="docs-copy" data-copy="rt-flow" title="Copy">⧉</button><pre><code id="code-rt-flow">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes create &lt;http|ssh|llm&gt; --file /path/route.json
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes health &lt;alias&gt;
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes enable &lt;alias&gt;</code></pre></div></div></section>
+
+            <section data-reveal><span>05</span><div><h2>Host Key 探测</h2><div class="docs-terminal"><b>探测（不执行认证）</b><button class="docs-copy" data-copy="rt-probe" title="Copy">⧉</button><pre><code id="code-rt-probe">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  ssh probe --address ssh.example:22 --egress Auto</code></pre></div><p>探测只读取 Host Key 并在认证前停止。请通过独立渠道（如服务器控制台）核对指纹后再写入规格。</p></div></section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>Routes and policies</h1>
+            <p class="docs-lead" data-reveal>Spec files are the only input path for Server Core: absolute path, regular file, non-symlink, <code>0600</code>. Never put URLs, passwords, or keys in command arguments.</p>
+            <section data-reveal><span>01</span><div><h2>HTTP route spec</h2><div class="docs-terminal"><b>releases.json</b><button class="docs-copy" data-copy="rt-http" title="Copy">⧉</button><pre><code id="code-rt-http">{
+  "name": "Release mirror",
+  "alias": "releases",
+  "base_url": "https://upstream.example/releases/",
+  "authorization": "Bearer upstream-secret",
+  "methods": ["GET", "HEAD"],
+  "query_keys": ["version", "platform"],
+  "egress": "Auto"
+}</code></pre></div><ul><li><code>methods</code>: allowed HTTP method allowlist.</li><li><code>query_keys</code>: query parameters allowed to pass through; anything else is rejected.</li><li><code>egress</code>: <code>Direct</code> / <code>Proxy</code> / <code>Auto</code>.</li></ul></div></section>
+            <section data-reveal><span>02</span><div><h2>SSH route spec</h2><div class="docs-terminal"><b>build.json</b><button class="docs-copy" data-copy="rt-ssh" title="Copy">⧉</button><pre><code id="code-rt-ssh">{
+  "name": "Build server",
+  "alias": "build",
+  "local_username": "build",
+  "upstream": "build.example:22",
+  "username": "deploy",
+  "password": "upstream-password",
+  "host_key": "ssh-ed25519 AAAA...",
+  "allowed_command": "deploy --release",
+  "allow_all_commands": false,
+  "allow_interactive_shell": false,
+  "allow_sftp": false,
+  "record_commands": true,
+  "keyword_replacements": [
+    { "from": "%%TOKEN%%", "to": "protected-value", "enabled": true }
+  ],
+  "egress": "Auto"
+}</code></pre></div><ul><li><code>allowed_command</code>: exact full-string match (default mode).</li><li><code>allow_all_commands</code>: requires CLI <code>--allow-all-confirmed</code> or an in-app high-risk acknowledgement.</li><li><code>allow_interactive_shell</code>: requires all-commands; forwards PTY when enabled.</li><li><code>allow_sftp</code>: enables modern scp/SFTP clients (high risk).</li><li><code>keyword_replacements</code>: applied only after the command policy passes.</li></ul></div></section>
+            <section data-reveal><span>03</span><div><h2>LLM route spec</h2><div class="docs-terminal"><b>coding.json</b><button class="docs-copy" data-copy="rt-llm" title="Copy">⧉</button><pre><code id="code-rt-llm">{
+  "name": "Coding",
+  "alias": "coding",
+  "base_url": "https://api.example.com/v1",
+  "authorization": "upstream-key",
+  "provider": "openai",
+  "models": ["model-a"],
+  "max_output_tokens": 4096,
+  "requests_per_minute": 60,
+  "max_concurrent": 4,
+  "track_usage": true
+}</code></pre></div><ul><li><code>provider</code>: <code>openai</code> (/v1/responses, /v1/chat/completions) or <code>anthropic</code> (/v1/messages).</li><li><code>models</code>: allowlist; the request model must match.</li><li><code>max_output_tokens</code>: requests cannot exceed it; defaults are injected when absent.</li><li><code>requests_per_minute</code> / <code>max_concurrent</code>: rate and concurrency caps.</li><li><code>track_usage</code>: numbers only.</li></ul></div></section>
+            <section data-reveal><span>04</span><div><h2>Create and enable flow</h2><p>SSH routes are created disabled by default and must follow: probe host key → write spec → create → health check → enable. HTTP and LLM routes should be verified in the same order.</p><div class="docs-terminal"><b>Standard flow</b><button class="docs-copy" data-copy="rt-flow" title="Copy">⧉</button><pre><code id="code-rt-flow">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes create &lt;http|ssh|llm&gt; --file /path/route.json
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes health &lt;alias&gt;
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes enable &lt;alias&gt;</code></pre></div></div></section>
+            <section data-reveal><span>05</span><div><h2>Host-key probing</h2><div class="docs-terminal"><b>Probe (stops before authentication)</b><button class="docs-copy" data-copy="rt-probe" title="Copy">⧉</button><pre><code id="code-rt-probe">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  ssh probe --address ssh.example:22 --egress Auto</code></pre></div><p>The probe reads only the host key and stops before authentication. Confirm the fingerprint over an independent channel before writing the spec.</p></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Airlock getting-started tutorial: install, create your first HTTP/SSH/LLM route, verify access, and rotate credentials." />
+    <title>Airlock - 从零开始</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="getting-started">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions">
+        <div class="language-switch" role="group" aria-label="Language">
+          <button type="button" data-language-button="zh">中</button>
+          <button type="button" data-language-button="en">EN</button>
+        </div>
+        <button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button>
+        <a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a>
+      </div>
+    </header>
+
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group">
+              <span>指南</span>
+              <a class="docs-chapter-link active" href="getting-started.html">从零开始</a>
+              <a class="docs-chapter-link" href="install.html">安装与校验</a>
+              <a class="docs-chapter-link" href="desktop.html">桌面控制台</a>
+            </div>
+            <div class="docs-chapter-group">
+              <span>参考</span>
+              <a class="docs-chapter-link" href="security.html">安全模型</a>
+              <a class="docs-chapter-link" href="routes.html">路由与策略</a>
+              <a class="docs-chapter-link" href="server.html">Server Core</a>
+              <a class="docs-chapter-link" href="operations.html">运维与排障</a>
+              <a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a>
+              <a class="docs-chapter-link" href="cli.html">CLI 参考</a>
+            </div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>从零开始：15 分钟跑通第一条路由</h1>
+            <p class="docs-lead" data-reveal>本教程带你完成：安装 Airlock → 启动桌面端 → 创建并验证第一条 HTTP 路由 → 再创建 SSH 与 LLM 路由 → 最后轮换和撤销凭据。完成后你就掌握了日常使用 Airlock 的完整闭环。</p>
+
+            <section data-reveal>
+              <span>01</span>
+              <div>
+                <h2>前置条件</h2>
+                <ul>
+                  <li>macOS 12+（Apple Silicon 或 Intel）、Windows 10+（x64/x86/arm64）或 Linux x64/arm64。</li>
+                  <li>Node.js 20+（仅安装器需要；安装完成后可卸载）。</li>
+                  <li>一个你拥有凭据的上游目标：例如一个需要 Authorization 的下载 URL、一台 SSH 服务器、或一个 OpenAI/Anthropic 兼容 API。</li>
+                  <li>建议先阅读<a href="security.html">安全模型</a>一章，理解 Airlock 的边界。</li>
+                </ul>
+              </div>
+            </section>
+
+            <section data-reveal>
+              <span>02</span>
+              <div>
+                <h2>安装 Airlock</h2>
+                <p>所有平台使用同一条命令安装。安装器会下载当前平台的固定校验和产物，SHA-256 校验失败时拒绝执行。</p>
+                <div class="docs-terminal"><b>安装（首次安装请去掉 --open）</b><button class="docs-copy" data-copy="gs-install" title="Copy">⧉</button><pre><code id="code-gs-install">npm install -g airlock-relay
+airlock-installer install --open</code></pre></div>
+                <p>安装后建议立即校验一次安装器契约：</p>
+                <div class="docs-terminal"><b>查看平台状态</b><button class="docs-copy" data-copy="gs-status" title="Copy">⧉</button><pre><code id="code-gs-status">airlock-installer status --json
+airlock-installer doctor</code></pre></div>
+                <div class="docs-note"><strong>关于签名</strong><p>macOS 包为 ad-hoc 签名且未经 Apple 公证，首次打开需要 Gatekeeper 确认；Windows/Linux 为未签名预览产物。请始终从官方 Release 下载并核对 SHA-256。</p></div>
+              </div>
+            </section>
+
+            <section data-reveal>
+              <span>03</span>
+              <div>
+                <h2>启动并了解界面</h2>
+                <p>首次启动 Airlock Desktop 后，本地核心 <code>airlockd</code> 会自动运行：HTTP 入口默认监听 <code>127.0.0.1:4768</code>，SSH 入口监听 <code>127.0.0.1:4770</code>。关闭窗口不会停止转发服务；控制通道是当前用户专属的 Unix 套接字（Windows 为命名管道）。</p>
+                <p>左侧导航：<strong>概览</strong>（核心状态与端口）、<strong>路由</strong>（创建与管理入口）、<strong>活动</strong>（脱敏请求记录）、<strong>设置</strong>（网络范围、Secret 存储、代理与主题）。</p>
+              </div>
+            </section>
+
+            <section data-reveal>
+              <span>04</span>
+              <div>
+                <h2>创建第一条 HTTP 路由</h2>
+                <p>在"路由"页点击<strong>新增路由</strong>，类型选择 <strong>HTTP / Wget</strong>，填写：名称（如 <code>release</code>）、别名（<code>releases</code>）、上游基址（如 <code>https://example.com/releases/</code>）、允许的方法与查询参数。上游 Authorization 由受保护的原生输入窗口收集，不会进入桌面界面或日志。</p>
+                <p>服务端（无桌面）环境使用规格文件：</p>
+                <div class="docs-terminal"><b>/etc/airlock/releases.json</b><button class="docs-copy" data-copy="gs-http-spec" title="Copy">⧉</button><pre><code id="code-gs-http-spec">{
+  "name": "Release mirror",
+  "alias": "releases",
+  "base_url": "https://example.com/releases/",
+  "authorization": "Bearer upstream-secret",
+  "methods": ["GET", "HEAD"],
+  "egress": "Auto"
+}</code></pre></div>
+                <div class="docs-terminal"><b>创建并启用（CLI）</b><button class="docs-copy" data-copy="gs-http-create" title="Copy">⧉</button><pre><code id="code-gs-http-create">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes create http --file /etc/airlock/releases.json
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes enable releases</code></pre></div>
+                <div class="docs-warning"><strong>创建输出只出现一次</strong><p>创建成功后终端会打印一次本地 capability。请立即把它交给调用方；它不会再次显示，也不要用命令行参数传递上游 Secret。</p></div>
+              </div>
+            </section>
+
+            <section data-reveal>
+              <span>05</span>
+              <div>
+                <h2>验证 HTTP 路由</h2>
+                <p>调用方使用本地入口 <code>127.0.0.1:4768/r/releases/...</code> 和本地凭据，真实上游地址与 Authorization 不会出现在调用方一侧。</p>
+                <div class="docs-terminal"><b>成功场景</b><button class="docs-copy" data-copy="gs-http-ok" title="Copy">⧉</button><pre><code id="code-gs-http-ok">curl -H "Authorization: Bearer &lt;local-token&gt;" \
+  http://127.0.0.1:4768/r/releases/latest.zip -o latest.zip</code></pre></div>
+                <div class="docs-terminal"><b>预期失败场景</b><button class="docs-copy" data-copy="gs-http-fail" title="Copy">⧉</button><pre><code id="code-gs-http-fail">curl -H "Authorization: Bearer wrong" http://127.0.0.1:4768/r/releases/latest.zip
+# HTTP 401 invalid_api_key；不会泄露上游地址或真实凭据</code></pre></div>
+                <p>在"活动"页应看到两条记录：一条 <code>allowed</code>、一条 <code>blocked</code>，均不包含 URL 与 Secret。</p>
+              </div>
+            </section>
+
+            <section data-reveal>
+              <span>06</span>
+              <div>
+                <h2>创建 SSH 路由</h2>
+                <p>SSH 路由需要先探测上游 Host Key。桌面向导会引导完成：上游地址/账号/密码或私钥 → 本地用户名与本地密码 → Host Key 确认。CLI 路径如下：</p>
+                <div class="docs-terminal"><b>探测 Host Key</b><button class="docs-copy" data-copy="gs-ssh-probe" title="Copy">⧉</button><pre><code id="code-gs-ssh-probe">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  ssh probe --address build.example:22 --egress Auto
+# 输出 host_key，写入 0600 规格文件后创建</code></pre></div>
+                <div class="docs-terminal"><b>build.json</b><button class="docs-copy" data-copy="gs-ssh-spec" title="Copy">⧉</button><pre><code id="code-gs-ssh-spec">{
+  "name": "Build server",
+  "alias": "build",
+  "local_username": "build",
+  "upstream": "build.example:22",
+  "username": "deploy",
+  "password": "upstream-password",
+  "host_key": "ssh-ed25519 AAAA...",
+  "allowed_command": "deploy --release",
+  "egress": "Auto"
+}</code></pre></div>
+                <div class="docs-terminal"><b>创建、健康检查并启用</b><button class="docs-copy" data-copy="gs-ssh-create" title="Copy">⧉</button><pre><code id="code-gs-ssh-create">airlock ... routes create ssh --file /etc/airlock/build.json
+airlock ... routes health build
+airlock ... routes enable build</code></pre></div>
+                <p>调用方连接：<code>ssh build@127.0.0.1 -p 4770</code>（输入本地密码）。默认只允许精确命令 <code>deploy --release</code>；需要交互式 Shell 时，在路由设置中开启"允许交互式 Shell"（同时要求开放所有命令，属高风险操作）。</p>
+              </div>
+            </section>
+
+            <section data-reveal>
+              <span>07</span>
+              <div>
+                <h2>创建 LLM 路由</h2>
+                <div class="docs-terminal"><b>coding.json</b><button class="docs-copy" data-copy="gs-llm-spec" title="Copy">⧉</button><pre><code id="code-gs-llm-spec">{
+  "name": "Coding",
+  "alias": "coding",
+  "base_url": "https://api.example.com/v1",
+  "authorization": "upstream-key",
+  "provider": "openai",
+  "models": ["model-a", "model-b"],
+  "max_output_tokens": 4096,
+  "requests_per_minute": 60,
+  "max_concurrent": 4,
+  "track_usage": true
+}</code></pre></div>
+                <p>创建成功后，CLI 会打印一次<strong>本地二次 API Key</strong>。调用方这样使用：</p>
+                <div class="docs-terminal"><b>客户端配置</b><button class="docs-copy" data-copy="gs-llm-use" title="Copy">⧉</button><pre><code id="code-gs-llm-use">export OPENAI_BASE_URL=http://127.0.0.1:4768/r/coding
+export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre></div>
+                <p>模型白名单之外的请求返回 <code>403 model_not_allowed</code>；输出超过限额返回 <code>400</code>。用法统计只保留数字，不保存提示词或响应正文。</p>
+              </div>
+            </section>
+
+            <section data-reveal>
+              <span>08</span>
+              <div>
+                <h2>轮换与撤销凭据</h2>
+                <ul>
+                  <li><strong>轮换本地凭据</strong>：桌面端"编辑路由 → 轮换"；CLI 使用 <code>routes rotate-credential</code>。轮换后旧凭据立即失效。</li>
+                  <li><strong>撤销访问</strong>：<code>routes disable &lt;alias&gt;</code> 停用路由但保留配置；<code>routes delete &lt;alias&gt;</code> 删除路由与相关 Secret。</li>
+                  <li><strong>紧急全停</strong>：<code>routes stop-all --yes</code> 禁用所有路由，配置保留待审查。</li>
+                </ul>
+                <div class="docs-note"><strong>建议</strong><p>把轮换纳入例行操作：怀疑凭据泄露、人员变动或季度例行时执行。</p></div>
+              </div>
+            </section>
+
+            <section data-reveal>
+              <span>09</span>
+              <div>
+                <h2>下一步</h2>
+                <ul>
+                  <li>了解<a href="desktop.html">桌面控制台</a>的完整功能（审计、健康检查、端口管理）。</li>
+                  <li>生产环境阅读<a href="server.html">Server Core 部署</a>与<a href="operations.html">运维排障</a>。</li>
+                  <li>多平台与树莓派见<a href="platforms.html">跨平台章节</a>。</li>
+                  <li>命令速查见<a href="cli.html">CLI 参考</a>。</li>
+                </ul>
+              </div>
+            </section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>Getting started: a working route in 15 minutes</h1>
+            <p class="docs-lead" data-reveal>This tutorial walks you through: install Airlock, launch the desktop, create and verify your first HTTP route, add SSH and LLM routes, then rotate and revoke credentials.</p>
+
+            <section data-reveal><span>01</span><div><h2>Prerequisites</h2><ul><li>macOS 12+ (Apple Silicon or Intel), Windows 10+ (x64/x86/arm64), or Linux x64/arm64.</li><li>Node.js 20+ (only needed by the installer).</li><li>An upstream target you hold credentials for: a protected download URL, an SSH server, or an OpenAI/Anthropic-compatible API.</li><li>We recommend reading the <a href="security.html">security model</a> first.</li></ul></div></section>
+
+            <section data-reveal><span>02</span><div><h2>Install Airlock</h2><p>One command installs on every platform. The installer downloads the pinned artifact for your platform and refuses to run on any SHA-256 mismatch.</p><div class="docs-terminal"><b>Install (omit --open on first run)</b><button class="docs-copy" data-copy="gs-install" title="Copy">⧉</button><pre><code id="code-gs-install">npm install -g airlock-relay
+airlock-installer install --open</code></pre></div><p>Verify the installer contract immediately:</p><div class="docs-terminal"><b>Platform status</b><button class="docs-copy" data-copy="gs-status" title="Copy">⧉</button><pre><code id="code-gs-status">airlock-installer status --json
+airlock-installer doctor</code></pre></div><div class="docs-note"><strong>Signing</strong><p>macOS is ad-hoc signed and not notarized (expect Gatekeeper); Windows/Linux are unsigned previews. Always download from the official release and verify the SHA-256.</p></div></div></section>
+
+            <section data-reveal><span>03</span><div><h2>Launch and orient</h2><p>The local core <code>airlockd</code> starts with the desktop: HTTP listens on <code>127.0.0.1:4768</code>, SSH on <code>127.0.0.1:4770</code>. Closing the window does not stop the relay. The control channel is a current-user Unix socket (or named pipe on Windows).</p><p>Left navigation: <strong>Overview</strong> (core state and ports), <strong>Routes</strong> (create and manage), <strong>Activity</strong> (sanitized records), <strong>Settings</strong> (network scope, secret store, proxy, theme).</p></div></section>
+
+            <section data-reveal><span>04</span><div><h2>Create your first HTTP route</h2><p>From Routes, click <strong>New route</strong>, choose <strong>HTTP / Wget</strong>, and fill in the name, alias, upstream base URL, and allowed methods/query keys. The upstream Authorization is collected through a protected native prompt, never the WebView or logs.</p><p>Headless servers use a spec file:</p><div class="docs-terminal"><b>/etc/airlock/releases.json</b><button class="docs-copy" data-copy="gs-http-spec" title="Copy">⧉</button><pre><code id="code-gs-http-spec">{
+  "name": "Release mirror",
+  "alias": "releases",
+  "base_url": "https://example.com/releases/",
+  "authorization": "Bearer upstream-secret",
+  "methods": ["GET", "HEAD"],
+  "egress": "Auto"
+}</code></pre></div><div class="docs-terminal"><b>Create and enable (CLI)</b><button class="docs-copy" data-copy="gs-http-create" title="Copy">⧉</button><pre><code id="code-gs-http-create">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes create http --file /etc/airlock/releases.json
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes enable releases</code></pre></div><div class="docs-warning"><strong>The capability is printed once</strong><p>Creation prints the local capability exactly once. Hand it to the caller; it is never shown again, and upstream secrets must never appear in arguments.</p></div></div></section>
+
+            <section data-reveal><span>05</span><div><h2>Verify the HTTP route</h2><p>Callers use the local endpoint <code>127.0.0.1:4768/r/releases/...</code> with their local credential. The upstream URL and Authorization stay hidden.</p><div class="docs-terminal"><b>Success</b><button class="docs-copy" data-copy="gs-http-ok" title="Copy">⧉</button><pre><code id="code-gs-http-ok">curl -H "Authorization: Bearer &lt;local-token&gt;" \
+  http://127.0.0.1:4768/r/releases/latest.zip -o latest.zip</code></pre></div><div class="docs-terminal"><b>Expected failure</b><button class="docs-copy" data-copy="gs-http-fail" title="Copy">⧉</button><pre><code id="code-gs-http-fail">curl -H "Authorization: Bearer wrong" http://127.0.0.1:4768/r/releases/latest.zip
+# HTTP 401 invalid_api_key; no upstream or secret details leak</code></pre></div><p>Activity shows one <code>allowed</code> and one <code>blocked</code> record, both sanitized.</p></div></section>
+
+            <section data-reveal><span>06</span><div><h2>Create an SSH route</h2><p>SSH routes require probing the upstream host key first. The desktop wizard collects the upstream address/credentials, local username and password, then asks you to confirm the host key. CLI path:</p><div class="docs-terminal"><b>Probe host key</b><button class="docs-copy" data-copy="gs-ssh-probe" title="Copy">⧉</button><pre><code id="code-gs-ssh-probe">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  ssh probe --address build.example:22 --egress Auto
+# Write the returned host_key into a 0600 spec file</code></pre></div><div class="docs-terminal"><b>build.json</b><button class="docs-copy" data-copy="gs-ssh-spec" title="Copy">⧉</button><pre><code id="code-gs-ssh-spec">{
+  "name": "Build server",
+  "alias": "build",
+  "local_username": "build",
+  "upstream": "build.example:22",
+  "username": "deploy",
+  "password": "upstream-password",
+  "host_key": "ssh-ed25519 AAAA...",
+  "allowed_command": "deploy --release",
+  "egress": "Auto"
+}</code></pre></div><div class="docs-terminal"><b>Create, health check, enable</b><button class="docs-copy" data-copy="gs-ssh-create" title="Copy">⧉</button><pre><code id="code-gs-ssh-create">airlock ... routes create ssh --file /etc/airlock/build.json
+airlock ... routes health build
+airlock ... routes enable build</code></pre></div><p>Callers connect with <code>ssh build@127.0.0.1 -p 4770</code> and enter the local password. Only the exact command <code>deploy --release</code> is allowed by default. For interactive shells, enable the interactive-shell switch together with all-commands permission (high risk).</p></div></section>
+
+            <section data-reveal><span>07</span><div><h2>Create an LLM route</h2><div class="docs-terminal"><b>coding.json</b><button class="docs-copy" data-copy="gs-llm-spec" title="Copy">⧉</button><pre><code id="code-gs-llm-spec">{
+  "name": "Coding",
+  "alias": "coding",
+  "base_url": "https://api.example.com/v1",
+  "authorization": "upstream-key",
+  "provider": "openai",
+  "models": ["model-a", "model-b"],
+  "max_output_tokens": 4096,
+  "requests_per_minute": 60,
+  "max_concurrent": 4,
+  "track_usage": true
+}</code></pre></div><p>Creation prints a local secondary API key once. Callers use:</p><div class="docs-terminal"><b>Client configuration</b><button class="docs-copy" data-copy="gs-llm-use" title="Copy">⧉</button><pre><code id="code-gs-llm-use">export OPENAI_BASE_URL=http://127.0.0.1:4768/r/coding
+export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre></div><p>Disallowed models return <code>403 model_not_allowed</code>; oversized outputs return <code>400</code>. Usage tracking keeps numbers only.</p></div></section>
+
+            <section data-reveal><span>08</span><div><h2>Rotate and revoke credentials</h2><ul><li><strong>Rotate</strong>: desktop "Edit route → Rotate" or <code>routes rotate-credential</code>. Old credentials stop working immediately.</li><li><strong>Revoke</strong>: <code>routes disable &lt;alias&gt;</code> keeps config but blocks access; <code>routes delete &lt;alias&gt;</code> removes the route and its secrets.</li><li><strong>Emergency stop</strong>: <code>routes stop-all --yes</code> disables every route while retaining configuration.</li></ul></div></section>
+
+            <section data-reveal><span>09</span><div><h2>Next steps</h2><ul><li>Explore the <a href="desktop.html">desktop console</a> (audit, health, ports).</li><li>Read <a href="server.html">Server Core</a> and <a href="operations.html">operations</a> for production.</li><li>See <a href="platforms.html">platforms</a> for Windows/Linux/Raspberry Pi.</li><li>Use the <a href="cli.html">CLI reference</a> for command details.</li></ul></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

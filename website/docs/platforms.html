@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Airlock cross-platform support: macOS, Windows, Linux, and Raspberry Pi installation and verification matrix." />
+    <title>Airlock - 跨平台与树莓派</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="platforms">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+    </header>
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group"><span>指南</span><a class="docs-chapter-link" href="getting-started.html">从零开始</a><a class="docs-chapter-link" href="install.html">安装与校验</a><a class="docs-chapter-link" href="desktop.html">桌面控制台</a></div>
+            <div class="docs-chapter-group"><span>参考</span><a class="docs-chapter-link" href="security.html">安全模型</a><a class="docs-chapter-link" href="routes.html">路由与策略</a><a class="docs-chapter-link" href="server.html">Server Core</a><a class="docs-chapter-link" href="operations.html">运维与排障</a><a class="docs-chapter-link active" href="platforms.html">跨平台与树莓派</a><a class="docs-chapter-link" href="cli.html">CLI 参考</a></div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>跨平台与树莓派</h1>
+            <p class="docs-lead" data-reveal>v0.1.6 起所有支持平台都可以通过 <code>airlock-installer install</code> 安装；每个平台的产物都固定 SHA-256，校验失败即拒绝。</p>
+
+            <section data-reveal><span>01</span><div><h2>支持矩阵</h2><div class="docs-reference-table"><div><strong>macOS</strong><code>arm64 / x64 · DMG</code><p>12+；arm64 随 npm 包内置，x64 从 Release 下载；ad-hoc 签名、未公证。</p></div><div><strong>Windows</strong><code>x64 / x86 / arm64 · NSIS</code><p>10+；静默安装（UAC 提示），预览包未代码签名。</p></div><div><strong>Linux</strong><code>x64 / arm64 · AppImage</code><p>安装到 ~/.local/bin；GPG 签名随 Release 发布。</p></div><div><strong>Linux ARMv7</strong><code>32 位树莓派 · 构建脚本</code><p>无托管构建机，在设备端运行 build 脚本后发布。</p></div></div></div></section>
+
+            <section data-reveal><span>02</span><div><h2>macOS</h2><p>Apple Silicon 安装使用 npm 包内置 DMG；Intel 版本会从 Release 下载并校验。首次打开需 Gatekeeper 确认（ad-hoc 签名，未公证）：右键 → 打开，或系统设置 → 隐私与安全性 → 仍要打开。安装前务必核对 SHA-256。</p></div></section>
+
+            <section data-reveal><span>03</span><div><h2>Windows</h2><p>安装器下载固定校验和的 <code>setup.exe</code> 并静默运行；安装按机器级进行，需要 UAC 提权。SmartScreen 可能提示"未知发布者"，这是预览包未代码签名的预期行为——请用 SHA-256 清单交叉验证后继续。</p></div></section>
+
+            <section data-reveal><span>04</span><div><h2>Linux</h2><p>AppImage 安装到 <code>~/.local/bin/Airlock.AppImage</code>。无 FUSE 的发行版（部分容器/精简系统）使用 <code>--appimage-extract-and-run</code> 启动。deb 安装包同时随 Release 提供（<code>sudo dpkg -i</code>）。GPG 校验：</p><div class="docs-terminal"><b>校验</b><button class="docs-copy" data-copy="plt-gpg" title="Copy">⧉</button><pre><code id="code-plt-gpg">gpg --import Airlock-gpg-pubkey.asc
+gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage</code></pre></div></div></section>
+
+            <section data-reveal><span>05</span><div><h2>树莓派</h2><ul><li><strong>64 位系统（Pi 4/5）</strong>：直接 <code>npm install -g airlock-relay && airlock-installer install --open</code>，使用 arm64 AppImage。</li><li><strong>32 位系统（armv7/armhf）</strong>：GitHub 没有 armv7 构建机，需在设备端构建。克隆仓库后运行 <code>bash scripts/build-armv7-desktop.sh [--upload]</code>（依赖见脚本头部注释：Node.js、Rust、webkit2gtk 等）。构建出的 <code>.deb</code> 与 <code>.AppImage</code> 可上传到 Release。</li></ul></div></section>
+
+            <section data-reveal><span>06</span><div><h2>验收与发布边界</h2><p>macOS arm64/x64、Windows x64/x86/arm64 与 Linux x64/arm64 均已发布预览产物并通过维护者实机验收；Windows/Linux 未签名，Apple 未公证，因此不属于"已认证"发布。完整边界与发布前清单见<a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/cross-platform.md" target="_blank" rel="noreferrer">仓库跨平台文档</a>。</p></div></section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>Platforms and Raspberry Pi</h1>
+            <p class="docs-lead" data-reveal>Since v0.1.6, every supported platform installs with <code>airlock-installer install</code>; every artifact carries a pinned SHA-256 and fails closed on mismatch.</p>
+            <section data-reveal><span>01</span><div><h2>Support matrix</h2><div class="docs-reference-table"><div><strong>macOS</strong><code>arm64 / x64 · DMG</code><p>12+; arm64 ships in the npm package, x64 downloads from the release; ad-hoc signed, not notarized.</p></div><div><strong>Windows</strong><code>x64 / x86 / arm64 · NSIS</code><p>10+; silent install (UAC prompt), unsigned preview.</p></div><div><strong>Linux</strong><code>x64 / arm64 · AppImage</code><p>Installs to ~/.local/bin; GPG signatures ship with the release.</p></div><div><strong>Linux ARMv7</strong><code>32-bit Pi · build script</code><p>No hosted armv7 runner; build on-device and publish.</p></div></div></div></section>
+            <section data-reveal><span>02</span><div><h2>macOS</h2><p>Apple Silicon uses the bundled DMG; Intel downloads and verifies the release DMG. First open requires Gatekeeper confirmation (ad-hoc, not notarized): right-click → Open, or System Settings → Privacy & Security → Open Anyway. Always verify the SHA-256 first.</p></div></section>
+            <section data-reveal><span>03</span><div><h2>Windows</h2><p>The installer downloads the pinned <code>setup.exe</code> and runs it silently; installation is machine-wide and requires UAC. SmartScreen may flag the unsigned preview — cross-check the SHA-256 manifest before continuing.</p></div></section>
+            <section data-reveal><span>04</span><div><h2>Linux</h2><p>AppImages install to <code>~/.local/bin/Airlock.AppImage</code>. On FUSE-less distributions use <code>--appimage-extract-and-run</code>. deb packages also ship with the release (<code>sudo dpkg -i</code>). GPG verification:</p><div class="docs-terminal"><b>Verify</b><button class="docs-copy" data-copy="plt-gpg" title="Copy">⧉</button><pre><code id="code-plt-gpg">gpg --import Airlock-gpg-pubkey.asc
+gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage</code></pre></div></div></section>
+            <section data-reveal><span>05</span><div><h2>Raspberry Pi</h2><ul><li><strong>64-bit OS (Pi 4/5)</strong>: install directly with <code>npm install -g airlock-relay && airlock-installer install --open</code> (arm64 AppImage).</li><li><strong>32-bit OS (armv7/armhf)</strong>: no hosted armv7 runner exists. Clone the repository on the Pi and run <code>bash scripts/build-armv7-desktop.sh [--upload]</code> (see the script header for dependencies). The resulting <code>.deb</code> and <code>.AppImage</code> can be uploaded to the release.</li></ul></div></section>
+            <section data-reveal><span>06</span><div><h2>Acceptance and release boundary</h2><p>macOS arm64/x64, Windows x64/x86/arm64, and Linux x64/arm64 publish preview artifacts that passed maintainer real-device acceptance; Windows/Linux are unsigned and macOS is not notarized, so they are not "certified" releases. See the <a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/cross-platform.md" target="_blank" rel="noreferrer">repository cross-platform document</a> for the full boundary and release checklist.</p></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>

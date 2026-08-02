@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Airlock operations and troubleshooting: daily checks, upgrades, backups, common failures, and emergency response." />
+    <title>Airlock - 运维与排障</title>
+    <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20260803-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260803-docs" />
+    <script src="../assets/docs-site.js?v=20260803-docs" defer></script>
+  </head>
+  <body class="docs-page" data-chapter="operations">
+    <header class="docs-header">
+      <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+    </header>
+    <main class="docs-main" id="docs-main">
+      <div class="docs-layout">
+        <aside class="docs-sidebar" aria-label="Documentation chapters">
+          <div class="docs-sidebar-label">章节</div>
+          <nav class="docs-chapter-nav" aria-label="Documentation chapters">
+            <div class="docs-chapter-group"><span>指南</span><a class="docs-chapter-link" href="getting-started.html">从零开始</a><a class="docs-chapter-link" href="install.html">安装与校验</a><a class="docs-chapter-link" href="desktop.html">桌面控制台</a></div>
+            <div class="docs-chapter-group"><span>参考</span><a class="docs-chapter-link" href="security.html">安全模型</a><a class="docs-chapter-link" href="routes.html">路由与策略</a><a class="docs-chapter-link" href="server.html">Server Core</a><a class="docs-chapter-link active" href="operations.html">运维与排障</a><a class="docs-chapter-link" href="platforms.html">跨平台与树莓派</a><a class="docs-chapter-link" href="cli.html">CLI 参考</a></div>
+          </nav>
+          <a class="docs-sidebar-home" href="../index.html"><span aria-hidden="true">←</span><span>返回项目主页</span></a>
+        </aside>
+        <div class="docs-content">
+          <article class="docs-language" data-language="zh">
+            <h1 data-reveal>运维与排障</h1>
+            <p class="docs-lead" data-reveal>日常检查、升级备份、常见故障与紧急处置的运行手册。</p>
+
+            <section data-reveal><span>01</span><div><h2>日常检查</h2><div class="docs-reference-table"><div><strong>核心状态</strong><code>airlock ... status</code><p>核心、监听器与脱敏路由摘要。</p></div><div><strong>路由健康</strong><code>airlock ... routes health &lt;alias&gt;</code><p>不发送应用请求正文；SSH 只验证 Host Key 与认证。</p></div><div><strong>安装器契约</strong><code>airlock-installer doctor</code><p>校验当前平台发布产物完整性。</p></div></div></div></section>
+
+            <section data-reveal><span>02</span><div><h2>升级流程</h2><ol><li>停止服务（桌面端：退出 airlockd；服务器：<code>systemctl stop airlock</code>）。</li><li>离线备份 <code>/var/lib/airlock</code>、control/web token 文件。</li><li>替换二进制或更新 npm 包并重新安装。</li><li>启动后执行 <code>status</code> 与关键路由 <code>routes health</code>。</li></ol><div class="docs-warning"><strong>备份即 Secret</strong><p>数据目录包含上游描述与加密后的凭据，备份文件必须按 Secret 保管。</p></div></div></section>
+
+            <section data-reveal><span>03</span><div><h2>常见故障</h2><div class="docs-reference-table"><div><strong>Host Key 不匹配</strong><code>routes health → host key mismatch</code><p>停用路由，重新 probe 并在独立渠道核对新指纹，绝不绕过该错误。</p></div><div><strong>上游不可达</strong><code>upstream unavailable</code><p>检查 DNS、端口与 Direct/Proxy/Auto 策略；Auto 不会重放已开始的请求。</p></div><div><strong>本地 SSH 被拒</strong><code>SSH authentication failed</code><p>确认路由已启用、本地用户名唯一、本地密码/公钥正确。</p></div><div><strong>LLM 被限流</strong><code>429 capacity_limit / rate limit</code><p>检查 RPM/并发配置与全局网关容量。</p></div><div><strong>端口被占用</strong><code>bind: address in use</code><p>在桌面端查看占用者并确认结束，或切换非特权端口。</p></div></div></div></section>
+
+            <section data-reveal><span>04</span><div><h2>紧急处置</h2><div class="docs-terminal"><b>立即全停</b><button class="docs-copy" data-copy="ops-stop" title="Copy">⧉</button><pre><code id="code-ops-stop">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes stop-all --yes</code></pre></div><p>全停保留全部配置；处置完成后逐条审查并重新启用。桌面端同样提供"停止全部"按钮。</p></div></section>
+
+            <section data-reveal><span>05</span><div><h2>监控建议</h2><ul><li>对关键路由配置外部健康探测（HTTP 层或 SSH 隧道），失败时告警。</li><li>定期轮换本地凭据与上游密码；人员变动时立即轮换。</li><li>关注活动页的 <code>blocked</code> 记录：持续失败可能表示凭据泄露或误配置。</li><li>订阅项目 Release，按升级流程更新。</li></ul></div></section>
+          </article>
+
+          <article class="docs-language" data-language="en" hidden>
+            <h1 data-reveal>Operations and troubleshooting</h1>
+            <p class="docs-lead" data-reveal>A runbook for daily checks, upgrades, backups, common failures, and emergency response.</p>
+            <section data-reveal><span>01</span><div><h2>Daily checks</h2><div class="docs-reference-table"><div><strong>Core status</strong><code>airlock ... status</code><p>Core, listeners, and sanitized route summaries.</p></div><div><strong>Route health</strong><code>airlock ... routes health &lt;alias&gt;</code><p>No application body; SSH validates host key and authentication only.</p></div><div><strong>Installer contract</strong><code>airlock-installer doctor</code><p>Verifies the current platform release artifact.</p></div></div></div></section>
+            <section data-reveal><span>02</span><div><h2>Upgrade procedure</h2><ol><li>Stop the service (desktop: quit airlockd; server: <code>systemctl stop airlock</code>).</li><li>Back up <code>/var/lib/airlock</code> and both token files offline.</li><li>Replace binaries or update the npm package and reinstall.</li><li>Run <code>status</code> and <code>routes health</code> for critical routes.</li></ol><div class="docs-warning"><strong>Backups are secrets</strong><p>The data directory contains upstream descriptors and protected credentials; store backups accordingly.</p></div></div></section>
+            <section data-reveal><span>03</span><div><h2>Common failures</h2><div class="docs-reference-table"><div><strong>Host-key mismatch</strong><code>routes health → host key mismatch</code><p>Disable the route, re-probe, and confirm the new fingerprint over an independent channel. Never bypass this error.</p></div><div><strong>Upstream unreachable</strong><code>upstream unavailable</code><p>Check DNS, port, and Direct/Proxy/Auto policy. Auto never replays an already-started request.</p></div><div><strong>Local SSH denied</strong><code>SSH authentication failed</code><p>Confirm the route is enabled, the local username is unique, and the local password/public key is correct.</p></div><div><strong>LLM throttled</strong><code>429 capacity_limit / rate limit</code><p>Review RPM/concurrency and global gateway capacity.</p></div><div><strong>Port in use</strong><code>bind: address in use</code><p>Inspect the owner in the desktop settings and confirm termination, or switch ports.</p></div></div></div></section>
+            <section data-reveal><span>04</span><div><h2>Emergency response</h2><div class="docs-terminal"><b>Stop everything now</b><button class="docs-copy" data-copy="ops-stop" title="Copy">⧉</button><pre><code id="code-ops-stop">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes stop-all --yes</code></pre></div><p>Stop-all retains all configuration; review and re-enable per route afterward. The desktop also has a Stop all button.</p></div></section>
+            <section data-reveal><span>05</span><div><h2>Monitoring recommendations</h2><ul><li>Probe critical routes externally and alert on failure.</li><li>Rotate local and upstream credentials regularly and after personnel changes.</li><li>Watch <code>blocked</code> activity: persistent failures may mean leaked credentials or misconfiguration.</li><li>Subscribe to releases and follow the upgrade procedure.</li></ul></div></section>
+          </article>
+          <nav class="docs-pager" id="docs-pager"></nav>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span>本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> LouisonH · <a href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p>v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite">已复制</div>
+  </body>
+</html>
