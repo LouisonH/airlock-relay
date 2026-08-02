@@ -130,7 +130,7 @@ test("reports the current platform contract without opening the application", ()
   assert.equal(report.package, PACKAGE_NAME);
   assert.equal(report.currentTarget.platform, process.platform);
   assert.equal(report.currentTarget.arch, process.arch);
-  assert.equal(report.installerAvailable, process.platform === "darwin" && process.arch === "arm64");
+  assert.equal(report.installerAvailable, getPlatformContract().status === "released");
   assert.equal(report.currentTarget.installerAvailable, report.installerAvailable);
 });
 
