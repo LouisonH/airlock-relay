@@ -88,6 +88,22 @@ npm install -g airlock-relay && airlock-installer install --open
 ~/.local/bin/Airlock.AppImage --appimage-extract-and-run
 ```
 
+Linux 产物还带有 GPG 签名。导入发布公钥后可校验：
+
+```bash
+gpg --import Airlock-gpg-pubkey.asc
+gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage
+```
+
+### 树莓派
+
+- **64 位 Raspberry Pi OS**（Pi 4/5）：直接安装 arm64 AppImage：
+  `npm install -g airlock-relay && airlock-installer install`。
+- **32 位 Raspberry Pi OS**（armv7/armhf）：由于没有托管的 armv7 构建机，
+  需要在树莓派本机运行仓库里的 `bash scripts/build-armv7-desktop.sh`
+  （依赖见脚本头部注释），再把生成的 `.deb` 与 `.AppImage` 发布到 Release，
+  即可更新安装器契约。
+
 ## 首次运行
 
 - HTTP 与 LLM 路由默认监听 `127.0.0.1:4768`。

@@ -17,7 +17,7 @@ Core/CLI-only target with no desktop bundle.
 | Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Released preview (unsigned) |
 | Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Released preview (unsigned) |
 | Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Released preview (unsigned) |
-| Linux ARMv7 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | Core / CLI only | Planned desktop |
+| Linux ARMv7 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | Core / CLI + on-device build script | Desktop on 32-bit Pi via `scripts/build-armv7-desktop.sh` |
 
 “Cross-compiled” means CI and the target-aware build script compile both
 `airlockd` and `airlock` with `CGO_ENABLED=0`. Published preview installers have

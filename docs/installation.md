@@ -94,6 +94,24 @@ available on the distribution, launch it with:
 ~/.local/bin/Airlock.AppImage --appimage-extract-and-run
 ```
 
+Linux artifacts are also GPG-signed. Import the release public key and verify
+before running:
+
+```bash
+gpg --import Airlock-gpg-pubkey.asc
+gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage
+```
+
+### Raspberry Pi
+
+- **64-bit Raspberry Pi OS** (Pi 4/5): install the arm64 AppImage directly with
+  `npm install -g airlock-relay && airlock-installer install`.
+- **32-bit Raspberry Pi OS** (armv7/armhf): the desktop bundle is built on the
+  Pi itself because no hosted armv7 runner exists. Run
+  `bash scripts/build-armv7-desktop.sh` from the repository checkout (see the
+  script header for dependencies), then publish the resulting `.deb` and
+  `.AppImage` to the release so the installer contract can be updated.
+
 ## First Run
 
 - HTTP and LLM routes listen on `127.0.0.1:4768` by default.

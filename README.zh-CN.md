@@ -117,7 +117,10 @@ ad-hoc 签名，但没有 Developer ID 签名与 Apple 公证，请先阅读 Gat
 
 各平台都会下载固定校验和的发布产物，校验失败即拒绝安装：Windows 使用 NSIS
 安装器（可能出现提权提示），Linux 安装 AppImage 到 `~/.local/bin`，macOS 挂载
-已核验 DMG。npm 诊断 CLI 也可在 Windows x64/x86/ARM64 与 Linux x64/ARM64 无副作用安装。运行
+已核验 DMG。Linux 产物还使用 `Airlock Release Signing` 密钥做 GPG 签名，公钥与
+分离签名随 Release 发布。64 位树莓派系统可直接安装 arm64 AppImage；32 位
+armv7 用户可在树莓派上运行 `scripts/build-armv7-desktop.sh` 构建桌面包。
+npm 诊断 CLI 也可在 Windows x64/x86/ARM64 与 Linux x64/ARM64 无副作用安装。运行
 `airlock-installer status --json` 或 `airlock-installer platform --json` 查看当前平台契约。
 这些目标属于 CI 预览，不是经过公开校验的安装器：`install` 会失败关闭，绝不会下载未验证
 CI 产物。Linux ARMv7 与 macOS x64 仍处于计划阶段。

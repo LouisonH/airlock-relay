@@ -117,7 +117,11 @@ npm install -g airlock-relay && airlock-installer install --open
 Every platform downloads its pinned, SHA-256-verified release asset; checksum
 mismatches fail closed. Windows uses the NSIS installer (an elevation prompt may
 appear), Linux installs an AppImage to `~/.local/bin`, and macOS mounts the
-verified DMG. Alternatively, get the artifacts and checksums from
+verified DMG. Linux artifacts are additionally GPG-signed with the `Airlock
+Release Signing` key; the public key and detached signatures ship with the
+release. 64-bit Raspberry Pi OS installs the arm64 AppImage directly, and
+32-bit armv7 users can build the desktop bundle on the Pi with
+`scripts/build-armv7-desktop.sh`. Alternatively, get the artifacts and checksums from
 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6),
 then follow the [installation guide](docs/installation.md). The macOS package is
 ad-hoc signed but is not Developer ID signed or notarized, so read the
