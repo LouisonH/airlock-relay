@@ -27,6 +27,12 @@
 .docs-layout { display: grid; grid-template-columns: 218px minmax(0, 1fr); gap: clamp(32px, 6vw, 74px); }
 .docs-sidebar { position: sticky; top: 24px; align-self: start; display: grid; gap: 15px; min-height: calc(100vh - 112px); padding: 4px 20px 20px 0; border-right: 1px solid var(--border); }
 .docs-sidebar-label, .docs-chapter-group > span { color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.docs-sidebar { gap: 8px; }
+.docs-sidebar-label { margin-bottom: 1px; }
+.docs-faq-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 3px 0 7px; color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border)); border-left: 2px solid var(--accent); border-radius: 6px; font-weight: 760; }
+.docs-faq-link::after { content: "FAQ"; padding: 2px 7px; color: #fff; background: var(--accent); border-radius: 999px; font-size: 8px; font-weight: 800; letter-spacing: .06em; }
+.docs-faq-link:hover { background: var(--accent-soft); transform: translateX(2px); }
+.docs-faq-link.active { background: color-mix(in srgb, var(--accent-soft) 80%, var(--surface)); }
 .docs-chapter-nav { display: grid; gap: 16px; }
 .docs-chapter-group { display: grid; gap: 4px; padding-top: 11px; border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent); }
 .docs-chapter-group:first-child { padding-top: 0; border-top: 0; }
