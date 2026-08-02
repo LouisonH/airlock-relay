@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { constants, createReadStream, realpathSync } from "node:fs";
+import { constants, createReadStream, createWriteStream, realpathSync } from "node:fs";
 import {
   access,
+  chmod,
   mkdtemp,
   mkdir,
   rename,
@@ -12,16 +13,25 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { spawnSync } from "node:child_process";
-import { AIRLOCK_VERSION, getPlatformContract, listPlatformContracts, resolveReleasedArtifact } from "../lib/platform.mjs";
+import { spawn, spawnSync } from "node:child_process";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import {
+  AIRLOCK_VERSION,
+  RELEASE_URL,
+  getPlatformContract,
+  listPlatformContracts,
+  releaseAssetURL,
+  resolveReleasedArtifact,
+} from "../lib/platform.mjs";
+
+export { RELEASE_URL };
 
 export const PACKAGE_NAME = "airlock-relay";
 export const VERSION = AIRLOCK_VERSION;
-const releasedMacArtifact = resolveReleasedArtifact("darwin", "arm64");
-export const ASSET_NAME = releasedMacArtifact.artifactName;
-export const ASSET_SHA256 = releasedMacArtifact.sha256;
-export const RELEASE_URL =
-  "https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5";
+const bundledMacTarget = resolveReleasedArtifact("darwin", "arm64");
+export const ASSET_NAME = bundledMacTarget.artifactName;
+export const ASSET_SHA256 = bundledMacTarget.sha256;
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const bundledAssetPath = resolve(scriptDirectory, "../dist", ASSET_NAME);
@@ -40,9 +50,9 @@ Usage:
   airlock help
 
 Commands:
-  install   Install the verified Airlock.app to ~/Applications.
-  verify    Verify the SHA-256 digest of the bundled DMG.
-  path      Print the bundled DMG path.
+  install   Install the verified Airlock app for this platform.
+  verify    Verify the SHA-256 digest of this platform's release asset.
+  path      Print the bundled DMG path (Apple Silicon macOS only).
   status    Print the current platform and artifact status.
   platform  Print all platform release contracts.
   doctor    Verify the bundled installer without opening it.
@@ -50,14 +60,17 @@ Commands:
   version   Print the package version.
 
 Options:
-  --output  Destination Applications directory for Airlock.app.
+  --output  Destination directory for Airlock.app (macOS) or Airlock.AppImage (Linux).
   --force   Replace an incomplete Airlock.app at the destination.
   --open    Launch Airlock after it is installed.
   --json    Emit machine-readable status or platform data.
   --help    Show this help.
 
-The verified npm installer is currently published for Apple Silicon Macs running macOS 12 or newer.
-Windows and Linux targets are recognized for diagnostics; install fails closed until each target has a public artifact and pinned SHA-256.
+The verified npm installer supports Apple Silicon and Intel Macs (macOS 12 or newer),
+Windows x64/x86/arm64, and Linux x64/arm64. macOS uses the bundled or release DMG,
+Windows downloads the pinned NSIS installer, and Linux installs the pinned AppImage.
+Every asset is SHA-256 verified against the release contract before installation and
+fails closed on mismatch. Linux ARMv7 remains a Core/CLI-only target.
 The macOS app is ad-hoc signed and is not Apple-notarized. Read the release notes:
 ${RELEASE_URL}
 `;
@@ -123,11 +136,11 @@ export async function sha256(filePath) {
   });
 }
 
-async function verifyFile(filePath) {
+async function verifyFile(filePath, expectedDigest = ASSET_SHA256) {
   const digest = await sha256(filePath);
-  if (digest !== ASSET_SHA256) {
+  if (digest !== expectedDigest) {
     throw new Error(
-      `Integrity check failed for ${filePath}\nExpected ${ASSET_SHA256}\nReceived ${digest}`,
+      `Integrity check failed for ${filePath}\nExpected ${expectedDigest}\nReceived ${digest}`,
     );
   }
   return digest;
@@ -154,6 +167,29 @@ function runMacOSCommand(binary, args, label) {
   if (result.status !== 0) {
     const detail = result.stderr?.trim();
     throw new Error(`${label} failed${detail ? `: ${detail}` : ""}`);
+  }
+}
+
+async function downloadFile(url, destination) {
+  const response = await fetch(url, { redirect: "follow" });
+  if (!response.ok || !response.body) {
+    throw new Error(`Download failed (HTTP ${response.status}) for ${url}`);
+  }
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(destination));
+}
+
+async function fetchVerifiedAsset(target) {
+  const directory = await mkdtemp(join(tmpdir(), "airlock-asset-"));
+  const destination = join(directory, target.artifactName);
+  try {
+    const url = releaseAssetURL(target);
+    console.log(`Downloading ${url}`);
+    await downloadFile(url, destination);
+    await verifyFile(destination, target.sha256);
+    return { directory, destination };
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true });
+    throw error;
   }
 }
 
@@ -197,10 +233,13 @@ function openApplication(applicationPath) {
   runMacOSCommand("/usr/bin/open", [applicationPath], "macOS could not launch Airlock");
 }
 
-async function install(options) {
-  assertSupportedPlatform();
-  await verifyFile(bundledAssetPath);
+function launchDetached(executable, args = []) {
+  const child = spawn(executable, args, { stdio: "ignore", detached: true });
+  child.on("error", () => {});
+  child.unref();
+}
 
+async function installMacOSDMG(assetPath, target, options) {
   const applicationsDirectory = resolve(options.output ?? join(homedir(), "Applications"));
   const destination = join(applicationsDirectory, "Airlock.app");
   await mkdir(applicationsDirectory, { recursive: true });
@@ -218,7 +257,7 @@ async function install(options) {
     }
   }
 
-  const mountDirectory = await mountDiskImage(bundledAssetPath);
+  const mountDirectory = await mountDiskImage(assetPath);
   const source = join(mountDirectory, "Airlock.app");
   const temporaryPath = join(applicationsDirectory, `.Airlock-${process.pid}.app`);
   try {
@@ -238,10 +277,72 @@ async function install(options) {
   }
 
   console.log(`Installed Airlock: ${destination}`);
-  console.log(`SHA-256: ${ASSET_SHA256}`);
+  console.log(`SHA-256: ${target.sha256}`);
 
   if (options.open) {
     openApplication(destination);
+  }
+}
+
+async function installWindowsNSIS(installerPath, target, options) {
+  const result = spawnSync(installerPath, ["/S"], { stdio: "inherit" });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`Airlock Windows installer exited with status ${result.status}`);
+  }
+  console.log("Installed Airlock (Windows).");
+  console.log(`SHA-256: ${target.sha256}`);
+  if (options.open) {
+    const programFiles = process.env.ProgramFiles ?? "C:\\Program Files";
+    launchDetached(join(programFiles, "Airlock", "Airlock.exe"));
+  }
+}
+
+async function installLinuxAppImage(assetPath, target, options) {
+  const binDirectory = resolve(options.output ?? join(homedir(), ".local", "bin"));
+  await mkdir(binDirectory, { recursive: true });
+  const destination = join(binDirectory, "Airlock.AppImage");
+  await rm(destination, { force: true });
+  await rename(assetPath, destination);
+  await chmod(destination, 0o755);
+  console.log(`Installed Airlock: ${destination}`);
+  console.log(`SHA-256: ${target.sha256}`);
+  console.log("Launch with ~/.local/bin/Airlock.AppImage (use --appimage-extract-and-run if FUSE is unavailable).");
+  if (options.open) {
+    launchDetached(destination, ["--appimage-extract-and-run"]);
+  }
+}
+
+async function install(options) {
+  const target = resolveReleasedArtifact();
+  let downloaded = null;
+  let assetPath = bundledAssetPath;
+  if (target.platform !== "darwin" || target.arch !== "arm64") {
+    downloaded = await fetchVerifiedAsset(target);
+    assetPath = downloaded.destination;
+  } else {
+    await verifyFile(bundledAssetPath, target.sha256);
+  }
+  try {
+    switch (target.installType) {
+      case "macos-dmg":
+        await installMacOSDMG(assetPath, target, options);
+        break;
+      case "windows-nsis":
+        await installWindowsNSIS(assetPath, target, options);
+        break;
+      case "linux-appimage":
+        await installLinuxAppImage(assetPath, target, options);
+        break;
+      default:
+        throw new Error(`Unsupported installer type: ${target.installType}`);
+    }
+  } finally {
+    if (downloaded) {
+      await rm(downloaded.directory, { recursive: true, force: true });
+    }
   }
 }
 
@@ -258,7 +359,9 @@ function status(options) {
     currentTarget: target,
     installerAvailable: target.installerAvailable,
     installAction: target.installerAvailable
-      ? "verified-installer-available"
+      ? target.platform === "darwin" && target.arch === "arm64"
+        ? "bundled-verified-installer"
+        : "release-download-verified-installer"
       : "no-verified-installer-published",
   };
   if (options.json) {
@@ -286,11 +389,23 @@ function platform(options) {
 }
 
 async function doctor() {
-  assertSupportedPlatform();
-  const digest = await verifyFile(bundledAssetPath);
-  console.log("Installer integrity: verified");
-  console.log(`SHA-256: ${digest}`);
-  console.log("No application was opened or installed.");
+  const target = resolveReleasedArtifact();
+  let downloaded = null;
+  let filePath = bundledAssetPath;
+  if (target.platform !== "darwin" || target.arch !== "arm64") {
+    downloaded = await fetchVerifiedAsset(target);
+    filePath = downloaded.destination;
+  }
+  try {
+    const digest = await verifyFile(filePath, target.sha256);
+    console.log("Installer integrity: verified");
+    console.log(`SHA-256: ${digest}`);
+    console.log("No application was opened or installed.");
+  } finally {
+    if (downloaded) {
+      await rm(downloaded.directory, { recursive: true, force: true });
+    }
+  }
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -307,7 +422,11 @@ export async function main(argv = process.argv.slice(2)) {
       console.log(`${PACKAGE_NAME} v${VERSION}`);
       return;
     case "path":
-      assertSupportedPlatform();
+      if (process.platform !== "darwin" || process.arch !== "arm64") {
+        throw new Error(
+          "path is only available on Apple Silicon macOS. Use `airlock doctor` to verify this platform's release asset.",
+        );
+      }
       await verifyFile(bundledAssetPath);
       console.log(bundledAssetPath);
       return;
@@ -324,10 +443,20 @@ export async function main(argv = process.argv.slice(2)) {
       console.log(RELEASE_URL);
       return;
     case "verify": {
-      assertSupportedPlatform();
-      const digest = await verifyFile(bundledAssetPath);
-      console.log(`Verified ${ASSET_NAME}`);
-      console.log(`SHA-256: ${digest}`);
+      const target = resolveReleasedArtifact();
+      if (target.platform === "darwin" && target.arch === "arm64") {
+        const digest = await verifyFile(bundledAssetPath, target.sha256);
+        console.log(`Verified ${ASSET_NAME}`);
+        console.log(`SHA-256: ${digest}`);
+      } else {
+        const downloaded = await fetchVerifiedAsset(target);
+        try {
+          console.log(`Verified ${target.artifactName}`);
+          console.log(`SHA-256: ${target.sha256}`);
+        } finally {
+          await rm(downloaded.directory, { recursive: true, force: true });
+        }
+      }
       return;
     }
     case "install":

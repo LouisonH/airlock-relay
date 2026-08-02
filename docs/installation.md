@@ -1,24 +1,30 @@
-# Install Airlock on macOS
+# Install Airlock
 
 [English](installation.md) | [简体中文](installation.zh-CN.md)
 
 ## Requirements
 
-Airlock v0.1.5 supports Apple Silicon Macs running macOS 12 Monterey or newer.
-This release does not include an Intel, Windows, or Linux installer.
+Airlock v0.1.6 supports:
+
+- macOS 12 Monterey or newer on Apple Silicon and Intel Macs;
+- Windows 10 or newer on x64, x86 (i686), and arm64;
+- Linux x64 and arm64 desktop distributions (AppImage).
+
+Linux ARMv7 (Raspberry Pi) remains a Core/CLI-only target in this release.
 
 ## Verify the Download
 
-Download these files from the [v0.1.5 release](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5):
+Download these files from the [v0.1.6 release](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6):
 
-- `Airlock_0.1.5_aarch64.dmg` for normal installation
-- `Airlock_0.1.5_aarch64.app.zip` as a portable archive
-- `SHA256SUMS-v0.1.5.txt` for integrity verification
+- `Airlock_0.1.6_aarch64.dmg` (Apple Silicon) or `Airlock_0.1.6_x64.dmg` (Intel)
+- `Airlock_0.1.6_x64-setup.exe` / `Airlock_0.1.6_x86-setup.exe` / `Airlock_0.1.6_arm64-setup.exe` (Windows)
+- `Airlock_0.1.6_x86_64.AppImage` / `Airlock_0.1.6_aarch64.AppImage` (Linux)
+- `SHA256SUMS-v0.1.6.txt` for integrity verification
 
 From the directory containing the downloads, verify the DMG before opening it:
 
 ```bash
-shasum -a 256 -c SHA256SUMS-v0.1.5.txt
+shasum -a 256 -c SHA256SUMS-v0.1.6.txt
 ```
 
 The command also checks the ZIP when all three files are in the same directory.
@@ -40,7 +46,7 @@ replaced only when you explicitly add `--force` after checking the path.
 
 ### Install manually
 
-1. Open `Airlock_0.1.5_aarch64.dmg`.
+1. Open `Airlock_0.1.6_aarch64.dmg` (or `Airlock_0.1.6_x64.dmg`).
 2. Drag **Airlock** into **Applications**.
 3. Eject the Airlock disk image.
 4. In Finder, open Applications, Control-click **Airlock**, and choose **Open**.
@@ -48,7 +54,7 @@ replaced only when you explicitly add `--force` after checking the path.
 
 ### Why macOS Shows a Warning
 
-v0.1.5 is ad-hoc signed so its bundle integrity can be checked, but it is not
+v0.1.6 is ad-hoc signed so its bundle integrity can be checked, but it is not
 signed with an Apple Developer ID and has not been notarized by Apple. macOS
 therefore cannot verify the developer identity. This is a release limitation,
 not proof that a warning can be ignored: verify the SHA-256 checksum and ensure
@@ -61,6 +67,31 @@ quarantine attribute:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Airlock.app
+```
+
+## Install on Windows
+
+```powershell
+npm install -g airlock-relay && airlock-installer install --open
+```
+
+`airlock-installer` downloads the pinned `Airlock_0.1.6_<arch>-setup.exe`,
+verifies its SHA-256 against the release contract, and runs it silently. A
+User Account Control prompt appears because the NSIS installer installs for the
+machine. SmartScreen may warn because the preview installer is not code-signed.
+
+## Install on Linux
+
+```bash
+npm install -g airlock-relay && airlock-installer install --open
+```
+
+The installer downloads the pinned AppImage for x64 or arm64, verifies its
+SHA-256, and installs it to `~/.local/bin/Airlock.AppImage`. If FUSE is not
+available on the distribution, launch it with:
+
+```bash
+~/.local/bin/Airlock.AppImage --appimage-extract-and-run
 ```
 
 ## First Run

@@ -1,0 +1,64 @@
+name: Desktop macOS installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "codex/**"
+    paths:
+      - "apps/desktop/**"
+      - "scripts/build-sidecar.mjs"
+      - ".github/workflows/desktop-macos.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    name: Build macOS installer (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            triple: aarch64-apple-darwin
+            runner: macos-14
+          - target: darwin-x64
+            triple: x86_64-apple-darwin
+            runner: macos-13
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Build Tauri sidecar
+        shell: bash
+        env:
+          AIRLOCK_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/src-tauri/binaries
+        run: node scripts/build-sidecar.mjs ${{ matrix.target }}
+      - name: Build desktop installer
+        working-directory: apps/desktop
+        run: npm run tauri build -- --target ${{ matrix.triple }}
+      - name: Collect installer artifacts
+        shell: bash
+        run: |
+          mkdir -p .verify/installer-${{ matrix.target }}
+          find apps/desktop/src-tauri/target/${{ matrix.triple }}/release/bundle -type f \( -name "*.dmg" -o -name "*.app" \) -exec cp {} .verify/installer-${{ matrix.target }}/ \;
+      - uses: actions/upload-artifact@v5
+        with:
+          name: airlock-macos-${{ matrix.target }}
+          path: .verify/installer-${{ matrix.target }}/
+          if-no-files-found: error

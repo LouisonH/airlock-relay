@@ -4,6 +4,18 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
+## [0.1.6] - 2026-08-02
+
+### Added
+
+- `airlock-installer install` now works on every supported desktop platform:
+  Apple Silicon and Intel macOS, Windows x64/x86/arm64, and Linux x64/arm64.
+  macOS uses the bundled or release DMG, Windows runs the pinned NSIS installer,
+  and Linux installs the pinned AppImage to `~/.local/bin`; every release asset
+  is SHA-256 verified and fails closed on mismatch.
+- macOS x64 DMG and Linux x64/arm64 AppImage/deb installer builds are produced
+  by CI and published with fixed checksums.
+
 ## [0.1.5] - 2026-08-01
 
 ### Added
@@ -116,6 +128,7 @@ technical previews whose interfaces may still change.
   production security audit.
 
 [0.1.0]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0
+[0.1.6]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6
 [0.1.5]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5
 [0.1.4]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4
 [0.1.1]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.1

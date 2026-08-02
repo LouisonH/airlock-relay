@@ -1,24 +1,30 @@
-# 在 macOS 上安装 Airlock
+# 安装 Airlock
 
 [English](installation.md) | [简体中文](installation.zh-CN.md)
 
 ## 系统要求
 
-Airlock v0.1.5 支持运行 macOS 12 Monterey 或更高版本的 Apple Silicon Mac。
-首版暂不提供 Intel、Windows 或 Linux 安装包。
+Airlock v0.1.6 支持：
+
+- macOS 12 Monterey 或更高版本（Apple Silicon 与 Intel）；
+- Windows 10 或更高版本（x64、x86/i686、arm64）；
+- Linux x64 与 arm64 桌面发行版（AppImage）。
+
+Linux ARMv7（树莓派）本版本仍仅提供 Core/CLI 支持。
 
 ## 核验下载
 
-从 [v0.1.5 Release](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5) 下载：
+从 [v0.1.6 Release](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6) 下载：
 
-- `Airlock_0.1.5_aarch64.dmg`：常规安装包
-- `Airlock_0.1.5_aarch64.app.zip`：便携压缩包
-- `SHA256SUMS-v0.1.5.txt`：完整性校验值
+- `Airlock_0.1.6_aarch64.dmg`（Apple Silicon）或 `Airlock_0.1.6_x64.dmg`（Intel）
+- Windows：`Airlock_0.1.6_x64-setup.exe` / `Airlock_0.1.6_x86-setup.exe` / `Airlock_0.1.6_arm64-setup.exe`
+- Linux：`Airlock_0.1.6_x86_64.AppImage` / `Airlock_0.1.6_aarch64.AppImage`
+- `SHA256SUMS-v0.1.6.txt`：完整性校验值
 
 在下载目录执行：
 
 ```bash
-shasum -a 256 -c SHA256SUMS-v0.1.5.txt
+shasum -a 256 -c SHA256SUMS-v0.1.6.txt
 ```
 
 三个文件位于同一目录时，该命令会同时核验 DMG 和 ZIP。
@@ -38,7 +44,7 @@ npm install -g airlock-relay && airlock-installer install --open
 
 ### 手动安装
 
-1. 打开 `Airlock_0.1.5_aarch64.dmg`。
+1. 打开 `Airlock_0.1.6_aarch64.dmg`（或 `Airlock_0.1.6_x64.dmg`）。
 2. 将 **Airlock** 拖入 **Applications（应用程序）**。
 3. 推出 Airlock 磁盘映像。
 4. 在 Finder 的应用程序目录中按住 Control 点击 **Airlock**，选择**打开**。
@@ -46,7 +52,7 @@ npm install -g airlock-relay && airlock-installer install --open
 
 ### 为什么 macOS 会警告
 
-v0.1.5 已进行 ad-hoc 签名，可检查应用包结构完整性，但没有 Apple Developer
+v0.1.6 已进行 ad-hoc 签名，可检查应用包结构完整性，但没有 Apple Developer
 ID 签名，也没有经过 Apple 公证。因此 macOS 无法验证开发者身份。这个限制并不
 意味着可以直接忽略安全警告；请先确认文件来自官方 GitHub Release，并核对
 SHA-256。
@@ -57,6 +63,29 @@ SHA-256。
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Airlock.app
+```
+
+## 在 Windows 上安装
+
+```powershell
+npm install -g airlock-relay && airlock-installer install --open
+```
+
+安装器会下载固定校验和的 `Airlock_0.1.6_<架构>-setup.exe`，核验 SHA-256 后静默
+运行。由于 NSIS 安装包按机器安装，会出现 UAC 提权提示；预览安装包未代码签名，
+SmartScreen 可能提示。
+
+## 在 Linux 上安装
+
+```bash
+npm install -g airlock-relay && airlock-installer install --open
+```
+
+安装器会下载 x64 或 arm64 的固定校验和 AppImage，核验后安装到
+`~/.local/bin/Airlock.AppImage`。发行版没有 FUSE 时，可用以下命令启动：
+
+```bash
+~/.local/bin/Airlock.AppImage --appimage-extract-and-run
 ```
 
 ## 首次运行

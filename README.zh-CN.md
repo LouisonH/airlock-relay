@@ -11,7 +11,7 @@
     <a href="website/index.html">静态说明网页</a>
   </p>
   <p>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5"><img src="https://img.shields.io/badge/release-v0.1.5%20technical%20preview-b26b25" alt="v0.1.5 技术预览版" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6%20technical%20preview-b26b25" alt="v0.1.6 技术预览版" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 桌面端" />
     <img src="https://img.shields.io/badge/core-Go%201.25%2B-267d5f" alt="Go 1.25 或更高版本" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -19,7 +19,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.5 是技术预览版，已完成维护者执行的生产就绪安全审计；它尚未完成独立第三方审计、Developer ID 签名或 Apple 公证。生产使用前请阅读[审计记录](docs/security-audit-2026-07-31.md)。
+> Airlock v0.1.6 是技术预览版，已完成维护者执行的生产就绪安全审计；它尚未完成独立第三方审计、Developer ID 签名或 Apple 公证。生产使用前请阅读[审计记录](docs/security-audit-2026-07-31.md)。
 
 ## 为什么需要 Airlock？
 
@@ -104,18 +104,20 @@ flowchart LR
 
 ## 安装技术预览版
 
-v0.1.5 下载包支持运行 macOS 12 或更高版本的 Apple Silicon Mac。可用以下命令把已核验的
-应用安装到 `~/Applications`：
+v0.1.6 的 npm 安装器支持 Apple Silicon 与 Intel Mac（macOS 12 或更高版本）、
+Windows x64/x86/arm64 与 Linux x64/arm64。可用以下命令安装已核验的应用：
 
 ```bash
 npm install -g airlock-relay && airlock-installer install --open
 ```
 
-也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5)
+也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6)
 下载 DMG 和校验文件，再按照[安装指南](docs/installation.zh-CN.md)操作。安装包已进行
 ad-hoc 签名，但没有 Developer ID 签名与 Apple 公证，请先阅读 Gatekeeper 说明。
 
-npm 诊断 CLI 也可在 Windows x64/x86/ARM64 与 Linux x64/ARM64 无副作用安装。运行
+各平台都会下载固定校验和的发布产物，校验失败即拒绝安装：Windows 使用 NSIS
+安装器（可能出现提权提示），Linux 安装 AppImage 到 `~/.local/bin`，macOS 挂载
+已核验 DMG。npm 诊断 CLI 也可在 Windows x64/x86/ARM64 与 Linux x64/ARM64 无副作用安装。运行
 `airlock-installer status --json` 或 `airlock-installer platform --json` 查看当前平台契约。
 这些目标属于 CI 预览，不是经过公开校验的安装器：`install` 会失败关闭，绝不会下载未验证
 CI 产物。Linux ARMv7 与 macOS x64 仍处于计划阶段。
@@ -205,7 +207,7 @@ deploy/systemd     服务端 systemd 示例
 
 ## 文档
 
-可从[文档索引](docs/README.md)、[v0.1.5 发布说明](docs/releases/v0.1.5.zh-CN.md)、[审计记录](docs/security-audit-2026-07-31.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
+可从[文档索引](docs/README.md)、[v0.1.6 发布说明](docs/releases/v0.1.6.zh-CN.md)、[审计记录](docs/security-audit-2026-07-31.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
 
 ## 许可证
 

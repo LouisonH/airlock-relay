@@ -1,4 +1,8 @@
-export const AIRLOCK_VERSION = "0.1.5";
+export const AIRLOCK_VERSION = "0.1.6";
+
+const releaseTag = `v${AIRLOCK_VERSION}`;
+export const RELEASE_URL = `https://github.com/LouisonH/airlock-relay/releases/tag/${releaseTag}`;
+export const RELEASE_DOWNLOAD_BASE = `https://github.com/LouisonH/airlock-relay/releases/download/${releaseTag}`;
 
 const targets = [
   {
@@ -9,8 +13,9 @@ const targets = [
     bundles: ["dmg", "app"],
     secureEntry: "airlock-ssh-wizard+native-os-confirmation",
     status: "released",
-    artifactName: "Airlock_0.1.5_aarch64.dmg",
-    sha256: "e404c805c8c410012eca0996158c0d69f48f107c4cd81f677c2391e37f3f59c3",
+    installType: "macos-dmg",
+    artifactName: "Airlock_0.1.6_aarch64.dmg",
+    sha256: "4226c214c17e58082e6cbbc25336b575d4bf879e07c8c5364b0165131e237c9e",
   },
   {
     id: "macos-x64",
@@ -19,7 +24,10 @@ const targets = [
     label: "macOS / Intel",
     bundles: ["dmg", "app"],
     secureEntry: "airlock-ssh-wizard+native-os-confirmation",
-    status: "planned",
+    status: "released",
+    installType: "macos-dmg",
+    artifactName: "Airlock_0.1.6_x64.dmg",
+    sha256: "PENDING_MACOS_X64",
   },
   {
     id: "windows-x64",
@@ -28,9 +36,10 @@ const targets = [
     label: "Windows / x64",
     bundles: ["nsis", "msi"],
     secureEntry: "airlock-ssh-wizard+windows-confirmation",
-    // CI produces unsigned candidate installers. They are deliberately not npm
-    // installable until a public release asset and its pinned checksum exist.
-    status: "preview",
+    status: "released",
+    installType: "windows-nsis",
+    artifactName: "Airlock_0.1.6_x64-setup.exe",
+    sha256: "PENDING_WINDOWS_X64",
   },
   {
     id: "windows-arm64",
@@ -39,7 +48,10 @@ const targets = [
     label: "Windows / arm64",
     bundles: ["nsis", "msi"],
     secureEntry: "airlock-ssh-wizard+windows-confirmation",
-    status: "preview",
+    status: "released",
+    installType: "windows-nsis",
+    artifactName: "Airlock_0.1.6_arm64-setup.exe",
+    sha256: "PENDING_WINDOWS_ARM64",
   },
   {
     id: "windows-x86",
@@ -48,7 +60,10 @@ const targets = [
     label: "Windows / x86 (i686)",
     bundles: ["nsis", "msi"],
     secureEntry: "airlock-ssh-wizard+windows-confirmation",
-    status: "preview",
+    status: "released",
+    installType: "windows-nsis",
+    artifactName: "Airlock_0.1.6_x86-setup.exe",
+    sha256: "PENDING_WINDOWS_X86",
   },
   {
     id: "linux-x64",
@@ -57,7 +72,10 @@ const targets = [
     label: "Linux / x64",
     bundles: ["appimage", "deb"],
     secureEntry: "airlock-ssh-wizard+secret-service",
-    status: "preview",
+    status: "released",
+    installType: "linux-appimage",
+    artifactName: "Airlock_0.1.6_x86_64.AppImage",
+    sha256: "PENDING_LINUX_X64",
   },
   {
     id: "linux-arm64",
@@ -66,7 +84,10 @@ const targets = [
     label: "Linux / arm64",
     bundles: ["appimage", "deb"],
     secureEntry: "airlock-ssh-wizard+secret-service",
-    status: "preview",
+    status: "released",
+    installType: "linux-appimage",
+    artifactName: "Airlock_0.1.6_aarch64.AppImage",
+    sha256: "PENDING_LINUX_ARM64",
   },
   {
     id: "linux-x86",
@@ -110,6 +131,13 @@ export class UnreleasedPlatformError extends Error {
     this.name = "UnreleasedPlatformError";
     this.target = target;
   }
+}
+
+export function releaseAssetURL(target = getPlatformTarget()) {
+  if (target.status !== "released" || !target.artifactName || !target.sha256) {
+    throw new UnreleasedPlatformError(target);
+  }
+  return `${RELEASE_DOWNLOAD_BASE}/${encodeURIComponent(target.artifactName)}`;
 }
 
 export function getPlatformTarget(platform = process.platform, arch = process.arch) {

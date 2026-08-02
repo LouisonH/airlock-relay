@@ -1,29 +1,30 @@
 # Cross-Platform Core Bootstrap
 
-Airlock v0.1.5 publishes a verified Apple Silicon macOS desktop preview only.
-The npm package can be installed without side effects on recognized Windows and
-Linux targets to report a platform contract. Windows x64/x86/arm64 and Linux
-x64/arm64 are CI preview targets: their desktop artifacts are not public,
-checksummed installers, so `airlock-installer install` fails closed and never
-downloads a CI artifact. The desktop GUI, local control transport, and native
-prompt flows are ported at the code level, but still require real-device runtime
-acceptance before release.
+Airlock v0.1.6 publishes npm-installable desktop previews for macOS (Apple
+Silicon and Intel), Windows x64/x86/arm64, and Linux x64/arm64. Each platform's
+`airlock-installer install` downloads a pinned SHA-256-verified release asset
+and fails closed on mismatch. Windows and Linux installers are unsigned preview
+artifacts, so SmartScreen or a missing FUSE runtime may require extra steps;
+they are not Apple-notarized or Microsoft/Flatpak-signed. Linux ARMv7 remains a
+Core/CLI-only target with no desktop bundle.
 
 | Target | Core / CLI build | Local control transport | Platform secret backend | Desktop bundle | Status |
 | --- | --- | --- | --- | --- | --- |
 | macOS arm64 | Native | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Released preview |
-| macOS x64 | Target build | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Installer planned |
-| Windows x64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | CI preview · no public verified installer |
-| Windows x86 (i686) | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | CI preview · no public verified installer |
-| Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | CI preview · no public verified installer |
-| Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | CI preview · no public verified installer |
-| Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | CI preview · no public verified installer |
-| Linux ARMv7 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Raspberry Pi baseline |
+| macOS x64 | Target build | owner-only Unix socket | Keychain / protected file | DMG / `.app` | Released preview |
+| Windows x64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Released preview (unsigned) |
+| Windows x86 (i686) | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Released preview (unsigned) |
+| Windows arm64 | Cross-compiled | current-owner ACL named pipe | Credential Manager / protected file | NSIS / MSI | Released preview (unsigned) |
+| Linux x64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Released preview (unsigned) |
+| Linux arm64 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | AppImage / deb | Released preview (unsigned) |
+| Linux ARMv7 | Cross-compiled | owner-only Unix socket | Secret Service / protected file | Core / CLI only | Planned desktop |
 
 “Cross-compiled” means CI and the target-aware build script compile both
-`airlockd` and `airlock` with `CGO_ENABLED=0`. It is not a claim of runtime
-acceptance on physical hardware. A target remains unreleased until the runtime
-and installer checklist below is completed.
+`airlockd` and `airlock` with `CGO_ENABLED=0`. Published preview installers have
+passed maintainer-run smoke and real-device acceptance (macOS arm64, Windows
+x64/x86/arm64, and Linux x64/arm64), but remain unsigned and are not a claim of
+full runtime acceptance on every distribution or hardware combination. Linux
+ARMv7 desktop remains unreleased until the runtime checklist below is completed.
 
 ## Core Boundary Implemented Here
 
