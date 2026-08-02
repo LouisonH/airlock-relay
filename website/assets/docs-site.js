@@ -125,7 +125,7 @@ const revealObserver = "IntersectionObserver" in window
   ? new IntersectionObserver((entries, observer) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          entry.target.classList.add("visible");
+          entry.target.classList.add("is-visible");
           observer.unobserve(entry.target);
         }
       });
@@ -134,11 +134,11 @@ const revealObserver = "IntersectionObserver" in window
 
 document.querySelectorAll("[data-reveal]").forEach((element) => {
   if (reduceMotion.matches) {
-    element.classList.add("visible");
+    element.classList.add("is-visible");
   } else if (revealObserver) {
     revealObserver.observe(element);
   } else {
-    element.classList.add("visible");
+    element.classList.add("is-visible");
   }
 });
 
