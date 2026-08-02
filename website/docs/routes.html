@@ -7,15 +7,16 @@
     <meta name="description" content="Airlock route specifications and policies: HTTP, SSH, and LLM route fields, allowlists, limits, and host-key probing." />
     <title>Airlock - 路由与策略</title>
     <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../assets/styles.css?v=20260804-docs" />
-    <link rel="stylesheet" href="../assets/docs.css?v=20260804-docs" />
-    <script src="../assets/docs-site.js?v=20260804-docs" defer></script>
+    <link rel="stylesheet" href="../assets/styles.css?v=20260805-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260805-docs" />
+    <script src="../assets/docs-search.js?v=20260805-docs" defer></script>
+    <script src="../assets/docs-site.js?v=20260805-docs" defer></script>
   </head>
   <body class="docs-page" data-chapter="routes">
     <header class="docs-header">
       <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
-      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
-      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a><div class="docs-search" role="search"><label class="sr-only" for="docs-search-input">搜索文档</label><input id="docs-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="搜索文档…" aria-label="搜索文档" /><div id="docs-search-results" class="docs-search-results" role="listbox" hidden></div></div></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button><button type="button" data-language-button="ja">日</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </header>
     <main class="docs-main" id="docs-main">
       <div class="docs-layout">
@@ -135,6 +136,57 @@ airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
   routes enable &lt;alias&gt;</code></pre></div></div></section>
             <section data-reveal><span>05</span><div><h2>Host-key probing</h2><div class="docs-terminal"><b>Probe (stops before authentication)</b><button class="docs-copy" data-copy="rt-probe" title="Copy">⧉</button><pre><code id="code-rt-probe">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
   ssh probe --address ssh.example:22 --egress Auto</code></pre></div><p>The probe reads only the host key and stops before authentication. Confirm the fingerprint over an independent channel before writing the spec.</p></div></section>
+          </article>
+          <article class="docs-language" data-language="ja" hidden>
+            <h1 data-reveal>ルートとポリシー</h1>
+            <p class="docs-lead" data-reveal>仕様ファイルは Server Core の唯一の入力経路です：絶対パス、通常ファイル、シンボリックリンク禁止、<code>0600</code>。URL・パスワード・キーをコマンドライン引数に入れないでください。</p>
+            <section data-reveal><span>01</span><div><h2>HTTP ルート仕様</h2><div class="docs-terminal"><b>releases.json</b><button class="docs-copy" data-copy="rt-http" title="Copy">⧉</button><pre><code id="code-rt-http">{
+  "name": "Release mirror",
+  "alias": "releases",
+  "base_url": "https://upstream.example/releases/",
+  "authorization": "Bearer upstream-secret",
+  "methods": ["GET", "HEAD"],
+  "query_keys": ["version", "platform"],
+  "egress": "Auto"
+}</code></pre></div><ul><li><code>methods</code>：許可する HTTP メソッドの許可リスト。</li><li><code>query_keys</code>：透過を許可するクエリパラメータ。それ以外は拒否。</li><li><code>egress</code>：<code>Direct</code> / <code>Proxy</code> / <code>Auto</code>。</li></ul></div></section>
+            <section data-reveal><span>02</span><div><h2>SSH ルート仕様</h2><div class="docs-terminal"><b>build.json</b><button class="docs-copy" data-copy="rt-ssh" title="Copy">⧉</button><pre><code id="code-rt-ssh">{
+  "name": "Build server",
+  "alias": "build",
+  "local_username": "build",
+  "upstream": "build.example:22",
+  "username": "deploy",
+  "password": "upstream-password",
+  "host_key": "ssh-ed25519 AAAA...",
+  "allowed_command": "deploy --release",
+  "allow_all_commands": false,
+  "allow_interactive_shell": false,
+  "allow_sftp": false,
+  "record_commands": true,
+  "keyword_replacements": [
+    { "from": "%%TOKEN%%", "to": "protected-value", "enabled": true }
+  ],
+  "egress": "Auto"
+}</code></pre></div><ul><li><code>allowed_command</code>：完全一致（既定モード）。</li><li><code>allow_all_commands</code>：CLI の <code>--allow-all-confirmed</code> またはアプリ内の高リスク確認が必要。</li><li><code>allow_interactive_shell</code>：all-commands と併用が必須。有効時のみ PTY 転送。</li><li><code>allow_sftp</code>：最新 scp/SFTP 向け（高リスク）。</li><li><code>keyword_replacements</code>：コマンドポリシー通過後にのみ適用。</li></ul></div></section>
+            <section data-reveal><span>03</span><div><h2>LLM ルート仕様</h2><div class="docs-terminal"><b>coding.json</b><button class="docs-copy" data-copy="rt-llm" title="Copy">⧉</button><pre><code id="code-rt-llm">{
+  "name": "Coding",
+  "alias": "coding",
+  "base_url": "https://api.example.com/v1",
+  "authorization": "upstream-key",
+  "provider": "openai",
+  "models": ["model-a"],
+  "max_output_tokens": 4096,
+  "requests_per_minute": 60,
+  "max_concurrent": 4,
+  "track_usage": true
+}</code></pre></div><ul><li><code>provider</code>：<code>openai</code>（/v1/responses、/v1/chat/completions）または <code>anthropic</code>（/v1/messages）。</li><li><code>models</code>：許可リスト。リクエストのモデルは一致必須。</li><li><code>max_output_tokens</code>：上限を超えるリクエストは拒否。未指定時は自動で補完。</li><li><code>requests_per_minute</code> / <code>max_concurrent</code>：レート・並列上限。</li><li><code>track_usage</code>：数値のみ記録。</li></ul></div></section>
+            <section data-reveal><span>04</span><div><h2>作成と有効化の流れ</h2><p>SSH ルートは既定で無効状態で作成されます。Host Key プローブ → 仕様作成 → create → health → enable の順で進めてください。</p><div class="docs-terminal"><b>標準フロー</b><button class="docs-copy" data-copy="rt-flow" title="Copy">⧉</button><pre><code id="code-rt-flow">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes create &lt;http|ssh|llm&gt; --file /path/route.json
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes health &lt;alias&gt;
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes enable &lt;alias&gt;</code></pre></div></div></section>
+            <section data-reveal><span>05</span><div><h2>Host Key プローブ</h2><div class="docs-terminal"><b>プローブ（認証前に停止）</b><button class="docs-copy" data-copy="rt-probe" title="Copy">⧉</button><pre><code id="code-rt-probe">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  ssh probe --address ssh.example:22 --egress Auto</code></pre></div><p>プローブは Host Key を読み取るだけで認証前に停止します。独立した経路でフィンガープリントを確認してから仕様に書き込みます。</p></div></section>
           </article>
           <nav class="docs-pager" id="docs-pager"></nav>
         </div>

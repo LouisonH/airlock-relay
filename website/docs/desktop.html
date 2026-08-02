@@ -7,15 +7,16 @@
     <meta name="description" content="Airlock desktop console guide: routes, SSH wizard, interactive shell, SFTP, activity audit, health checks, and settings." />
     <title>Airlock - 桌面控制台</title>
     <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../assets/styles.css?v=20260804-docs" />
-    <link rel="stylesheet" href="../assets/docs.css?v=20260804-docs" />
-    <script src="../assets/docs-site.js?v=20260804-docs" defer></script>
+    <link rel="stylesheet" href="../assets/styles.css?v=20260805-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260805-docs" />
+    <script src="../assets/docs-search.js?v=20260805-docs" defer></script>
+    <script src="../assets/docs-site.js?v=20260805-docs" defer></script>
   </head>
   <body class="docs-page" data-chapter="desktop">
     <header class="docs-header">
       <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
-      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
-      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a><div class="docs-search" role="search"><label class="sr-only" for="docs-search-input">搜索文档</label><input id="docs-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="搜索文档…" aria-label="搜索文档" /><div id="docs-search-results" class="docs-search-results" role="listbox" hidden></div></div></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button><button type="button" data-language-button="ja">日</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </header>
     <main class="docs-main" id="docs-main">
       <div class="docs-layout">
@@ -51,6 +52,15 @@
             <section data-reveal><span>03</span><div><h2>Activity and audit</h2><p>Activity is sanitized by default. With command audit enabled, full SSH commands are stored in a user-only <code>0600</code> rolling file (up to 100 events) and viewable in details.</p><p>LLM usage tracking is off by default; when enabled it keeps call counts and upstream token numbers only, never prompts or responses, and resets on restart.</p></div></section>
             <section data-reveal><span>04</span><div><h2>Health checks and ports</h2><p>Routes can be health-checked individually: HTTP verifies connectivity; SSH verifies the pinned host key and upstream password within the authentication budget (20s default, 3–120s configurable).</p><p>Settings lists current-user processes owning the HTTP/SSH listener ports; you can confirm a graceful termination or switch to another unprivileged port. Airlock never force-kills other users' processes.</p></div></section>
             <section data-reveal><span>05</span><div><h2>Settings</h2><ul><li><strong>Network scope</strong>: loopback by default; private-LAN exposure requires a native confirmation.</li><li><strong>Secret store</strong>: prompt-free <code>0600</code> file by default; optional Keychain/Credential Manager/Secret Service with validated migration.</li><li><strong>Proxy egress</strong>: Direct / Proxy / Auto, compatible with Clash HTTP CONNECT and SOCKS5/SOCKS5H.</li><li><strong>Appearance</strong>: light/dark, three accents, density, refresh cadence, and motion preferences.</li><li><strong>Updates</strong>: reads public release metadata only; never auto-downloads or installs.</li></ul></div></section>
+          </article>
+          <article class="docs-language" data-language="ja" hidden>
+            <h1 data-reveal>デスクトップコンソール</h1>
+            <p class="docs-lead" data-reveal>デスクトップアプリはローカル運用のためのコンソールです：ルート作成・編集、認証情報ローテーション、サニタイズされたアクティビティ確認、ポート・プロキシ管理。実際の上流ターゲットや Secret は表示されません。</p>
+            <section data-reveal><span>01</span><div><h2>ルート管理</h2><p>ルート一覧は名前・エイリアス・ローカルユーザー名・ローカルエンドポイント・種類・状態・ヘルス・出口で検索・絞り込みできます。一括ヘルスチェックは現在の絞り込み結果だけに実行され、リクエスト本文を送信しません。</p><p>有効化/無効化、ポリシー編集、ローカル認証情報のローテーション、上流ターゲットの差し替え（Secret は上書きのみ）が可能です。削除時に Secret も消去されます。</p></div></section>
+            <section data-reveal><span>02</span><div><h2>SSH ウィザード</h2><p>上流アドレス・アカウント、上流パスワードまたは秘密鍵、ローカルユーザー名・パスワード、Host Key 確認をすべてデバイス上で行います。ローカルユーザー名は一意である必要があり、上流アドレスは複数ルートで共有できます。</p><ul><li><strong>コマンド範囲</strong>：既定は完全一致 1 コマンド。「すべてのコマンド」は明示的な高リスク確認が必要。</li><li><strong>対話型シェル</strong>：既定で無効。有効時のみ PTY メタデータが転送されます。</li><li><strong>SFTP</strong>：既定で無効。最新 scp/SFTP クライアント向けにルート単位で有効化（高リスク）。</li><li><strong>キーワード置換</strong>：ポリシー承認後にコマンド内の保護キーワードを置換します。</li></ul></div></section>
+            <section data-reveal><span>03</span><div><h2>アクティビティと監査</h2><p>アクティビティは既定でサニタイズされます。コマンド監査を有効化すると、完全な SSH コマンドがユーザー専用 <code>0600</code> ローリングファイル（最大 100 件）に保存され、詳細で確認できます。</p><p>LLM 利用統計は既定で無効。有効時も回数とトークン数のみで、再起動でリセットされます。</p></div></section>
+            <section data-reveal><span>04</span><div><h2>ヘルスチェックとポート管理</h2><p>ルートごとのヘルスチェック：HTTP は到達性、SSH は固定 Host Key と上流パスワードを認証予算内（既定 20 秒、3–120 秒設定可）で検証します。</p><p>設定画面では HTTP/SSH リスナーポートの占有プロセス（自分のユーザーのみ）を確認でき、正常終了を承認するか別の非特権ポートへ切り替えられます。</p></div></section>
+            <section data-reveal><span>05</span><div><h2>設定</h2><ul><li><strong>ネットワーク範囲</strong>：既定は loopback。プライベート LAN 開放にはネイティブ確認が必要。</li><li><strong>Secret ストア</strong>：既定は <code>0600</code> ファイル。Keychain / Credential Manager / Secret Service を選択可能。</li><li><strong>プロキシ出口</strong>：Direct / Proxy / Auto（Clash HTTP CONNECT、SOCKS5/SOCKS5H 対応）。</li><li><strong>外観</strong>：ライト/ダーク、アクセント、密度、リフレッシュ頻度、モーション。</li><li><strong>更新確認</strong>：公開 Release メタデータのみ読み取り、自動ダウンロードはしません。</li></ul></div></section>
           </article>
           <nav class="docs-pager" id="docs-pager"></nav>
         </div>

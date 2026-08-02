@@ -7,15 +7,16 @@
     <meta name="description" content="Airlock CLI reference: global options, route commands, host-key probing, proxy egress, tokens, JSON output, and exit codes." />
     <title>Airlock - CLI 参考</title>
     <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../assets/styles.css?v=20260804-docs" />
-    <link rel="stylesheet" href="../assets/docs.css?v=20260804-docs" />
-    <script src="../assets/docs-site.js?v=20260804-docs" defer></script>
+    <link rel="stylesheet" href="../assets/styles.css?v=20260805-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260805-docs" />
+    <script src="../assets/docs-search.js?v=20260805-docs" defer></script>
+    <script src="../assets/docs-site.js?v=20260805-docs" defer></script>
   </head>
   <body class="docs-page" data-chapter="cli">
     <header class="docs-header">
       <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
-      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
-      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a><div class="docs-search" role="search"><label class="sr-only" for="docs-search-input">搜索文档</label><input id="docs-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="搜索文档…" aria-label="搜索文档" /><div id="docs-search-results" class="docs-search-results" role="listbox" hidden></div></div></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button><button type="button" data-language-button="ja">日</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </header>
     <main class="docs-main" id="docs-main">
       <div class="docs-layout">
@@ -61,6 +62,20 @@
   "ssh_listen": "127.0.0.1:4770",
   "routes": [{ "alias": "releases", "enabled": true, "kind": "HTTP" }]
 }</code></pre></div><p>Failures return a non-zero exit code with JSON output; rely on the command's documented stable fields for scripting.</p></div></section>
+          </article>
+          <article class="docs-language" data-language="ja" hidden>
+            <h1 data-reveal>CLI リファレンス</h1>
+            <p class="docs-lead" data-reveal>Server Core 運用 CLI は既定で JSON を出力します。共通プレフィックス：<code>airlock --data-dir ... --token-file ...</code>。</p>
+            <section data-reveal><span>01</span><div><h2>グローバルオプション</h2><div class="docs-reference-table"><div><strong>データディレクトリ</strong><code>--data-dir &lt;path&gt;</code><p>ルートと状態の保存先。サーバーでは /var/lib/airlock。</p></div><div><strong>コントロールトークン</strong><code>--token-file &lt;path&gt;</code><p>Unix ソケット認証用の 0600 トークンファイル。</p></div><div><strong>タイムアウト</strong><code>--timeout 5s</code><p>コントロールリクエストのタイムアウト。</p></div></div></div></section>
+            <section data-reveal><span>02</span><div><h2>状態とヘルス</h2><div class="docs-reference-table"><div><strong>サービス状態</strong><code>status</code><p>コア、リスナー、サニタイズ済みルート要約。</p></div><div><strong>ルートヘルス</strong><code>routes health &lt;alias&gt;</code><p>ルート予算内で上流を検証。</p></div><div><strong>一覧</strong><code>routes list</code><p>Secret を含まないサニタイズ要約。</p></div></div></div></section>
+            <section data-reveal><span>03</span><div><h2>ルートライフサイクル</h2><div class="docs-reference-table"><div><strong>作成</strong><code>routes create &lt;http|ssh|llm&gt; --file &lt;spec&gt;</code><p>SSH ルートは既定で無効。作成時にローカル認証情報が一度だけ出力。</p></div><div><strong>有効化/無効化</strong><code>routes enable|disable &lt;alias&gt;</code><p>無効化は設定を保持。</p></div><div><strong>削除</strong><code>routes delete &lt;alias&gt;</code><p>ルートと Secret を削除。</p></div><div><strong>ローテーション</strong><code>routes rotate-credential &lt;alias&gt;</code><p>旧ローカル認証情報を即時無効化し新認証情報を出力。</p></div><div><strong>緊急全停止</strong><code>routes stop-all --yes</code><p>全ルートを無効化。</p></div></div></div></section>
+            <section data-reveal><span>04</span><div><h2>SSH とプロキシ</h2><div class="docs-reference-table"><div><strong>Host Key プローブ</strong><code>ssh probe --address host:22 [--egress Auto]</code><p>認証前に停止し host_key を返す。</p></div><div><strong>プロキシ出口</strong><code>proxy set|clear --file &lt;path&gt;</code><p>HTTP CONNECT / HTTPS CONNECT / SOCKS5 / SOCKS5H。</p></div><div><strong>トークン</strong><code>token generate --output &lt;path&gt;</code><p>control または Web UI トークンを生成（0600）。</p></div></div></div></section>
+            <section data-reveal><span>05</span><div><h2>JSON 出力例</h2><div class="docs-terminal"><b>airlock ... status</b><button class="docs-copy" data-copy="cli-json" title="Copy">⧉</button><pre><code id="code-cli-json">{
+  "running": true,
+  "http_listen": "127.0.0.1:4768",
+  "ssh_listen": "127.0.0.1:4770",
+  "routes": [{ "alias": "releases", "enabled": true, "kind": "HTTP" }]
+}</code></pre></div><p>失敗時は非ゼロ終了コードと JSON エラーを返します。</p></div></section>
           </article>
           <nav class="docs-pager" id="docs-pager"></nav>
         </div>

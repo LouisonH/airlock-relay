@@ -7,15 +7,16 @@
     <meta name="description" content="Airlock cross-platform support: macOS, Windows, Linux, and Raspberry Pi installation and verification matrix." />
     <title>Airlock - 跨平台与树莓派</title>
     <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../assets/styles.css?v=20260804-docs" />
-    <link rel="stylesheet" href="../assets/docs.css?v=20260804-docs" />
-    <script src="../assets/docs-site.js?v=20260804-docs" defer></script>
+    <link rel="stylesheet" href="../assets/styles.css?v=20260805-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260805-docs" />
+    <script src="../assets/docs-search.js?v=20260805-docs" defer></script>
+    <script src="../assets/docs-site.js?v=20260805-docs" defer></script>
   </head>
   <body class="docs-page" data-chapter="platforms">
     <header class="docs-header">
       <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
-      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
-      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a><div class="docs-search" role="search"><label class="sr-only" for="docs-search-input">搜索文档</label><input id="docs-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="搜索文档…" aria-label="搜索文档" /><div id="docs-search-results" class="docs-search-results" role="listbox" hidden></div></div></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button><button type="button" data-language-button="ja">日</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </header>
     <main class="docs-main" id="docs-main">
       <div class="docs-layout">
@@ -56,6 +57,17 @@ gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage</code
 gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage</code></pre></div></div></section>
             <section data-reveal><span>05</span><div><h2>Raspberry Pi</h2><ul><li><strong>64-bit OS (Pi 4/5)</strong>: install directly with <code>npm install -g airlock-relay && airlock-installer install --open</code> (arm64 AppImage).</li><li><strong>32-bit OS (armv7/armhf)</strong>: no hosted armv7 runner exists. Clone the repository on the Pi and run <code>bash scripts/build-armv7-desktop.sh [--upload]</code> (see the script header for dependencies). The resulting <code>.deb</code> and <code>.AppImage</code> can be uploaded to the release.</li></ul></div></section>
             <section data-reveal><span>06</span><div><h2>Acceptance and release boundary</h2><p>macOS arm64/x64, Windows x64/x86/arm64, and Linux x64/arm64 publish preview artifacts that passed maintainer real-device acceptance; Windows/Linux are unsigned and macOS is not notarized, so they are not "certified" releases. See the <a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/cross-platform.md" target="_blank" rel="noreferrer">repository cross-platform document</a> for the full boundary and release checklist.</p></div></section>
+          </article>
+          <article class="docs-language" data-language="ja" hidden>
+            <h1 data-reveal>プラットフォームとRaspberry Pi</h1>
+            <p class="docs-lead" data-reveal>v0.1.6 以降、すべての対応プラットフォームを <code>airlock-installer install</code> で導入できます。各アーティファクトは固定 SHA-256 を持ち、不一致なら拒否されます。</p>
+            <section data-reveal><span>01</span><div><h2>対応マトリクス</h2><div class="docs-reference-table"><div><strong>macOS</strong><code>arm64 / x64 · DMG</code><p>12+。arm64 は npm パッケージ同梱、x64 は Release からダウンロード。ad-hoc 署名・未公証。</p></div><div><strong>Windows</strong><code>x64 / x86 / arm64 · NSIS</code><p>10+。サイレントインストール（UAC 確認）、未署名プレビュー。</p></div><div><strong>Linux</strong><code>x64 / arm64 · AppImage</code><p>~/.local/bin にインストール。GPG 署名は Release に同梱。</p></div><div><strong>Linux ARMv7</strong><code>32bit Pi · ビルドスクリプト</code><p>ホスト型ランナーがないためデバイス上でビルドして公開。</p></div></div></div></section>
+            <section data-reveal><span>02</span><div><h2>macOS</h2><p>Apple Silicon は同梱 DMG、Intel は Release の DMG をダウンロード・検証して導入します。初回起動は Gatekeeper の確認が必要です（ad-hoc 署名・未公証）。SHA-256 を先に確認してください。</p></div></section>
+            <section data-reveal><span>03</span><div><h2>Windows</h2><p>固定 checksum の <code>setup.exe</code> をダウンロードしてサイレント実行します。マシン単位のインストールのため UAC が必要です。SmartScreen の警告は未署名プレビューの想定内ですが、SHA-256 マニフェストで照合してください。</p></div></section>
+            <section data-reveal><span>04</span><div><h2>Linux</h2><p>AppImage は <code>~/.local/bin/Airlock.AppImage</code> にインストールされます。FUSE がない環境では <code>--appimage-extract-and-run</code> で起動します。deb パッケージも Release に同梱（<code>sudo dpkg -i</code>）。GPG 検証：</p><div class="docs-terminal"><b>検証</b><button class="docs-copy" data-copy="plt-gpg" title="Copy">⧉</button><pre><code id="code-plt-gpg">gpg --import Airlock-gpg-pubkey.asc
+gpg --verify Airlock_0.1.6_amd64.AppImage.sig Airlock_0.1.6_amd64.AppImage</code></pre></div></div></section>
+            <section data-reveal><span>05</span><div><h2>Raspberry Pi</h2><ul><li><strong>64bit OS（Pi 4/5）</strong>：<code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code> で arm64 AppImage を導入。</li><li><strong>32bit OS（armv7/armhf）</strong>：Pi 上でリポジトリを clone し <code>bash scripts/build-armv7-desktop.sh [--upload]</code> を実行（依存関係はスクリプト冒頭参照）。生成した <code>.deb</code> と <code>.AppImage</code> は Release にアップロードできます。</li></ul></div></section>
+            <section data-reveal><span>06</span><div><h2>受入とリリース境界</h2><p>macOS arm64/x64、Windows x64/x86/arm64、Linux x64/arm64 はプレビュー成果物として公開され、保守者の実機受入を通過しています。Windows/Linux は未署名、macOS は未公証のため「認定済み」ではありません。完全な境界は<a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/cross-platform.md" target="_blank" rel="noreferrer">リポジトリのクロスプラットフォーム文書</a>を参照してください。</p></div></section>
           </article>
           <nav class="docs-pager" id="docs-pager"></nav>
         </div>

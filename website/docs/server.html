@@ -7,15 +7,16 @@
     <meta name="description" content="Deploy Airlock Server Core on Linux with a service account, systemd, CLI, and optional Web UI." />
     <title>Airlock - Server Core</title>
     <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../assets/styles.css?v=20260804-docs" />
-    <link rel="stylesheet" href="../assets/docs.css?v=20260804-docs" />
-    <script src="../assets/docs-site.js?v=20260804-docs" defer></script>
+    <link rel="stylesheet" href="../assets/styles.css?v=20260805-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260805-docs" />
+    <script src="../assets/docs-search.js?v=20260805-docs" defer></script>
+    <script src="../assets/docs-site.js?v=20260805-docs" defer></script>
   </head>
   <body class="docs-page" data-chapter="server">
     <header class="docs-header">
       <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
-      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
-      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a><div class="docs-search" role="search"><label class="sr-only" for="docs-search-input">搜索文档</label><input id="docs-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="搜索文档…" aria-label="搜索文档" /><div id="docs-search-results" class="docs-search-results" role="listbox" hidden></div></div></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button><button type="button" data-language-button="ja">日</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </header>
     <main class="docs-main" id="docs-main">
       <div class="docs-layout">
@@ -82,6 +83,30 @@ sudo systemctl enable --now airlock
 sudo systemctl status airlock</code></pre></div><p>The service runs as the non-login <code>airlock</code> account; the example unit includes standard hardening options.</p></div></section>
             <section data-reveal><span>05</span><div><h2>Remote Web UI management</h2><p>The Web UI listens on loopback only and uses a separate bearer token for sanitized status, health checks, enable/disable, and stop-all. Reach it over an SSH tunnel:</p><div class="docs-terminal"><b>Operator workstation</b><button class="docs-copy" data-copy="srv-tunnel" title="Copy">⧉</button><pre><code id="code-srv-tunnel">ssh -L 4769:127.0.0.1:4769 operator@example-server</code></pre></div><p>Open <code>http://127.0.0.1:4769</code>; the token lives in tab-scoped <code>sessionStorage</code>.</p></div></section>
             <section data-reveal><span>06</span><div><h2>Upgrades and backups</h2><p>Before upgrading: stop the service, back up <code>/var/lib/airlock</code> and both token files offline, replace binaries, start, then run <code>status</code> and <code>routes health</code> for critical routes. Treat backups as secrets.</p></div></section>
+          </article>
+          <article class="docs-language" data-language="ja" hidden>
+            <h1 data-reveal>Server Core デプロイ</h1>
+            <p class="docs-lead" data-reveal>Linux サーバーで専用サービスアカウントのもとに <code>airlockd</code> を実行し、<code>airlock</code> CLI で固定ルートを管理します。Web UI は loopback のみ・サニタイズ表示です。</p>
+            <section data-reveal><span>01</span><div><h2>サービスアカウントとディレクトリ</h2><div class="docs-terminal"><b>アカウント・ディレクトリ・トークン準備</b><button class="docs-copy" data-copy="srv-account" title="Copy">⧉</button><pre><code id="code-srv-account">sudo useradd --system --create-home --shell /usr/sbin/nologin airlock
+sudo install -d -o airlock -g airlock -m 0700 /var/lib/airlock /etc/airlock
+sudo -u airlock /usr/local/bin/airlock token generate --output /etc/airlock/control.token
+sudo -u airlock /usr/local/bin/airlock token generate --output /etc/airlock/web.token</code></pre></div><p>control token と web token は分離し、両方 <code>0600</code> で保持します。</p></div></section>
+            <section data-reveal><span>02</span><div><h2>バイナリの取得</h2><div class="docs-terminal"><b>ビルド</b><button class="docs-copy" data-copy="srv-build" title="Copy">⧉</button><pre><code id="code-srv-build">git clone https://github.com/LouisonH/airlock-relay.git
+cd airlock-relay
+go build -trimpath -o ./bin/airlockd ./cmd/airlockd
+go build -trimpath -o ./bin/airlock ./cmd/airlock
+sudo install -m 0755 ./bin/airlockd /usr/local/bin/airlockd
+sudo install -m 0755 ./bin/airlock /usr/local/bin/airlock</code></pre></div></div></section>
+            <section data-reveal><span>03</span><div><h2>コアと Web UI の起動</h2><div class="docs-terminal"><b>フォアグラウンドで検証</b><button class="docs-copy" data-copy="srv-run" title="Copy">⧉</button><pre><code id="code-srv-run">sudo -u airlock /usr/local/bin/airlockd --mode server \
+  --data-dir /var/lib/airlock \
+  --control-token-file /etc/airlock/control.token \
+  --listen 127.0.0.1:4768 --ssh-listen 127.0.0.1:4770 \
+  --web-listen 127.0.0.1:4769 --web-token-file /etc/airlock/web.token</code></pre></div><p><code>airlock status</code> を確認してから systemd を導入します。</p></div></section>
+            <section data-reveal><span>04</span><div><h2>systemd サービス</h2><p><code>deploy/systemd/airlock.service.example</code> を <code>/etc/systemd/system/airlock.service</code> にコピーし、トークンとリスナーを設定します。</p><div class="docs-terminal"><b>有効化</b><button class="docs-copy" data-copy="srv-systemd" title="Copy">⧉</button><pre><code id="code-srv-systemd">sudo systemctl daemon-reload
+sudo systemctl enable --now airlock
+sudo systemctl status airlock</code></pre></div></div></section>
+            <section data-reveal><span>05</span><div><h2>Web UI のリモート管理</h2><p>Web UI は loopback のみ・専用 bearer token・サニタイズ表示です。SSH トンネル経由でアクセスします。</p><div class="docs-terminal"><b>オペレータ端末</b><button class="docs-copy" data-copy="srv-tunnel" title="Copy">⧉</button><pre><code id="code-srv-tunnel">ssh -L 4769:127.0.0.1:4769 operator@example-server</code></pre></div><p><code>http://127.0.0.1:4769</code> を開きます。トークンはタブ単位の <code>sessionStorage</code> に保持されます。</p></div></section>
+            <section data-reveal><span>06</span><div><h2>アップグレードとバックアップ</h2><p>サービス停止 → <code>/var/lib/airlock</code> と 2 つのトークンファイルをオフラインでバックアップ → バイナリ差し替え → 起動 → <code>status</code> と <code>routes health</code> で確認。バックアップは Secret として扱います。</p></div></section>
           </article>
           <nav class="docs-pager" id="docs-pager"></nav>
         </div>

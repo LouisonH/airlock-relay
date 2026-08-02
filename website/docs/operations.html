@@ -7,15 +7,16 @@
     <meta name="description" content="Airlock operations and troubleshooting: daily checks, upgrades, backups, common failures, and emergency response." />
     <title>Airlock - 运维与排障</title>
     <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../assets/styles.css?v=20260804-docs" />
-    <link rel="stylesheet" href="../assets/docs.css?v=20260804-docs" />
-    <script src="../assets/docs-site.js?v=20260804-docs" defer></script>
+    <link rel="stylesheet" href="../assets/styles.css?v=20260805-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260805-docs" />
+    <script src="../assets/docs-search.js?v=20260805-docs" defer></script>
+    <script src="../assets/docs-site.js?v=20260805-docs" defer></script>
   </head>
   <body class="docs-page" data-chapter="operations">
     <header class="docs-header">
       <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
-      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
-      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a><div class="docs-search" role="search"><label class="sr-only" for="docs-search-input">搜索文档</label><input id="docs-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="搜索文档…" aria-label="搜索文档" /><div id="docs-search-results" class="docs-search-results" role="listbox" hidden></div></div></div>
+      <div class="docs-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-language-button="zh">中</button><button type="button" data-language-button="en">EN</button><button type="button" data-language-button="ja">日</button></div><button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button><a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </header>
     <main class="docs-main" id="docs-main">
       <div class="docs-layout">
@@ -53,6 +54,16 @@
             <section data-reveal><span>04</span><div><h2>Emergency response</h2><div class="docs-terminal"><b>Stop everything now</b><button class="docs-copy" data-copy="ops-stop" title="Copy">⧉</button><pre><code id="code-ops-stop">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
   routes stop-all --yes</code></pre></div><p>Stop-all retains all configuration; review and re-enable per route afterward. The desktop also has a Stop all button.</p></div></section>
             <section data-reveal><span>05</span><div><h2>Monitoring recommendations</h2><ul><li>Probe critical routes externally and alert on failure.</li><li>Rotate local and upstream credentials regularly and after personnel changes.</li><li>Watch <code>blocked</code> activity: persistent failures may mean leaked credentials or misconfiguration.</li><li>Subscribe to releases and follow the upgrade procedure.</li></ul></div></section>
+          </article>
+          <article class="docs-language" data-language="ja" hidden>
+            <h1 data-reveal>運用とトラブルシューティング</h1>
+            <p class="docs-lead" data-reveal>日常チェック、アップグレード、バックアップ、よくある障害、緊急対応のランブックです。</p>
+            <section data-reveal><span>01</span><div><h2>日常チェック</h2><div class="docs-reference-table"><div><strong>コア状態</strong><code>airlock ... status</code><p>コア、リスナー、サニタイズ済みルート要約。</p></div><div><strong>ルートヘルス</strong><code>airlock ... routes health &lt;alias&gt;</code><p>アプリケーション本文を送信せず、SSH は Host Key と認証のみ検証。</p></div><div><strong>インストーラー契約</strong><code>airlock-installer doctor</code><p>現在のプラットフォームのアーティファクトを検証。</p></div></div></div></section>
+            <section data-reveal><span>02</span><div><h2>アップグレード手順</h2><ol><li>サービス停止（デスクトップ：airlockd 終了、サーバー：<code>systemctl stop airlock</code>）。</li><li><code>/var/lib/airlock</code> と 2 つのトークンファイルをオフラインでバックアップ。</li><li>バイナリ差し替え、または npm パッケージ更新と再インストール。</li><li>起動後、<code>status</code> と重要ルートの <code>routes health</code> を実行。</li></ol><div class="docs-warning"><strong>バックアップは Secret</strong><p>データディレクトリには上流の記述と保護された認証情報が含まれます。</p></div></div></section>
+            <section data-reveal><span>03</span><div><h2>よくある障害</h2><div class="docs-reference-table"><div><strong>Host Key 不一致</strong><code>routes health → host key mismatch</code><p>ルートを無効化し、再プローブして独立経路でフィンガープリントを確認。エラーを無視しない。</p></div><div><strong>上流に到達できない</strong><code>upstream unavailable</code><p>DNS・ポート・Direct/Proxy/Auto を確認して再試行。Auto は開始済みリクエストを再送しない。</p></div><div><strong>ローカル SSH 拒否</strong><code>SSH authentication failed</code><p>ルート有効化、ローカルユーザー名の一意性、ローカルパスワード/公開鍵を確認。</p></div><div><strong>LLM レート制限</strong><code>429 capacity_limit / rate limit</code><p>RPM・並列上限とゲートウェイ容量を確認。</p></div><div><strong>ポート使用中</strong><code>bind: address in use</code><p>設定画面で占有プロセスを確認し、正常終了を承認するかポートを変更。</p></div></div></div></section>
+            <section data-reveal><span>04</span><div><h2>緊急対応</h2><div class="docs-terminal"><b>即時全停止</b><button class="docs-copy" data-copy="ops-stop" title="Copy">⧉</button><pre><code id="code-ops-stop">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes stop-all --yes</code></pre></div><p>全停止は設定を保持します。対応後、ルートごとに確認して再開してください。</p></div></section>
+            <section data-reveal><span>05</span><div><h2>モニタリングの推奨</h2><ul><li>重要ルートに外部ヘルスプローブを設定し、失敗時にアラート。</li><li>認証情報を定期的にローテーションし、要員変更時は即時。</li><li>Activity の <code>blocked</code> 記録を監視（認証情報漏えいや設定ミスの兆候）。</li><li>Release を購読し、アップグレード手順に従って更新。</li></ul></div></section>
           </article>
           <nav class="docs-pager" id="docs-pager"></nav>
         </div>

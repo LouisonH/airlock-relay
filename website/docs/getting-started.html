@@ -7,18 +7,19 @@
     <meta name="description" content="Airlock getting-started tutorial: install, create your first HTTP/SSH/LLM route, verify access, and rotate credentials." />
     <title>Airlock - 从零开始</title>
     <link rel="icon" href="../assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../assets/styles.css?v=20260804-docs" />
-    <link rel="stylesheet" href="../assets/docs.css?v=20260804-docs" />
-    <script src="../assets/docs-site.js?v=20260804-docs" defer></script>
+    <link rel="stylesheet" href="../assets/styles.css?v=20260805-docs" />
+    <link rel="stylesheet" href="../assets/docs.css?v=20260805-docs" />
+    <script src="../assets/docs-search.js?v=20260805-docs" defer></script>
+    <script src="../assets/docs-site.js?v=20260805-docs" defer></script>
   </head>
   <body class="docs-page" data-chapter="getting-started">
     <header class="docs-header">
       <a class="brand" href="../index.html" aria-label="Airlock home"><img src="../assets/airlock-logo.svg" alt="" width="34" height="34" /><span><strong>Airlock</strong><small>Documentation</small></span></a>
-      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a></div>
+      <div class="docs-header-tools"><a class="docs-home-link" href="index.html">文档中心</a><div class="docs-search" role="search"><label class="sr-only" for="docs-search-input">搜索文档</label><input id="docs-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="搜索文档…" aria-label="搜索文档" /><div id="docs-search-results" class="docs-search-results" role="listbox" hidden></div></div></div>
       <div class="docs-actions">
         <div class="language-switch" role="group" aria-label="Language">
           <button type="button" data-language-button="zh">中</button>
-          <button type="button" data-language-button="en">EN</button>
+          <button type="button" data-language-button="en">EN</button><button type="button" data-language-button="ja">日</button>
         </div>
         <button class="docs-theme" id="docs-theme" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button>
         <a class="docs-source" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer">GitHub ↗</a>
@@ -261,6 +262,55 @@ export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre></div><p>Disallowed mode
             <section data-reveal><span>08</span><div><h2>Rotate and revoke credentials</h2><ul><li><strong>Rotate</strong>: desktop "Edit route → Rotate" or <code>routes rotate-credential</code>. Old credentials stop working immediately.</li><li><strong>Revoke</strong>: <code>routes disable &lt;alias&gt;</code> keeps config but blocks access; <code>routes delete &lt;alias&gt;</code> removes the route and its secrets.</li><li><strong>Emergency stop</strong>: <code>routes stop-all --yes</code> disables every route while retaining configuration.</li></ul></div></section>
 
             <section data-reveal><span>09</span><div><h2>Next steps</h2><ul><li>Explore the <a href="desktop.html">desktop console</a> (audit, health, ports).</li><li>Read <a href="server.html">Server Core</a> and <a href="operations.html">operations</a> for production.</li><li>See <a href="platforms.html">platforms</a> for Windows/Linux/Raspberry Pi.</li><li>Use the <a href="cli.html">CLI reference</a> for command details.</li></ul></div></section>
+          </article>
+          <article class="docs-language" data-language="ja" hidden>
+            <h1 data-reveal>はじめに：15分で最初のルートを構築</h1>
+            <p class="docs-lead" data-reveal>このチュートリアルでは、Airlock のインストール、デスクトップの起動、最初の HTTP ルートの作成と検証、SSH/LLM ルートの追加、認証情報のローテーションと失効までを順に説明します。</p>
+            <section data-reveal><span>01</span><div><h2>前提条件</h2><ul><li>macOS 12+（Apple Silicon / Intel）、Windows 10+（x64/x86/arm64）、または Linux x64/arm64。</li><li>Node.js 20+（インストーラーのみで必要）。</li><li>認証情報を持つ上流ターゲット（保護付き URL、SSH サーバー、OpenAI/Anthropic 互換 API）。</li><li><a href="security.html">セキュリティモデル</a>を先に読むことを推奨します。</li></ul></div></section>
+            <section data-reveal><span>02</span><div><h2>Airlock のインストール</h2><p>すべてのプラットフォームで同じコマンドを使います。インストーラーは固定 checksum 付きのアーティファクトをダウンロードし、SHA-256 不一致なら実行を拒否します。</p><div class="docs-terminal"><b>インストール（初回は --open を外す）</b><button class="docs-copy" data-copy="gs-install" title="Copy">⧉</button><pre><code id="code-gs-install">npm install -g airlock-relay
+airlock-installer install --open</code></pre></div><div class="docs-terminal"><b>契約を確認</b><button class="docs-copy" data-copy="gs-status" title="Copy">⧉</button><pre><code id="code-gs-status">airlock-installer status --json
+airlock-installer doctor</code></pre></div><div class="docs-note"><strong>署名について</strong><p>macOS は ad-hoc 署名・未公証（Gatekeeper 確認あり）、Windows/Linux は未署名プレビューです。必ず公式 Release から取得し SHA-256 を確認してください。</p></div></div></section>
+            <section data-reveal><span>03</span><div><h2>起動と画面の確認</h2><p>ローカルコア <code>airlockd</code> はデスクトップとともに起動します。HTTP は <code>127.0.0.1:4768</code>、SSH は <code>127.0.0.1:4770</code> を既定で待ち受けます。ウィンドウを閉じてもリレーは停止しません。左メニュー：Overview / Routes / Activity / Settings。</p></div></section>
+            <section data-reveal><span>04</span><div><h2>最初の HTTP ルートを作成</h2><p>Routes から「New route」→「HTTP / Wget」を選択し、名前・エイリアス・上流ベース URL・許可メソッドを入力します。上流の Authorization は保護されたネイティブ入力で収集され、WebView やログには入りません。</p><p>ヘッドレス環境では仕様ファイルを使います。</p><div class="docs-terminal"><b>/etc/airlock/releases.json</b><button class="docs-copy" data-copy="gs-http-spec" title="Copy">⧉</button><pre><code id="code-gs-http-spec">{
+  "name": "Release mirror",
+  "alias": "releases",
+  "base_url": "https://example.com/releases/",
+  "authorization": "Bearer upstream-secret",
+  "methods": ["GET", "HEAD"],
+  "egress": "Auto"
+}</code></pre></div><div class="docs-terminal"><b>作成と有効化（CLI）</b><button class="docs-copy" data-copy="gs-http-create" title="Copy">⧉</button><pre><code id="code-gs-http-create">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes create http --file /etc/airlock/releases.json
+airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  routes enable releases</code></pre></div><div class="docs-warning"><strong>capability は一度だけ出力</strong><p>作成時、ローカル capability は一度だけ表示されます。呼び出し元に渡し、再表示されることはありません。</p></div></div></section>
+            <section data-reveal><span>05</span><div><h2>HTTP ルートの検証</h2><div class="docs-terminal"><b>成功</b><button class="docs-copy" data-copy="gs-http-ok" title="Copy">⧉</button><pre><code id="code-gs-http-ok">curl -H "Authorization: Bearer &lt;local-token&gt;" \
+  http://127.0.0.1:4768/r/releases/latest.zip -o latest.zip</code></pre></div><div class="docs-terminal"><b>想定される失敗</b><button class="docs-copy" data-copy="gs-http-fail" title="Copy">⧉</button><pre><code id="code-gs-http-fail">curl -H "Authorization: Bearer wrong" http://127.0.0.1:4768/r/releases/latest.zip
+# HTTP 401 invalid_api_key。上流や認証情報は漏れません</code></pre></div><p>Activity には <code>allowed</code> と <code>blocked</code> が 1 件ずつ記録されます。</p></div></section>
+            <section data-reveal><span>06</span><div><h2>SSH ルートを作成</h2><p>まず上流の Host Key をプローブします。CLI の例：</p><div class="docs-terminal"><b>Host Key プローブ</b><button class="docs-copy" data-copy="gs-ssh-probe" title="Copy">⧉</button><pre><code id="code-gs-ssh-probe">airlock --data-dir /var/lib/airlock --token-file /etc/airlock/control.token \
+  ssh probe --address build.example:22 --egress Auto</code></pre></div><div class="docs-terminal"><b>build.json</b><button class="docs-copy" data-copy="gs-ssh-spec" title="Copy">⧉</button><pre><code id="code-gs-ssh-spec">{
+  "name": "Build server",
+  "alias": "build",
+  "local_username": "build",
+  "upstream": "build.example:22",
+  "username": "deploy",
+  "password": "upstream-password",
+  "host_key": "ssh-ed25519 AAAA...",
+  "allowed_command": "deploy --release",
+  "egress": "Auto"
+}</code></pre></div><p>呼び出し元は <code>ssh build@127.0.0.1 -p 4770</code> で接続します（ローカルパスワード入力）。既定では <code>deploy --release</code> のみ許可。対話型シェルが必要なら「すべてのコマンド」と合わせて明示的に有効化します。</p></div></section>
+            <section data-reveal><span>07</span><div><h2>LLM ルートを作成</h2><div class="docs-terminal"><b>coding.json</b><button class="docs-copy" data-copy="gs-llm-spec" title="Copy">⧉</button><pre><code id="code-gs-llm-spec">{
+  "name": "Coding",
+  "alias": "coding",
+  "base_url": "https://api.example.com/v1",
+  "authorization": "upstream-key",
+  "provider": "openai",
+  "models": ["model-a", "model-b"],
+  "max_output_tokens": 4096,
+  "requests_per_minute": 60,
+  "max_concurrent": 4,
+  "track_usage": true
+}</code></pre></div><p>作成時にローカル二次 API Key が一度だけ出力されます。クライアントは <code>OPENAI_BASE_URL=http://127.0.0.1:4768/r/coding</code> と <code>OPENAI_API_KEY</code> を設定します。許可外モデルは <code>403</code>、出力超過は <code>400</code> になります。</p></div></section>
+            <section data-reveal><span>08</span><div><h2>認証情報のローテーションと失効</h2><ul><li><strong>ローテーション</strong>：デスクトップ「Edit route → Rotate」または <code>routes rotate-credential</code>。旧認証情報は即時無効。</li><li><strong>失効</strong>：<code>routes disable &lt;alias&gt;</code> で停止（設定は保持）、<code>routes delete &lt;alias&gt;</code> で削除。</li><li><strong>緊急停止</strong>：<code>routes stop-all --yes</code>。</li></ul></div></section>
+            <section data-reveal><span>09</span><div><h2>次のステップ</h2><ul><li><a href="desktop.html">デスクトップコンソール</a>の機能を確認。</li><li>本番運用は<a href="server.html">Server Core</a>と<a href="operations.html">運用</a>を参照。</li><li><a href="platforms.html">プラットフォーム</a>、<a href="cli.html">CLI リファレンス</a>、<a href="faq.html">Q&amp;A</a>もどうぞ。</li></ul></div></section>
           </article>
           <nav class="docs-pager" id="docs-pager"></nav>
         </div>
