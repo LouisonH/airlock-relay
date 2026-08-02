@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#18201d" />
+    <meta name="description" content="Airlock desktop console: routes, activity, and protocol examples for HTTP, SSH, and LLM APIs." />
+    <title>Airlock - 桌面端</title>
+    <link rel="icon" href="./assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./assets/styles.css?v=20260803-site" />
+    <script src="./assets/site.js?v=20260803-site" defer></script>
+  </head>
+  <body data-page-title="desktopPageTitle">
+    <a class="skip-link" href="#main" data-i18n="skipLink">跳到主要内容</a>
+
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="./index.html" aria-label="Airlock home">
+          <img src="./assets/airlock-logo.svg" alt="" width="34" height="34" />
+          <span><strong>Airlock</strong><small>Local security relay</small></span>
+        </a>
+        <nav class="site-nav" id="site-nav" data-i18n-aria="navLabel" aria-label="主导航">
+          <a href="./index.html" data-i18n="navHome">首页</a>
+          <a href="./index.html#routes" data-i18n="navRoutes">路由类型</a>
+          <a href="./downloads.html" data-i18n="navDownload">下载</a>
+          <a href="./security.html" data-i18n="navSecurity">安全模型</a>
+          <a href="./desktop.html" data-i18n="navDesktop">桌面端</a>
+          <a href="./docs.html" data-i18n="navDocs">文档</a>
+        </nav>
+        <div class="header-actions">
+          <button class="language-button" id="language-toggle" type="button" aria-label="Switch to English">EN</button>
+          <button class="icon-button" id="theme-toggle" type="button" title="切换主题" aria-label="切换深浅主题"><span aria-hidden="true">◐</span></button>
+          <a class="github-link" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer"><span data-i18n="sourceCode">源代码</span><span aria-hidden="true">↗</span></a>
+          <button class="menu-button" id="menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" data-i18n-aria="menuLabel" aria-label="打开导航"><span aria-hidden="true">☰</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="page-hero">
+        <div class="page-hero-inner reveal">
+          <p class="eyebrow" data-i18n="desktopEyebrow">NATIVE DESKTOP</p>
+          <h1 data-i18n="desktopPageTitle">桌面控制台</h1>
+          <p data-i18n="desktopDetail">配置、轮换和观测路由，但不在 WebView 中显示真实目标或 Secret。</p>
+        </div>
+      </section>
+
+      <section class="section product-section" id="desktop">
+        <div class="desktop-preview reveal" role="img" data-i18n-aria="desktopPreviewLabel" aria-label="Airlock desktop route list preview">
+          <aside class="preview-sidebar">
+            <div class="preview-brand"><img src="./assets/airlock-logo.svg" alt="" /><strong>Airlock</strong></div>
+            <nav><span class="active">◔ <b data-i18n="previewOverview">概览</b></span><span>⌘ <b data-i18n="previewRoutes">路由</b></span><span>∿ <b data-i18n="previewActivity">活动</b></span><span>⚙ <b data-i18n="previewSettings">设置</b></span></nav>
+            <div class="preview-daemon"><i></i><span><b data-i18n="previewConnected">本地核心已连接</b><small>airlockd · loopback only</small></span></div>
+          </aside>
+          <div class="preview-main">
+            <div class="preview-toolbar"><span>◈ <b data-i18n="previewOpen">3 条路由已开放</b></span><button type="button" tabindex="-1">◎ <b data-i18n="previewStop">停止全部</b></button></div>
+            <div class="preview-content">
+              <div class="preview-title"><div><h3 data-i18n="previewRoutes">路由</h3><p data-i18n="previewRouteCount">3 条 · 所有目标均受保护</p></div><span>+ <b data-i18n="previewNew">新增路由</b></span></div>
+              <div class="preview-filters"><span data-i18n="previewSearch">搜索名称或别名</span><b>ALL</b><b>HTTP</b><b>SSH</b><b>LLM</b></div>
+              <div class="preview-table">
+                <div class="preview-row header"><span data-i18n="previewStatus">状态</span><span data-i18n="previewName">名称</span><span data-i18n="previewType">类型</span><span data-i18n="previewEntry">本地入口</span><span data-i18n="previewPolicy">访问边界</span><span data-i18n="previewEgress">出口</span></div>
+                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Release downloads</strong><small>release</small></span><span><i class="kind http">HTTP</i></span><code>127.0.0.1:4768/r/release</code><span>GET, HEAD · Range</span><span>Direct</span></div>
+                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Build server</strong><small>build</small></span><span><i class="kind ssh">SSH</i></span><code>build@127.0.0.1:4770</code><span data-i18n="previewExactCommand">1 条精确命令 · 已记录</span><span>Auto</span></div>
+                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Model gateway</strong><small>coding</small></span><span><i class="kind llm">LLM</i></span><code>127.0.0.1:4768/r/coding</code><span><em>3 models</em><em>60/min</em><em>4 concurrent</em></span><span>Proxy</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section quickstart-section" id="quickstart">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="quickstartEyebrow">QUICK START</p>
+          <h2 data-i18n="quickstartTitle">调用者只需要本地入口</h2>
+          <p data-i18n="quickstartIntro">先在 Airlock Desktop 中完成原生安全配置，然后把本地能力凭据交给需要执行任务的工具。</p>
+        </div>
+
+        <div class="code-workbench reveal">
+          <div class="code-tabs" role="tablist" data-i18n-aria="protocolExamples" aria-label="协议示例">
+            <button role="tab" aria-selected="true" aria-controls="panel-http" id="tab-http" data-tab="http">HTTP / Wget</button>
+            <button role="tab" aria-selected="false" aria-controls="panel-ssh" id="tab-ssh" data-tab="ssh">SSH</button>
+            <button role="tab" aria-selected="false" aria-controls="panel-llm" id="tab-llm" data-tab="llm">LLM API</button>
+          </div>
+          <div class="code-panel active" role="tabpanel" id="panel-http" aria-labelledby="tab-http" data-panel="http">
+            <div class="code-copy"><span><b data-i18n="httpExampleTitle">下载受保护的固定资源</b><small data-i18n="httpExampleDetail">本地 Token 只能访问 release 路由</small></span><button class="copy-button" type="button" data-copy="http" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
+            <pre><code id="code-http">wget --header="Authorization: Bearer &lt;local-token&gt;" \
+  http://127.0.0.1:4768/r/release/file.zip</code></pre>
+          </div>
+          <div class="code-panel" role="tabpanel" id="panel-ssh" aria-labelledby="tab-ssh" data-panel="ssh" hidden>
+            <div class="code-copy"><span><b data-i18n="sshExampleTitle">使用隔离的本地 SSH 身份</b><small data-i18n="sshExampleDetail">调用者不会得到上游用户名或密码</small></span><button class="copy-button" type="button" data-copy="ssh" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
+            <pre><code id="code-ssh">ssh build@127.0.0.1 -p 4770</code></pre>
+          </div>
+          <div class="code-panel" role="tabpanel" id="panel-llm" aria-labelledby="tab-llm" data-panel="llm" hidden>
+            <div class="code-copy"><span><b data-i18n="llmExampleTitle">把 OpenAI-compatible 客户端指向本地路由</b><small data-i18n="llmExampleDetail">二次 Key 可轮换，与上游 Key 完全隔离</small></span><button class="copy-button" type="button" data-copy="llm" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
+            <pre><code id="code-llm">export OPENAI_BASE_URL=http://127.0.0.1:4768/r/coding
+export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
+          </div>
+        </div>
+        <p class="quickstart-note reveal"><span data-i18n="p0Label">当前版本</span><b data-i18n="p0Notice">v0.1.6 已于 2026-08-02 发布；维护者生产就绪安全审计已完成。</b></p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span data-i18n="footerTagline">本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> <a href="https://0o0.site" target="_blank" rel="noreferrer">LouisonH</a> · <span data-i18n="footerAffiliation">华南理工大学（SCUT）相关开发者 · 独立项目</span> · <a href="https://github.com/LouisonH" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p data-i18n="footerSecurity">v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" data-i18n="copied">已复制命令</div>
+  </body>
+</html>

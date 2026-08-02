@@ -12,28 +12,25 @@
     <meta name="twitter:card" content="summary" />
     <title>Airlock - 本地凭据隔离转发器</title>
     <link rel="icon" href="./assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./assets/styles.css?v=20260802-site" />
-    <script src="./assets/site.js?v=20260802-site" defer></script>
+    <link rel="stylesheet" href="./assets/styles.css?v=20260803-site" />
+    <script src="./assets/site.js?v=20260803-site" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main" data-i18n="skipLink">跳到主要内容</a>
 
     <header class="site-header">
       <div class="header-inner">
-        <a class="brand" href="#top" aria-label="Airlock home">
+        <a class="brand" href="./index.html" aria-label="Airlock home">
           <img src="./assets/airlock-logo.svg" alt="" width="34" height="34" />
           <span><strong>Airlock</strong><small>Local security relay</small></span>
         </a>
 
         <nav class="site-nav" id="site-nav" data-i18n-aria="navLabel" aria-label="主导航">
-          <a href="#boundary" data-i18n="navBoundary">安全边界</a>
-          <a href="#routes" data-i18n="navRoutes">路由类型</a>
-          <a href="#quickstart" data-i18n="navQuickstart">快速使用</a>
-          <a href="#download" data-i18n="navDownload">下载</a>
-          <a href="#release" data-i18n="navRelease">发布状态</a>
-          <a href="#platform" data-i18n="navPlatform">跨平台</a>
-          <a href="#architecture" data-i18n="navArchitecture">架构</a>
-          <a href="#faq" data-i18n="navFaq">常见问题</a>
+          <a href="./index.html" data-i18n="navHome">首页</a>
+          <a href="./index.html#routes" data-i18n="navRoutes">路由类型</a>
+          <a href="./downloads.html" data-i18n="navDownload">下载</a>
+          <a href="./security.html" data-i18n="navSecurity">安全模型</a>
+          <a href="./desktop.html" data-i18n="navDesktop">桌面端</a>
           <a href="./docs.html" data-i18n="navDocs">文档</a>
         </nav>
 
@@ -64,24 +61,24 @@
           <i class="signal signal-a"></i><i class="signal signal-b"></i><i class="signal signal-c"></i>
         </div>
         <div class="hero-code-stream" aria-hidden="true">
-          <div class="code-column code-column-a"><span>route/releases</span><span>capability: verified</span><span>GET /artifact</span><span>upstream: protected</span><span>egress: auto</span><span>policy: allow</span><span>activity: sanitized</span><span>route/releases</span><span>capability: verified</span><span>GET /artifact</span><span>upstream: protected</span><span>egress: auto</span></div>
-          <div class="code-column code-column-b"><span>ssh.build</span><span>host key: pinned</span><span>command: exact</span><span>session: isolated</span><span>local user: mapped</span><span>auth: scoped</span><span>audit: enabled</span><span>ssh.build</span><span>host key: pinned</span><span>command: exact</span><span>session: isolated</span><span>local user: mapped</span></div>
-          <div class="code-column code-column-c"><span>llm/coding</span><span>model: allowed</span><span>token: local only</span><span>usage: numeric</span><span>upstream key: sealed</span><span>rate: bounded</span><span>relay: local</span><span>llm/coding</span><span>model: allowed</span><span>token: local only</span><span>usage: numeric</span><span>upstream key: sealed</span></div>
+          <div class="code-column code-column-a"><span>route/releases</span><span>capability: verified</span><span>GET /artifact</span><span>upstream: protected</span><span>egress: auto</span><span>policy: allow</span><span>activity: sanitized</span></div>
+          <div class="code-column code-column-b"><span>ssh.build</span><span>host key: pinned</span><span>command: exact</span><span>session: isolated</span><span>local user: mapped</span><span>auth: scoped</span><span>audit: enabled</span></div>
+          <div class="code-column code-column-c"><span>llm/coding</span><span>model: allowed</span><span>token: local only</span><span>usage: numeric</span><span>upstream key: sealed</span><span>rate: bounded</span><span>relay: local</span></div>
         </div>
 
         <div class="hero-inner">
           <div class="hero-copy reveal">
             <p class="eyebrow" data-i18n="heroEyebrow">LOCAL CREDENTIAL BOUNDARY</p>
             <h1 class="hero-wordmark" aria-label="Airlock"><span aria-hidden="true" style="--letter-index:0">A</span><span aria-hidden="true" style="--letter-index:1">i</span><span aria-hidden="true" style="--letter-index:2">r</span><span aria-hidden="true" style="--letter-index:3">l</span><span aria-hidden="true" style="--letter-index:4">o</span><span aria-hidden="true" style="--letter-index:5">c</span><span aria-hidden="true" style="--letter-index:6">k</span></h1>
-            <p class="hero-lead" data-i18n="heroLead" data-character-reveal>把能力交给 Agent，把凭据留在本机。</p>
+            <p class="hero-lead" data-i18n="heroLead">把能力交给 Agent，把凭据留在本机。</p>
             <p class="hero-detail" data-i18n="heroDetail">Airlock 使用固定本地路由、可撤销凭据与最小权限策略，为 HTTP、SSH 和 LLM 请求隔离真实上游地址、密码与 API Key。</p>
             <div class="hero-actions">
-              <a class="primary-action" href="#download"><span data-i18n="releaseCta">下载安装 v0.1.6</span></a>
-              <a class="secondary-action" href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer"><span data-i18n="releaseNotesLink">查看发布说明</span><span aria-hidden="true">↗</span></a>
+              <a class="primary-action" href="./downloads.html"><span data-i18n="releaseCta">下载安装 v0.1.6</span></a>
+              <a class="secondary-action" href="./security.html"><span data-i18n="quickStartCta">了解安全模型</span></a>
             </div>
             <div class="install-command" aria-label="Install Airlock">
               <span data-i18n="installLabel">NPM INSTALL</span>
-              <code id="code-install">npm install -g airlock-relay && airlock-installer status --json</code>
+              <code id="code-install">npm install -g airlock-relay && airlock-installer install --open</code>
               <button class="copy-button" type="button" data-copy="install" data-i18n-aria="copyCommand" aria-label="复制命令" title="Copy command">⧉</button>
             </div>
             <div class="protocol-list" aria-label="Supported protocols">
@@ -97,26 +94,6 @@
         <div><strong data-i18n="principleSecret">凭据隔离</strong><span data-i18n="principleSecretDetail">秘密不进入 Agent 上下文</span></div>
         <div><strong data-i18n="principlePolicy">最小权限</strong><span data-i18n="principlePolicyDetail">每条路由独立授权</span></div>
         <div><strong data-i18n="principleLocal">本地优先</strong><span data-i18n="principleLocalDetail">控制面仅当前用户可达</span></div>
-      </section>
-
-      <section class="section boundary-section" id="boundary">
-        <div class="section-heading reveal">
-          <p class="eyebrow" data-i18n="boundaryEyebrow">THE BOUNDARY</p>
-          <h2 data-i18n="boundaryTitle">不可信的调用者只获得一项能力</h2>
-          <p data-i18n="boundaryIntro">Agent 可以执行被允许的任务，但无法读取或还原真实上游凭据。</p>
-        </div>
-
-        <div class="boundary-layout reveal">
-          <div class="boundary-statement">
-            <p data-i18n="boundaryStatement">Airlock 不是通用开放代理。每条路由都是预先配置的、有界的本地能力。</p>
-            <div class="capability-token"><span>capability</span><code>airlock_••••••••••••</code><b data-i18n="revocable">可撤销</b></div>
-          </div>
-          <div class="boundary-facts">
-            <article><span>01</span><div><h3 data-i18n="factOneTitle">真实目标受保护</h3><p data-i18n="factOneDetail">URL、域名、IP 和 SSH 账户均由 SecretStore 保存。</p></div></article>
-            <article><span>02</span><div><h3 data-i18n="factTwoTitle">请求在上游前校验</h3><p data-i18n="factTwoDetail">方法、路径、模型、速率、并发与命令范围都有显式边界。</p></div></article>
-            <article><span>03</span><div><h3 data-i18n="factThreeTitle">错误也不泄密</h3><p data-i18n="factThreeDetail">失败响应与活动记录只包含脱敏的本地上下文。</p></div></article>
-          </div>
-        </div>
       </section>
 
       <section class="section route-section" id="routes">
@@ -137,7 +114,7 @@
             <div class="route-card-head"><span class="route-index">02</span><code>SSH</code></div>
             <h3 data-i18n="sshTitle">双会话 SSH 终止</h3>
             <p data-i18n="sshDetail">Airlock 分别终止本地与上游 SSH 会话，用完全独立的账号和凭据建立连接。</p>
-            <ul><li data-i18n="sshFeatureOne">自定义本地密码 / 公钥</li><li data-i18n="sshFeatureTwo">自定义精确命令或高风险完整 exec</li><li data-i18n="sshFeatureThree">固定 Host Key 与可选审计</li></ul>
+            <ul><li data-i18n="sshFeatureOne">自定义本地密码 / 公钥</li><li data-i18n="sshFeatureTwo">精确命令或受控的完整 exec</li><li data-i18n="sshFeatureThree">固定 Host Key 与可选审计</li></ul>
           </article>
           <article class="route-card llm reveal">
             <div class="route-card-head"><span class="route-index">03</span><code>LLM API</code></div>
@@ -148,217 +125,20 @@
         </div>
       </section>
 
-      <section class="section product-section" id="desktop">
-        <div class="product-heading reveal">
-          <div><p class="eyebrow" data-i18n="desktopEyebrow">NATIVE DESKTOP</p><h2 data-i18n="desktopTitle">一个安静的本地运维界面</h2></div>
-          <p data-i18n="desktopDetail">配置、轮换和观测路由，但不在 WebView 中显示真实目标或 Secret。</p>
-        </div>
-
-        <div class="desktop-preview reveal" role="img" data-i18n-aria="desktopPreviewLabel" aria-label="Airlock desktop route list preview">
-          <aside class="preview-sidebar">
-            <div class="preview-brand"><img src="./assets/airlock-logo.svg" alt="" /><strong>Airlock</strong></div>
-            <nav><span class="active">◔ <b data-i18n="previewOverview">概览</b></span><span>⌘ <b data-i18n="previewRoutes">路由</b></span><span>∿ <b data-i18n="previewActivity">活动</b></span><span>⚙ <b data-i18n="previewSettings">设置</b></span></nav>
-            <div class="preview-daemon"><i></i><span><b data-i18n="previewConnected">本地核心已连接</b><small>airlockd · loopback only</small></span></div>
-          </aside>
-          <div class="preview-main">
-            <div class="preview-toolbar"><span>◈ <b data-i18n="previewOpen">3 条路由已开放</b></span><button type="button" tabindex="-1">◎ <b data-i18n="previewStop">停止全部</b></button></div>
-            <div class="preview-content">
-              <div class="preview-title"><div><h3 data-i18n="previewRoutes">路由</h3><p data-i18n="previewRouteCount">3 条 · 所有目标均受保护</p></div><span>+ <b data-i18n="previewNew">新增路由</b></span></div>
-              <div class="preview-filters"><span data-i18n="previewSearch">搜索名称或别名</span><b>ALL</b><b>HTTP</b><b>SSH</b><b>LLM</b></div>
-              <div class="preview-table">
-                <div class="preview-row header"><span data-i18n="previewStatus">状态</span><span data-i18n="previewName">名称</span><span data-i18n="previewType">类型</span><span data-i18n="previewEntry">本地入口</span><span data-i18n="previewPolicy">访问边界</span><span data-i18n="previewEgress">出口</span></div>
-                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Release downloads</strong><small>release</small></span><span><i class="kind http">HTTP</i></span><code>127.0.0.1:4768/r/release</code><span>GET, HEAD · Range</span><span>Direct</span></div>
-                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Build server</strong><small>build</small></span><span><i class="kind ssh">SSH</i></span><code>build@127.0.0.1:4770</code><span data-i18n="previewExactCommand">1 条精确命令 · 已记录</span><span>Auto</span></div>
-                <div class="preview-row"><span class="ok">◉ <b data-i18n="enabled">已启用</b></span><span><strong>Model gateway</strong><small>coding</small></span><span><i class="kind llm">LLM</i></span><code>127.0.0.1:4768/r/coding</code><span><em>3 models</em><em>60/min</em><em>4 concurrent</em></span><span>Proxy</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section quickstart-section" id="quickstart">
-        <div class="section-heading reveal">
-          <p class="eyebrow" data-i18n="quickstartEyebrow">QUICK START</p>
-          <h2 data-i18n="quickstartTitle">调用者只需要本地入口</h2>
-          <p data-i18n="quickstartIntro">先在 Airlock Desktop 中完成原生安全配置，然后把本地能力凭据交给需要执行任务的工具。</p>
-        </div>
-
-        <div class="code-workbench reveal">
-          <div class="code-tabs" role="tablist" data-i18n-aria="protocolExamples" aria-label="协议示例">
-            <button role="tab" aria-selected="true" aria-controls="panel-http" id="tab-http" data-tab="http">HTTP / Wget</button>
-            <button role="tab" aria-selected="false" aria-controls="panel-ssh" id="tab-ssh" data-tab="ssh">SSH</button>
-            <button role="tab" aria-selected="false" aria-controls="panel-llm" id="tab-llm" data-tab="llm">LLM API</button>
-          </div>
-          <div class="code-panel active" role="tabpanel" id="panel-http" aria-labelledby="tab-http" data-panel="http">
-            <div class="code-copy"><span><b data-i18n="httpExampleTitle">下载受保护的固定资源</b><small data-i18n="httpExampleDetail">本地 Token 只能访问 release 路由</small></span><button class="copy-button" type="button" data-copy="http" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
-            <pre><code id="code-http">wget --header="Authorization: Bearer &lt;local-token&gt;" \
-  http://127.0.0.1:4768/r/release/file.zip</code></pre>
-          </div>
-          <div class="code-panel" role="tabpanel" id="panel-ssh" aria-labelledby="tab-ssh" data-panel="ssh" hidden>
-            <div class="code-copy"><span><b data-i18n="sshExampleTitle">使用隔离的本地 SSH 身份</b><small data-i18n="sshExampleDetail">调用者不会得到上游用户名或密码</small></span><button class="copy-button" type="button" data-copy="ssh" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
-            <pre><code id="code-ssh">ssh build@127.0.0.1 -p 4770</code></pre>
-          </div>
-          <div class="code-panel" role="tabpanel" id="panel-llm" aria-labelledby="tab-llm" data-panel="llm" hidden>
-            <div class="code-copy"><span><b data-i18n="llmExampleTitle">把 OpenAI-compatible 客户端指向本地路由</b><small data-i18n="llmExampleDetail">二次 Key 可轮换，与上游 Key 完全隔离</small></span><button class="copy-button" type="button" data-copy="llm" title="Copy command" data-i18n-aria="copyCommand" aria-label="复制命令">⧉</button></div>
-            <pre><code id="code-llm">export OPENAI_BASE_URL=http://127.0.0.1:4768/r/coding
-export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
-          </div>
-        </div>
-        <p class="quickstart-note reveal"><span data-i18n="p0Label">当前版本</span><b data-i18n="p0Notice">v0.1.6 已于 2026-08-02 发布；维护者生产就绪安全审计已完成。</b></p>
-      </section>
-
-      <section class="section release-section" id="release">
-        <div class="section-heading reveal">
-          <p class="eyebrow" data-i18n="releaseEyebrow">RELEASE &amp; ASSURANCE</p>
-          <h2 data-i18n="releaseTitle">v0.1.6 已发布，生产就绪审计已完成</h2>
-          <p data-i18n="releaseIntro">2026 年 7 月 31 日发布。审计涵盖核心转发边界、依赖、发布工件、安装器和公开站点。</p>
-        </div>
-        <div class="release-audit-grid reveal">
-          <article>
-            <span data-i18n="releasePackageLabel">公开分发</span>
-            <h3 data-i18n="releasePackageTitle">GitHub Release + npm</h3>
-            <p data-i18n="releasePackageDetail">已发布 Apple Silicon macOS 工件、SHA-256 清单与 airlock-relay@0.1.6。</p>
-          </article>
-          <article>
-            <span data-i18n="releaseAuditLabel">审计结论</span>
-            <h3 data-i18n="releaseAuditTitle">维护者生产就绪审计完成</h3>
-            <p data-i18n="releaseAuditDetail">已复核 SSH / HTTP / LLM 边界、依赖漏洞、竞态测试、安装器和 CI 发布路径。</p>
-          </article>
-          <article>
-            <span data-i18n="releaseBoundaryLabel">仍需注意</span>
-            <h3 data-i18n="releaseBoundaryTitle">不是第三方认证</h3>
-            <p data-i18n="releaseBoundaryDetail">当前为 Apple Silicon 技术预览；未进行 Developer ID 签名、Apple 公证或独立渗透测试。</p>
-          </article>
-        </div>
-        <div class="release-links reveal">
-          <a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/security-audit-2026-07-31.md" target="_blank" rel="noreferrer" data-i18n="releaseReadAudit">查看完整审计记录</a>
-          <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer" data-i18n="releaseReadNotes">查看 v0.1.6 发布说明</a>
-        </div>
-      </section>
-
-      <section class="section download-section" id="download">
-        <div class="section-heading reveal">
+      <section class="download-teaser" id="download">
+        <div class="download-teaser-copy reveal">
           <p class="eyebrow" data-i18n="downloadEyebrow">DOWNLOAD &amp; INSTALL</p>
-          <h2 data-i18n="downloadTitle">选择平台，直接下载或通过 npm 安装</h2>
-          <p data-i18n="downloadIntro">所有安装包都附带固定 SHA-256 校验和；Linux 产物另有 GPG 签名。校验失败时安装器会拒绝执行。</p>
-        </div>
-
-        <div class="download-grid reveal">
-          <article class="download-card download-card-mac">
-            <div class="download-card-head"><span class="download-os">macOS</span><span class="download-version">12+</span></div>
-            <h3 data-i18n="dlMacTitle">Apple Silicon / Intel</h3>
-            <p data-i18n="dlMacDetail">DMG 安装到 ~/Applications；Apple Silicon 版本随 npm 包内置，Intel 版本从 Release 下载并校验。</p>
-            <div class="arch-list">
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_aarch64.dmg" target="_blank" rel="noreferrer">arm64 DMG <span aria-hidden="true">↗</span></a>
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x64.dmg" target="_blank" rel="noreferrer">x64 DMG <span aria-hidden="true">↗</span></a>
-            </div>
-            <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
-            <p class="download-note" data-i18n="dlMacNote">ad-hoc 签名，未经 Apple 公证；首次打开需 Gatekeeper 确认，请先核对 SHA-256。</p>
-          </article>
-
-          <article class="download-card download-card-win">
-            <div class="download-card-head"><span class="download-os">Windows</span><span class="download-version">10+</span></div>
-            <h3 data-i18n="dlWinTitle">x64 / x86 / arm64</h3>
-            <p data-i18n="dlWinDetail">NSIS 安装包静默安装；npm 安装器会先下载固定校验和的安装程序并核验。</p>
-            <div class="arch-list">
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x64-setup.exe" target="_blank" rel="noreferrer">x64 <span aria-hidden="true">↗</span></a>
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x86-setup.exe" target="_blank" rel="noreferrer">x86 <span aria-hidden="true">↗</span></a>
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_arm64-setup.exe" target="_blank" rel="noreferrer">arm64 <span aria-hidden="true">↗</span></a>
-            </div>
-            <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
-            <p class="download-note" data-i18n="dlWinNote">预览安装包未代码签名，会出现 UAC 提权提示，SmartScreen 可能警告。</p>
-          </article>
-
-          <article class="download-card download-card-linux">
-            <div class="download-card-head"><span class="download-os">Linux</span><span class="download-version">x64 / arm64</span></div>
-            <h3 data-i18n="dlLinuxTitle">AppImage + GPG 签名</h3>
-            <p data-i18n="dlLinuxDetail">AppImage 安装到 ~/.local/bin；64 位树莓派可直接使用 arm64 版本，32 位 armv7 见文档构建脚本。</p>
-            <div class="arch-list">
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_amd64.AppImage" target="_blank" rel="noreferrer">x64 AppImage <span aria-hidden="true">↗</span></a>
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_aarch64.AppImage" target="_blank" rel="noreferrer">arm64 AppImage <span aria-hidden="true">↗</span></a>
-            </div>
-            <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
-            <p class="download-note" data-i18n="dlLinuxNote">GPG 公钥与 .sig 随 Release 发布；无 FUSE 时用 --appimage-extract-and-run。</p>
-          </article>
-        </div>
-
-        <div class="verify-strip reveal">
-          <div><span>SHA-256</span><strong data-i18n="verifyShaTitle">固定校验和</strong><a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/SHA256SUMS-v0.1.6.txt" target="_blank" rel="noreferrer" data-i18n="verifyShaLink">下载校验清单 ↗</a></div>
-          <div><span>GPG</span><strong data-i18n="verifyGpgTitle">Linux 发布签名</strong><a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock-gpg-pubkey.asc" target="_blank" rel="noreferrer" data-i18n="verifyGpgLink">导入公钥 ↗</a></div>
-          <div><span>RELEASE</span><strong data-i18n="verifyReleaseTitle">全部平台产物</strong><a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer" data-i18n="verifyReleaseLink">GitHub Release ↗</a></div>
-        </div>
-      </section>
-
-      <section class="section platform-section" id="platform">
-        <div class="section-heading reveal">
-          <p class="eyebrow" data-i18n="platformEyebrow">PLATFORM CONTRACT</p>
-          <h2 data-i18n="platformTitle">先识别系统，再选择受验证的安装路径</h2>
-          <p data-i18n="platformIntro">同一个 npm 包会识别当前操作系统与 CPU；安装器只会在公开工件及 SHA-256 已固定时执行。</p>
-        </div>
-        <div class="release-audit-grid platform-matrix reveal">
-          <article>
-            <span data-i18n="platformMacLabel">已发布</span>
-            <h3 data-i18n="platformMacTitle">macOS / Apple Silicon · Intel</h3>
-            <p data-i18n="platformMacDetail">arm64 与 x64 DMG 均已发布；npm 安装器直接安装到 ~/Applications。</p>
-          </article>
-          <article>
-            <span data-i18n="platformWindowsLabel">已发布预览</span>
-            <h3 data-i18n="platformWindowsTitle">Windows / x64 · x86 · ARM64</h3>
-            <p data-i18n="platformWindowsDetail">NSIS 安装包已随 Release 发布并固定校验和；npm 安装器核验后静默安装。</p>
-          </article>
-          <article>
-            <span data-i18n="platformLinuxLabel">已发布预览</span>
-            <h3 data-i18n="platformLinuxTitle">Linux / x64 · arm64 · 树莓派</h3>
-            <p data-i18n="platformLinuxDetail">AppImage 已发布并带 GPG 签名；64 位树莓派直接可用，32 位 armv7 提供设备端构建脚本。</p>
-          </article>
-        </div>
-        <div class="release-links reveal">
-          <a href="./docs.html#zh-platform" data-i18n="platformReadDocs">阅读跨平台测试与发布边界</a>
-          <a href="https://github.com/LouisonH/airlock-relay/blob/main/docs/cross-platform.zh-CN.md" target="_blank" rel="noreferrer" data-i18n="platformReadContract">查看平台契约</a>
-        </div>
-      </section>
-
-      <section class="section architecture-section" id="architecture">
-        <div class="architecture-layout">
-          <div class="section-heading reveal">
-            <p class="eyebrow" data-i18n="architectureEyebrow">ARCHITECTURE</p>
-            <h2 data-i18n="architectureTitle">桌面控制面与网络核心分离</h2>
-            <p data-i18n="architectureIntro">GUI 关闭后，本地转发服务仍可继续运行。控制命令不经过普通 TCP 端口。</p>
+          <h2 data-i18n="downloadTeaserTitle">macOS · Windows · Linux · Raspberry Pi</h2>
+          <p data-i18n="downloadTeaserDetail">一个 npm 命令即可在全部支持平台安装；也可以到下载页获取各平台的安装包、SHA-256 清单与 GPG 公钥。</p>
+          <div class="download-teaser-actions">
+            <a class="primary-action" href="./downloads.html" data-i18n="downloadTeaserCta">进入下载页</a>
+            <a class="secondary-action" href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer"><span data-i18n="releaseNotesLink">查看发布说明</span><span aria-hidden="true">↗</span></a>
           </div>
-          <ol class="architecture-flow reveal">
-            <li><span>01</span><div><strong>Airlock Desktop</strong><small>Tauri 2 + React</small><p data-i18n="architectureDesktop">路由、策略、主题与脱敏状态。</p></div></li>
-            <li><span>02</span><div><strong>Unix Socket</strong><small>0600 · current user</small><p data-i18n="architectureSocket">受保护的本地控制通道。</p></div></li>
-            <li><span>03</span><div><strong>airlockd</strong><small>Go network core</small><p data-i18n="architectureCore">验证能力、应用策略、注入 Secret 并选择出口。</p></div></li>
-            <li><span>04</span><div><strong>SecretStore</strong><small>Keychain / 0600 file</small><p data-i18n="architectureSecret">保存完整目标描述与真实凭据。</p></div></li>
-          </ol>
         </div>
-      </section>
-
-      <section class="section controls-section">
-        <div class="section-heading reveal">
-          <p class="eyebrow" data-i18n="controlsEyebrow">CONTROL WITHOUT EXPOSURE</p>
-          <h2 data-i18n="controlsTitle">可调整的便捷性，不可绕过的控制面</h2>
-        </div>
-        <div class="control-matrix reveal">
-          <div><span data-i18n="controlNetwork">网络范围</span><strong data-i18n="controlNetworkValue">仅本机 / 私有局域网</strong><small data-i18n="controlNetworkDetail">局域网模式需要原生风险确认</small></div>
-          <div><span data-i18n="controlSecrets">Secret 保护</span><strong>macOS Keychain / 0600 file</strong><small data-i18n="controlSecretsDetail">切换前进行双向验证与失败回滚</small></div>
-          <div><span data-i18n="controlProxy">代理出口</span><strong>Direct / Proxy / Auto</strong><small data-i18n="controlProxyDetail">兼容 Clash HTTP CONNECT 与 SOCKS5</small></div>
-          <div><span data-i18n="controlAppearance">桌面偏好</span><strong data-i18n="controlAppearanceValue">深浅主题 · 密度 · 动效</strong><small data-i18n="controlAppearanceDetail">只保存在本地 UI，不与路由 Secret 混合</small></div>
-        </div>
-      </section>
-
-      <section class="section faq-section" id="faq">
-        <div class="section-heading reveal">
-          <p class="eyebrow" data-i18n="faqEyebrow">FAQ</p>
-          <h2 data-i18n="faqTitle">安全边界说明</h2>
-        </div>
-        <div class="faq-list reveal">
-          <details><summary data-i18n="faqOneQuestion">Airlock 是通用代理或 VPN 吗？</summary><p data-i18n="faqOneAnswer">不是。Airlock 不接受调用者提供的任意目标，只转发到用户预先配置并授权的固定路由。</p></details>
-          <details><summary data-i18n="faqTwoQuestion">LLM 能看到上游 API Key 吗？</summary><p data-i18n="faqTwoAnswer">不能。客户端使用的是可撤销的本地二次 Key，Airlock 在向固定上游发起请求时才注入真实 Key。</p></details>
-          <details><summary data-i18n="faqThreeQuestion">Token 统计会保存提示词吗？</summary><p data-i18n="faqThreeAnswer">不会。该功能默认关闭；开启后只提取上游 usage 数字，计数仅保存在 airlockd 内存中。</p></details>
-          <details><summary data-i18n="faqFourQuestion">Airlock 能防御本机管理员吗？</summary><p data-i18n="faqFourAnswer">不能。本机管理员、root、可调试 Airlock 进程或已控制操作系统的攻击者不在保护范围内。</p></details>
-          <details><summary data-i18n="faqFiveQuestion">支持哪些平台？</summary><p data-i18n="faqFiveAnswer">macOS 12+（Apple Silicon 与 Intel）、Windows 10+（x64/x86/arm64）与 Linux x64/arm64；64 位树莓派可直接安装，32 位 armv7 提供设备端构建脚本。</p></details>
-          <details><summary data-i18n="faqSixQuestion">如何校验下载的安装包？</summary><p data-i18n="faqSixAnswer">下载 SHA256SUMS-v0.1.6.txt 后用 shasum -a 256 -c 核对；Linux 产物还可导入 Airlock-gpg-pubkey.asc 后用 gpg --verify 校验签名。安装器本身也会在安装前强制校验。</p></details>
+        <div class="install-command reveal" aria-label="Install Airlock">
+          <span data-i18n="installLabel">NPM INSTALL</span>
+          <code id="code-install-teaser">npm install -g airlock-relay && airlock-installer install --open</code>
+          <button class="copy-button" type="button" data-copy="install-teaser" data-i18n-aria="copyCommand" aria-label="复制命令" title="Copy command">⧉</button>
         </div>
       </section>
 

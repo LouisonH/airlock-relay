@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#18201d" />
+    <meta name="description" content="Airlock security model: fixed routes, credential isolation, architecture, and threat boundary." />
+    <title>Airlock - 安全模型</title>
+    <link rel="icon" href="./assets/airlock-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./assets/styles.css?v=20260803-site" />
+    <script src="./assets/site.js?v=20260803-site" defer></script>
+  </head>
+  <body data-page-title="securityPageTitle">
+    <a class="skip-link" href="#main" data-i18n="skipLink">跳到主要内容</a>
+
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="./index.html" aria-label="Airlock home">
+          <img src="./assets/airlock-logo.svg" alt="" width="34" height="34" />
+          <span><strong>Airlock</strong><small>Local security relay</small></span>
+        </a>
+        <nav class="site-nav" id="site-nav" data-i18n-aria="navLabel" aria-label="主导航">
+          <a href="./index.html" data-i18n="navHome">首页</a>
+          <a href="./index.html#routes" data-i18n="navRoutes">路由类型</a>
+          <a href="./downloads.html" data-i18n="navDownload">下载</a>
+          <a href="./security.html" data-i18n="navSecurity">安全模型</a>
+          <a href="./desktop.html" data-i18n="navDesktop">桌面端</a>
+          <a href="./docs.html" data-i18n="navDocs">文档</a>
+        </nav>
+        <div class="header-actions">
+          <button class="language-button" id="language-toggle" type="button" aria-label="Switch to English">EN</button>
+          <button class="icon-button" id="theme-toggle" type="button" title="切换主题" aria-label="切换深浅主题"><span aria-hidden="true">◐</span></button>
+          <a class="github-link" href="https://github.com/LouisonH/airlock-relay" target="_blank" rel="noreferrer"><span data-i18n="sourceCode">源代码</span><span aria-hidden="true">↗</span></a>
+          <button class="menu-button" id="menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" data-i18n-aria="menuLabel" aria-label="打开导航"><span aria-hidden="true">☰</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="page-hero">
+        <div class="page-hero-inner reveal">
+          <p class="eyebrow" data-i18n="boundaryEyebrow">THE BOUNDARY</p>
+          <h1 data-i18n="securityPageTitle">安全模型</h1>
+          <p data-i18n="boundaryIntro">Agent 可以执行被允许的任务，但无法读取或还原真实上游凭据。</p>
+        </div>
+      </section>
+
+      <section class="section boundary-section" id="boundary">
+        <div class="boundary-layout reveal">
+          <div class="boundary-statement">
+            <p data-i18n="boundaryStatement">Airlock 不是通用开放代理。每条路由都是预先配置的、有界的本地能力。</p>
+            <div class="capability-token"><span>capability</span><code>airlock_••••••••••••</code><b data-i18n="revocable">可撤销</b></div>
+          </div>
+          <div class="boundary-facts">
+            <article><span>01</span><div><h3 data-i18n="factOneTitle">真实目标受保护</h3><p data-i18n="factOneDetail">URL、域名、IP 和 SSH 账户均由 SecretStore 保存。</p></div></article>
+            <article><span>02</span><div><h3 data-i18n="factTwoTitle">请求在上游前校验</h3><p data-i18n="factTwoDetail">方法、路径、模型、速率、并发与命令范围都有显式边界。</p></div></article>
+            <article><span>03</span><div><h3 data-i18n="factThreeTitle">错误也不泄密</h3><p data-i18n="factThreeDetail">失败响应与活动记录只包含脱敏的本地上下文。</p></div></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section architecture-section" id="architecture">
+        <div class="architecture-layout">
+          <div class="section-heading reveal">
+            <p class="eyebrow" data-i18n="architectureEyebrow">ARCHITECTURE</p>
+            <h2 data-i18n="architectureTitle">桌面控制面与网络核心分离</h2>
+            <p data-i18n="architectureIntro">GUI 关闭后，本地转发服务仍可继续运行。控制命令不经过普通 TCP 端口。</p>
+          </div>
+          <ol class="architecture-flow reveal">
+            <li><span>01</span><div><strong>Airlock Desktop</strong><small>Tauri 2 + React</small><p data-i18n="architectureDesktop">路由、策略、主题与脱敏状态。</p></div></li>
+            <li><span>02</span><div><strong>Unix Socket</strong><small>0600 · current user</small><p data-i18n="architectureSocket">受保护的本地控制通道。</p></div></li>
+            <li><span>03</span><div><strong>airlockd</strong><small>Go network core</small><p data-i18n="architectureCore">验证能力、应用策略、注入 Secret 并选择出口。</p></div></li>
+            <li><span>04</span><div><strong>SecretStore</strong><small>Keychain / 0600 file</small><p data-i18n="architectureSecret">保存完整目标描述与真实凭据。</p></div></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section controls-section">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="controlsEyebrow">CONTROL WITHOUT EXPOSURE</p>
+          <h2 data-i18n="controlsTitle">可调整的便捷性，不可绕过的控制面</h2>
+        </div>
+        <div class="control-matrix reveal">
+          <div><span data-i18n="controlNetwork">网络范围</span><strong data-i18n="controlNetworkValue">仅本机 / 私有局域网</strong><small data-i18n="controlNetworkDetail">局域网模式需要原生风险确认</small></div>
+          <div><span data-i18n="controlSecrets">Secret 保护</span><strong>macOS Keychain / 0600 file</strong><small data-i18n="controlSecretsDetail">切换前进行双向验证与失败回滚</small></div>
+          <div><span data-i18n="controlProxy">代理出口</span><strong>Direct / Proxy / Auto</strong><small data-i18n="controlProxyDetail">兼容 Clash HTTP CONNECT 与 SOCKS5</small></div>
+          <div><span data-i18n="controlAppearance">桌面偏好</span><strong data-i18n="controlAppearanceValue">深浅主题 · 密度 · 动效</strong><small data-i18n="controlAppearanceDetail">只保存在本地 UI，不与路由 Secret 混合</small></div>
+        </div>
+      </section>
+
+      <section class="section faq-section" id="faq">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="faqEyebrow">FAQ</p>
+          <h2 data-i18n="faqTitle">安全边界说明</h2>
+        </div>
+        <div class="faq-list reveal">
+          <details><summary data-i18n="faqOneQuestion">Airlock 是通用代理或 VPN 吗？</summary><p data-i18n="faqOneAnswer">不是。Airlock 不接受调用者提供的任意目标，只转发到用户预先配置并授权的固定路由。</p></details>
+          <details><summary data-i18n="faqTwoQuestion">LLM 能看到上游 API Key 吗？</summary><p data-i18n="faqTwoAnswer">不能。客户端使用的是可撤销的本地二次 Key，Airlock 在向固定上游发起请求时才注入真实 Key。</p></details>
+          <details><summary data-i18n="faqThreeQuestion">Token 统计会保存提示词吗？</summary><p data-i18n="faqThreeAnswer">不会。该功能默认关闭；开启后只提取上游 usage 数字，计数仅保存在 airlockd 内存中。</p></details>
+          <details><summary data-i18n="faqFourQuestion">Airlock 能防御本机管理员吗？</summary><p data-i18n="faqFourAnswer">不能。本机管理员、root、可调试 Airlock 进程或已控制操作系统的攻击者不在保护范围内。</p></details>
+          <details><summary data-i18n="faqFiveQuestion">支持哪些平台？</summary><p data-i18n="faqFiveAnswer">macOS 12+（Apple Silicon 与 Intel）、Windows 10+（x64/x86/arm64）与 Linux x64/arm64；64 位树莓派可直接安装，32 位 armv7 提供设备端构建脚本。</p></details>
+          <details><summary data-i18n="faqSixQuestion">如何校验下载的安装包？</summary><p data-i18n="faqSixAnswer">下载 SHA256SUMS-v0.1.6.txt 后用 shasum -a 256 -c 核对；Linux 产物还可导入 Airlock-gpg-pubkey.asc 后用 gpg --verify 校验签名。安装器本身也会在安装前强制校验。</p></details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div><span><strong>Airlock</strong> · <span data-i18n="footerTagline">本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> <a href="https://0o0.site" target="_blank" rel="noreferrer">LouisonH</a> · <span data-i18n="footerAffiliation">华南理工大学（SCUT）相关开发者 · 独立项目</span> · <a href="https://github.com/LouisonH" target="_blank" rel="noreferrer">GitHub</a></span></div>
+      <p data-i18n="footerSecurity">v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+    </footer>
+
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" data-i18n="copied">已复制命令</div>
+  </body>
+</html>
