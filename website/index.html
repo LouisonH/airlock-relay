@@ -12,8 +12,8 @@
     <meta name="twitter:card" content="summary" />
     <title>Airlock - 本地凭据隔离转发器</title>
     <link rel="icon" href="./assets/airlock-logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./assets/styles.css?v=20260801-cross" />
-    <script src="./assets/site.js?v=20260801-cross" defer></script>
+    <link rel="stylesheet" href="./assets/styles.css?v=20260802-site" />
+    <script src="./assets/site.js?v=20260802-site" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main" data-i18n="skipLink">跳到主要内容</a>
@@ -29,6 +29,7 @@
           <a href="#boundary" data-i18n="navBoundary">安全边界</a>
           <a href="#routes" data-i18n="navRoutes">路由类型</a>
           <a href="#quickstart" data-i18n="navQuickstart">快速使用</a>
+          <a href="#download" data-i18n="navDownload">下载</a>
           <a href="#release" data-i18n="navRelease">发布状态</a>
           <a href="#platform" data-i18n="navPlatform">跨平台</a>
           <a href="#architecture" data-i18n="navArchitecture">架构</a>
@@ -75,8 +76,8 @@
             <p class="hero-lead" data-i18n="heroLead" data-character-reveal>把能力交给 Agent，把凭据留在本机。</p>
             <p class="hero-detail" data-i18n="heroDetail">Airlock 使用固定本地路由、可撤销凭据与最小权限策略，为 HTTP、SSH 和 LLM 请求隔离真实上游地址、密码与 API Key。</p>
             <div class="hero-actions">
-              <a class="primary-action" href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer"><span data-i18n="releaseCta">下载 v0.1.6</span><span aria-hidden="true">↗</span></a>
-              <a class="secondary-action" href="#quickstart" data-i18n="quickStartCta">查看快速用法</a>
+              <a class="primary-action" href="#download"><span data-i18n="releaseCta">下载安装 v0.1.6</span></a>
+              <a class="secondary-action" href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer"><span data-i18n="releaseNotesLink">查看发布说明</span><span aria-hidden="true">↗</span></a>
             </div>
             <div class="install-command" aria-label="Install Airlock">
               <span data-i18n="installLabel">NPM INSTALL</span>
@@ -235,6 +236,59 @@ export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
         </div>
       </section>
 
+      <section class="section download-section" id="download">
+        <div class="section-heading reveal">
+          <p class="eyebrow" data-i18n="downloadEyebrow">DOWNLOAD &amp; INSTALL</p>
+          <h2 data-i18n="downloadTitle">选择平台，直接下载或通过 npm 安装</h2>
+          <p data-i18n="downloadIntro">所有安装包都附带固定 SHA-256 校验和；Linux 产物另有 GPG 签名。校验失败时安装器会拒绝执行。</p>
+        </div>
+
+        <div class="download-grid reveal">
+          <article class="download-card download-card-mac">
+            <div class="download-card-head"><span class="download-os">macOS</span><span class="download-version">12+</span></div>
+            <h3 data-i18n="dlMacTitle">Apple Silicon / Intel</h3>
+            <p data-i18n="dlMacDetail">DMG 安装到 ~/Applications；Apple Silicon 版本随 npm 包内置，Intel 版本从 Release 下载并校验。</p>
+            <div class="arch-list">
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_aarch64.dmg" target="_blank" rel="noreferrer">arm64 DMG <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x64.dmg" target="_blank" rel="noreferrer">x64 DMG <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
+            <p class="download-note" data-i18n="dlMacNote">ad-hoc 签名，未经 Apple 公证；首次打开需 Gatekeeper 确认，请先核对 SHA-256。</p>
+          </article>
+
+          <article class="download-card download-card-win">
+            <div class="download-card-head"><span class="download-os">Windows</span><span class="download-version">10+</span></div>
+            <h3 data-i18n="dlWinTitle">x64 / x86 / arm64</h3>
+            <p data-i18n="dlWinDetail">NSIS 安装包静默安装；npm 安装器会先下载固定校验和的安装程序并核验。</p>
+            <div class="arch-list">
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x64-setup.exe" target="_blank" rel="noreferrer">x64 <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x86-setup.exe" target="_blank" rel="noreferrer">x86 <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_arm64-setup.exe" target="_blank" rel="noreferrer">arm64 <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
+            <p class="download-note" data-i18n="dlWinNote">预览安装包未代码签名，会出现 UAC 提权提示，SmartScreen 可能警告。</p>
+          </article>
+
+          <article class="download-card download-card-linux">
+            <div class="download-card-head"><span class="download-os">Linux</span><span class="download-version">x64 / arm64</span></div>
+            <h3 data-i18n="dlLinuxTitle">AppImage + GPG 签名</h3>
+            <p data-i18n="dlLinuxDetail">AppImage 安装到 ~/.local/bin；64 位树莓派可直接使用 arm64 版本，32 位 armv7 见文档构建脚本。</p>
+            <div class="arch-list">
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_amd64.AppImage" target="_blank" rel="noreferrer">x64 AppImage <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_aarch64.AppImage" target="_blank" rel="noreferrer">arm64 AppImage <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
+            <p class="download-note" data-i18n="dlLinuxNote">GPG 公钥与 .sig 随 Release 发布；无 FUSE 时用 --appimage-extract-and-run。</p>
+          </article>
+        </div>
+
+        <div class="verify-strip reveal">
+          <div><span>SHA-256</span><strong data-i18n="verifyShaTitle">固定校验和</strong><a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/SHA256SUMS-v0.1.6.txt" target="_blank" rel="noreferrer" data-i18n="verifyShaLink">下载校验清单 ↗</a></div>
+          <div><span>GPG</span><strong data-i18n="verifyGpgTitle">Linux 发布签名</strong><a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock-gpg-pubkey.asc" target="_blank" rel="noreferrer" data-i18n="verifyGpgLink">导入公钥 ↗</a></div>
+          <div><span>RELEASE</span><strong data-i18n="verifyReleaseTitle">全部平台产物</strong><a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer" data-i18n="verifyReleaseLink">GitHub Release ↗</a></div>
+        </div>
+      </section>
+
       <section class="section platform-section" id="platform">
         <div class="section-heading reveal">
           <p class="eyebrow" data-i18n="platformEyebrow">PLATFORM CONTRACT</p>
@@ -243,19 +297,19 @@ export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
         </div>
         <div class="release-audit-grid platform-matrix reveal">
           <article>
-            <span data-i18n="platformMacLabel">RELEASED PREVIEW</span>
-            <h3 data-i18n="platformMacTitle">macOS / Apple Silicon</h3>
-            <p data-i18n="platformMacDetail">已发布 DMG 与校验和。使用状态检查后，可显式执行 `airlock-installer install --open`。</p>
+            <span data-i18n="platformMacLabel">已发布</span>
+            <h3 data-i18n="platformMacTitle">macOS / Apple Silicon · Intel</h3>
+            <p data-i18n="platformMacDetail">arm64 与 x64 DMG 均已发布；npm 安装器直接安装到 ~/Applications。</p>
           </article>
           <article>
-            <span data-i18n="platformWindowsLabel">CI PREVIEW</span>
+            <span data-i18n="platformWindowsLabel">已发布预览</span>
             <h3 data-i18n="platformWindowsTitle">Windows / x64 · x86 · ARM64</h3>
-            <p data-i18n="platformWindowsDetail">npm 可识别平台并安全返回状态；CI 构建产物尚未作为校验后的公开安装包发布。</p>
+            <p data-i18n="platformWindowsDetail">NSIS 安装包已随 Release 发布并固定校验和；npm 安装器核验后静默安装。</p>
           </article>
           <article>
-            <span data-i18n="platformLinuxLabel">CI PREVIEW</span>
-            <h3 data-i18n="platformLinuxTitle">Linux / x64 · ARM64</h3>
-            <p data-i18n="platformLinuxDetail">CLI/Core 有跨架构构建基线；npm 不下载 CI 工件，也不会在未发布目标上执行安装。</p>
+            <span data-i18n="platformLinuxLabel">已发布预览</span>
+            <h3 data-i18n="platformLinuxTitle">Linux / x64 · arm64 · 树莓派</h3>
+            <p data-i18n="platformLinuxDetail">AppImage 已发布并带 GPG 签名；64 位树莓派直接可用，32 位 armv7 提供设备端构建脚本。</p>
           </article>
         </div>
         <div class="release-links reveal">
@@ -303,6 +357,8 @@ export OPENAI_API_KEY=&lt;local-api-key&gt;</code></pre>
           <details><summary data-i18n="faqTwoQuestion">LLM 能看到上游 API Key 吗？</summary><p data-i18n="faqTwoAnswer">不能。客户端使用的是可撤销的本地二次 Key，Airlock 在向固定上游发起请求时才注入真实 Key。</p></details>
           <details><summary data-i18n="faqThreeQuestion">Token 统计会保存提示词吗？</summary><p data-i18n="faqThreeAnswer">不会。该功能默认关闭；开启后只提取上游 usage 数字，计数仅保存在 airlockd 内存中。</p></details>
           <details><summary data-i18n="faqFourQuestion">Airlock 能防御本机管理员吗？</summary><p data-i18n="faqFourAnswer">不能。本机管理员、root、可调试 Airlock 进程或已控制操作系统的攻击者不在保护范围内。</p></details>
+          <details><summary data-i18n="faqFiveQuestion">支持哪些平台？</summary><p data-i18n="faqFiveAnswer">macOS 12+（Apple Silicon 与 Intel）、Windows 10+（x64/x86/arm64）与 Linux x64/arm64；64 位树莓派可直接安装，32 位 armv7 提供设备端构建脚本。</p></details>
+          <details><summary data-i18n="faqSixQuestion">如何校验下载的安装包？</summary><p data-i18n="faqSixAnswer">下载 SHA256SUMS-v0.1.6.txt 后用 shasum -a 256 -c 核对；Linux 产物还可导入 Airlock-gpg-pubkey.asc 后用 gpg --verify 校验签名。安装器本身也会在安装前强制校验。</p></details>
         </div>
       </section>
 
