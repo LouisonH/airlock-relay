@@ -8,7 +8,7 @@
     <a href="README.zh-CN.md">简体中文</a> |
     <a href="README.ja.md">日本語</a> |
     <a href="docs/README.md">文档索引</a> |
-    <a href="website/index.html">静态说明网页</a>
+    <a href="https://louisonh.github.io/airlock-relay/">静态说明网页</a>
   </p>
   <p>
     <a href="https://louisonh.github.io/airlock-relay/"><img src="https://img.shields.io/badge/website-Airlock%20Pages-267d5f" alt="Airlock 项目主页" /></a>

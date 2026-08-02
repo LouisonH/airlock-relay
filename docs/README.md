@@ -17,7 +17,7 @@
 - [Desktop UI security specification](ui-spec.md)
 - [Cross-platform adaptation plan](cross-platform.md)
 - [Changelog](../CHANGELOG.md)
-- [Static documentation website](../website/en/index.html)
+- [Static documentation website](https://louisonh.github.io/airlock-relay/)
 - [Static Pages guide: desktop, updates, CLI, and platforms](../website/docs.html?lang=en)
 
 ## 简体中文
@@ -35,7 +35,7 @@
 - [桌面 UI 安全规范](ui-spec.md)
 - [跨平台适配方案](cross-platform.zh-CN.md)
 - [更新日志](../CHANGELOG.md)
-- [静态说明网页](../website/index.html)
+- [静态说明网页](https://louisonh.github.io/airlock-relay/)
 - [静态 Pages 指南：桌面端、更新、CLI 与平台](../website/docs.html?lang=zh)
 
 ## 日本語
@@ -51,4 +51,4 @@
 - [v0.1.2 起動ホットフィックスノート](releases/v0.1.2.ja.md)
 - [セキュリティポリシー](../SECURITY.md)
 - [デスクトップ UI セキュリティ仕様](ui-spec.md)
-- [静的 Pages ガイド：デスクトップ、更新、CLI、プラットフォーム](../website/docs.html?lang=ja)
+- [静的 Pages ガイド：デスクトップ、更新、CLI、プラットフォーム](https://louisonh.github.io/airlock-relay/docs.html?lang=ja)
