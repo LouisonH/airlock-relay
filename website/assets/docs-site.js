@@ -24,6 +24,8 @@ function storageSet(key, value) {
 }
 
 function currentLanguage() {
+  const queryLanguage = new URLSearchParams(window.location.search).get("lang");
+  if (queryLanguage === "zh" || queryLanguage === "en" || queryLanguage === "ja") return queryLanguage;
   const stored = storageGet(docsLanguageKey);
   if (stored === "zh" || stored === "en" || stored === "ja") return stored;
   const language = navigator.language.toLowerCase();
