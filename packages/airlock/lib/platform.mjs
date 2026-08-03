@@ -27,7 +27,7 @@ const targets = [
     status: "released",
     installType: "macos-dmg",
     artifactName: "Airlock_0.1.7_x64.dmg",
-    sha256: "PENDING_MACOS_X64",
+    sha256: "7c8a7a141986a4bad61fa76096bbdefefc9c47445774faebb69f5cd25f44392c",
   },
   {
     id: "windows-x64",
@@ -39,7 +39,7 @@ const targets = [
     status: "released",
     installType: "windows-nsis",
     artifactName: "Airlock_0.1.7_x64-setup.exe",
-    sha256: "PENDING_WINDOWS_X64",
+    sha256: "f2ca78f3c3e68c39cad476a5b3f628a3b58837a4e7051e547138fe6b0268662b",
   },
   {
     id: "windows-arm64",
@@ -51,7 +51,7 @@ const targets = [
     status: "released",
     installType: "windows-nsis",
     artifactName: "Airlock_0.1.7_arm64-setup.exe",
-    sha256: "PENDING_WINDOWS_ARM64",
+    sha256: "a7d0ed3c2dd95cdfdde2da1b550d138dfe977522a717fcf03602d55e06defeb4",
   },
   {
     id: "windows-x86",
@@ -63,7 +63,7 @@ const targets = [
     status: "released",
     installType: "windows-nsis",
     artifactName: "Airlock_0.1.7_x86-setup.exe",
-    sha256: "PENDING_WINDOWS_X86",
+    sha256: "e418fd6d35d8fde162b14e1964659ccb04353f7f01ca6a25aad349aff7bd1077",
   },
   {
     id: "linux-x64",
@@ -75,7 +75,7 @@ const targets = [
     status: "released",
     installType: "linux-appimage",
     artifactName: "Airlock_0.1.7_amd64.AppImage",
-    sha256: "PENDING_LINUX_X64",
+    sha256: "5f405f992c549c46f986bcb3d11f0a84d70a405257921caf1d881dba18671639",
   },
   {
     id: "linux-arm64",
@@ -87,7 +87,7 @@ const targets = [
     status: "released",
     installType: "linux-appimage",
     artifactName: "Airlock_0.1.7_aarch64.AppImage",
-    sha256: "PENDING_LINUX_ARM64",
+    sha256: "96d7d445733aa8b61b373b408d89d83dbe4c8018a06b56061059002f52232c94",
   },
   {
     id: "linux-x86",
