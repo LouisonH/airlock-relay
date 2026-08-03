@@ -4,6 +4,18 @@ All notable changes to Airlock are documented here. Airlock follows
 [Semantic Versioning](https://semver.org/), with pre-1.0 releases treated as
 technical previews whose interfaces may still change.
 
+## [0.1.7] - 2026-08-03
+
+### Fixed
+
+- The custom desktop title bar now works on every platform: minimize,
+  maximize/restore, close, and drag-region permissions were missing from the
+  Tauri capability set and are now explicitly granted.
+
+### Added
+
+- Windows runtime diagnostic helper (`scripts/diagnose-windows.ps1`).
+
 ## [0.1.6] - 2026-08-02
 
 ### Added
@@ -128,6 +140,7 @@ technical previews whose interfaces may still change.
   production security audit.
 
 [0.1.0]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.0
+[0.1.7]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.7
 [0.1.6]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6
 [0.1.5]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.5
 [0.1.4]: https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4

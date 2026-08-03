@@ -120,7 +120,7 @@ test("rejects an incomplete macOS bundle", async () => {
 test("platform resolver releases only verified targets", () => {
   assert.equal(resolveReleasedArtifact("darwin", "arm64").artifactName, ASSET_NAME);
   assert.equal(PLATFORM_TARGETS.filter((target) => target.status === "released").length, 7);
-  assert.equal(resolveReleasedArtifact("win32", "x64").artifactName, "Airlock_0.1.6_x64-setup.exe");
+  assert.equal(resolveReleasedArtifact("win32", "x64").artifactName, "Airlock_0.1.7_x64-setup.exe");
   assert.equal(resolveReleasedArtifact("linux", "x64").installType, "linux-appimage");
   assert.equal(getPlatformContract("win32", "arm64").status, "released");
   assert.equal(getPlatformContract("win32", "ia32").status, "released");

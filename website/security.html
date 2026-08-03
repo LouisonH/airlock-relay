@@ -100,14 +100,14 @@
           <details><summary data-i18n="faqThreeQuestion">Token 统计会保存提示词吗？</summary><p data-i18n="faqThreeAnswer">不会。该功能默认关闭；开启后只提取上游 usage 数字，计数仅保存在 airlockd 内存中。</p></details>
           <details><summary data-i18n="faqFourQuestion">Airlock 能防御本机管理员吗？</summary><p data-i18n="faqFourAnswer">不能。本机管理员、root、可调试 Airlock 进程或已控制操作系统的攻击者不在保护范围内。</p></details>
           <details><summary data-i18n="faqFiveQuestion">支持哪些平台？</summary><p data-i18n="faqFiveAnswer">macOS 12+（Apple Silicon 与 Intel）、Windows 10+（x64/x86/arm64）与 Linux x64/arm64；64 位树莓派可直接安装，32 位 armv7 提供设备端构建脚本。</p></details>
-          <details><summary data-i18n="faqSixQuestion">如何校验下载的安装包？</summary><p data-i18n="faqSixAnswer">下载 SHA256SUMS-v0.1.6.txt 后用 shasum -a 256 -c 核对；Linux 产物还可导入 Airlock-gpg-pubkey.asc 后用 gpg --verify 校验签名。安装器本身也会在安装前强制校验。</p></details>
+          <details><summary data-i18n="faqSixQuestion">如何校验下载的安装包？</summary><p data-i18n="faqSixAnswer">下载 SHA256SUMS-v0.1.7.txt 后用 shasum -a 256 -c 核对；Linux 产物还可导入 Airlock-gpg-pubkey.asc 后用 gpg --verify 校验签名。安装器本身也会在安装前强制校验。</p></details>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
       <div><span><strong>Airlock</strong> · <span data-i18n="footerTagline">本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> <a href="https://0o0.site" target="_blank" rel="noreferrer">LouisonH</a> · <span data-i18n="footerAffiliation">华南理工大学（SCUT）相关开发者 · 独立项目</span> · <a href="https://github.com/LouisonH" target="_blank" rel="noreferrer">GitHub</a></span></div>
-      <p data-i18n="footerSecurity">v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+      <p data-i18n="footerSecurity">v0.1.7 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
     </footer>
 
     <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" data-i18n="copied">已复制命令</div>

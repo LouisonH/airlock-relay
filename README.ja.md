@@ -12,7 +12,7 @@
   </p>
   <p>
     <a href="https://louisonh.github.io/airlock-relay/"><img src="https://img.shields.io/badge/website-Airlock%20Pages-267d5f" alt="Airlock ウェブサイト" /></a>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6%20technical%20preview-b26b25" alt="v0.1.6 テクニカルプレビュー" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.7"><img src="https://img.shields.io/badge/release-v0.1.7%20technical%20preview-b26b25" alt="v0.1.7 テクニカルプレビュー" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 デスクトップ" />
     <img src="https://img.shields.io/badge/core-Go%201.25%2B-267d5f" alt="Go 1.25 以上" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -20,7 +20,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.6 はテクニカルプレビューです。保守者による本番運用準備セキュリティ監査は完了しましたが、独立した第三者監査、Developer ID 署名、Apple 公証は未完了です。運用前に[監査記録](docs/security-audit-2026-07-31.md)を確認してください。
+> Airlock v0.1.7 はテクニカルプレビューです。保守者による本番運用準備セキュリティ監査は完了しましたが、独立した第三者監査、Developer ID 署名、Apple 公証は未完了です。運用前に[監査記録](docs/security-audit-2026-07-31.md)を確認してください。
 
 ## Airlock が必要な理由
 

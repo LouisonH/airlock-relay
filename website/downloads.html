@@ -58,8 +58,8 @@
             <h3 data-i18n="dlMacTitle">Apple Silicon / Intel</h3>
             <p data-i18n="dlMacDetail">DMG 安装到 ~/Applications；Apple Silicon 版本随 npm 包内置，Intel 版本从 Release 下载并校验。</p>
             <div class="arch-list">
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_aarch64.dmg" target="_blank" rel="noreferrer">arm64 DMG <span aria-hidden="true">↗</span></a>
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x64.dmg" target="_blank" rel="noreferrer">x64 DMG <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/Airlock_0.1.7_aarch64.dmg" target="_blank" rel="noreferrer">arm64 DMG <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/Airlock_0.1.7_x64.dmg" target="_blank" rel="noreferrer">x64 DMG <span aria-hidden="true">↗</span></a>
             </div>
             <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
             <p class="download-note" data-i18n="dlMacNote">ad-hoc 签名，未经 Apple 公证；首次打开需 Gatekeeper 确认，请先核对 SHA-256。</p>
@@ -70,9 +70,9 @@
             <h3 data-i18n="dlWinTitle">x64 / x86 / arm64</h3>
             <p data-i18n="dlWinDetail">NSIS 安装包静默安装；npm 安装器会先下载固定校验和的安装程序并核验。</p>
             <div class="arch-list">
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x64-setup.exe" target="_blank" rel="noreferrer">x64 <span aria-hidden="true">↗</span></a>
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_x86-setup.exe" target="_blank" rel="noreferrer">x86 <span aria-hidden="true">↗</span></a>
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_arm64-setup.exe" target="_blank" rel="noreferrer">arm64 <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/Airlock_0.1.7_x64-setup.exe" target="_blank" rel="noreferrer">x64 <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/Airlock_0.1.7_x86-setup.exe" target="_blank" rel="noreferrer">x86 <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/Airlock_0.1.7_arm64-setup.exe" target="_blank" rel="noreferrer">arm64 <span aria-hidden="true">↗</span></a>
             </div>
             <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
             <p class="download-note" data-i18n="dlWinNote">预览安装包未代码签名，会出现 UAC 提权提示，SmartScreen 可能警告。</p>
@@ -83,8 +83,8 @@
             <h3 data-i18n="dlLinuxTitle">AppImage + GPG 签名</h3>
             <p data-i18n="dlLinuxDetail">AppImage 安装到 ~/.local/bin；64 位树莓派可直接使用 arm64 版本，32 位 armv7 见文档构建脚本。</p>
             <div class="arch-list">
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_amd64.AppImage" target="_blank" rel="noreferrer">x64 AppImage <span aria-hidden="true">↗</span></a>
-              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock_0.1.6_aarch64.AppImage" target="_blank" rel="noreferrer">arm64 AppImage <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/Airlock_0.1.7_amd64.AppImage" target="_blank" rel="noreferrer">x64 AppImage <span aria-hidden="true">↗</span></a>
+              <a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/Airlock_0.1.7_aarch64.AppImage" target="_blank" rel="noreferrer">arm64 AppImage <span aria-hidden="true">↗</span></a>
             </div>
             <div class="download-command"><code>npm install -g airlock-relay &amp;&amp; airlock-installer install --open</code></div>
             <p class="download-note" data-i18n="dlLinuxNote">GPG 公钥与 .sig 随 Release 发布；无 FUSE 时用 --appimage-extract-and-run。</p>
@@ -92,9 +92,9 @@
         </div>
 
         <div class="verify-strip reveal">
-          <div><span>SHA-256</span><strong data-i18n="verifyShaTitle">固定校验和</strong><a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/SHA256SUMS-v0.1.6.txt" target="_blank" rel="noreferrer" data-i18n="verifyShaLink">下载校验清单 ↗</a></div>
-          <div><span>GPG</span><strong data-i18n="verifyGpgTitle">Linux 发布签名</strong><a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.6/Airlock-gpg-pubkey.asc" target="_blank" rel="noreferrer" data-i18n="verifyGpgLink">导入公钥 ↗</a></div>
-          <div><span>RELEASE</span><strong data-i18n="verifyReleaseTitle">全部平台产物</strong><a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6" target="_blank" rel="noreferrer" data-i18n="verifyReleaseLink">GitHub Release ↗</a></div>
+          <div><span>SHA-256</span><strong data-i18n="verifyShaTitle">固定校验和</strong><a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/SHA256SUMS-v0.1.7.txt" target="_blank" rel="noreferrer" data-i18n="verifyShaLink">下载校验清单 ↗</a></div>
+          <div><span>GPG</span><strong data-i18n="verifyGpgTitle">Linux 发布签名</strong><a href="https://github.com/LouisonH/airlock-relay/releases/download/v0.1.7/Airlock-gpg-pubkey.asc" target="_blank" rel="noreferrer" data-i18n="verifyGpgLink">导入公钥 ↗</a></div>
+          <div><span>RELEASE</span><strong data-i18n="verifyReleaseTitle">全部平台产物</strong><a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.7" target="_blank" rel="noreferrer" data-i18n="verifyReleaseLink">GitHub Release ↗</a></div>
         </div>
       </section>
 
@@ -130,7 +130,7 @@
 
     <footer class="site-footer">
       <div><span><strong>Airlock</strong> · <span data-i18n="footerTagline">本地凭据隔离转发器</span></span><span>© <span id="current-year">2026</span> <a href="https://0o0.site" target="_blank" rel="noreferrer">LouisonH</a> · <span data-i18n="footerAffiliation">华南理工大学（SCUT）相关开发者 · 独立项目</span> · <a href="https://github.com/LouisonH" target="_blank" rel="noreferrer">GitHub</a></span></div>
-      <p data-i18n="footerSecurity">v0.1.6 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
+      <p data-i18n="footerSecurity">v0.1.7 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证</p>
     </footer>
 
     <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" data-i18n="copied">已复制命令</div>

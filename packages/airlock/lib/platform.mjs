@@ -15,7 +15,7 @@ const targets = [
     status: "released",
     installType: "macos-dmg",
     artifactName: "Airlock_0.1.7_aarch64.dmg",
-    sha256: "PENDING_MACOS_ARM64",
+    sha256: "59d3bff839a96afbb8ac47bdbb57096d8a3b621a4cc91628de6c9f18f02d3c4c",
   },
   {
     id: "macos-x64",

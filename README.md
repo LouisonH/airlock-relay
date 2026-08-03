@@ -12,7 +12,7 @@
   </p>
   <p>
     <a href="https://louisonh.github.io/airlock-relay/"><img src="https://img.shields.io/badge/website-Airlock%20Pages-267d5f" alt="Airlock website" /></a>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6%20technical%20preview-b26b25" alt="v0.1.6 technical preview" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.7"><img src="https://img.shields.io/badge/release-v0.1.7%20technical%20preview-b26b25" alt="v0.1.7 technical preview" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 desktop" />
     <img src="https://img.shields.io/badge/core-Go%201.25%2B-267d5f" alt="Go 1.25 or newer" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -20,7 +20,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.6 is a technical preview that has completed a maintainer-run production-readiness security audit. It has not completed an independent third-party audit, Apple Developer ID signing, or notarization. Read the [audit record](docs/security-audit-2026-07-31.md) before production use.
+> Airlock v0.1.7 is a technical preview that has completed a maintainer-run production-readiness security audit. It has not completed an independent third-party audit, Apple Developer ID signing, or notarization. Read the [audit record](docs/security-audit-2026-07-31.md) before production use.
 
 ## Why Airlock?
 
@@ -123,7 +123,7 @@ Release Signing` key; the public key and detached signatures ship with the
 release. 64-bit Raspberry Pi OS installs the arm64 AppImage directly, and
 32-bit armv7 users can build the desktop bundle on the Pi with
 `scripts/build-armv7-desktop.sh`. Alternatively, get the artifacts and checksums from
-[GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6),
+[GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.7),
 then follow the [installation guide](docs/installation.md). The macOS package is
 ad-hoc signed but is not Developer ID signed or notarized, so read the
 Gatekeeper instructions before opening it.
@@ -220,7 +220,7 @@ deploy/systemd     Server service examples
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md), [v0.1.6 release notes](docs/releases/v0.1.6.md), [security audit](docs/security-audit-2026-07-31.md), [changelog](CHANGELOG.md), or visit the [Airlock documentation site](https://louisonh.github.io/airlock-relay/). The site supports English, Simplified Chinese, and Japanese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service.
+Start with the [documentation index](docs/README.md), [v0.1.7 release notes](docs/releases/v0.1.7.md), [security audit](docs/security-audit-2026-07-31.md), [changelog](CHANGELOG.md), or visit the [Airlock documentation site](https://louisonh.github.io/airlock-relay/). The site supports English, Simplified Chinese, and Japanese, light/dark appearance, protocol examples, and narrow-screen layouts without requiring a Web management service.
 
 ## License
 

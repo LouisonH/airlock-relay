@@ -12,7 +12,7 @@
   </p>
   <p>
     <a href="https://louisonh.github.io/airlock-relay/"><img src="https://img.shields.io/badge/website-Airlock%20Pages-267d5f" alt="Airlock 项目主页" /></a>
-    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6%20technical%20preview-b26b25" alt="v0.1.6 技术预览版" /></a>
+    <a href="https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.7"><img src="https://img.shields.io/badge/release-v0.1.7%20technical%20preview-b26b25" alt="v0.1.7 技术预览版" /></a>
     <img src="https://img.shields.io/badge/desktop-Tauri%202-397b9b" alt="Tauri 2 桌面端" />
     <img src="https://img.shields.io/badge/core-Go%201.25%2B-267d5f" alt="Go 1.25 或更高版本" />
     <img src="https://img.shields.io/badge/platform-macOS-343b38" alt="macOS" />
@@ -20,7 +20,7 @@
 </div>
 
 > [!WARNING]
-> Airlock v0.1.6 是技术预览版，已完成维护者执行的生产就绪安全审计；它尚未完成独立第三方审计、Developer ID 签名或 Apple 公证。生产使用前请阅读[审计记录](docs/security-audit-2026-07-31.md)。
+> Airlock v0.1.7 是技术预览版，已完成维护者执行的生产就绪安全审计；它尚未完成独立第三方审计、Developer ID 签名或 Apple 公证。生产使用前请阅读[审计记录](docs/security-audit-2026-07-31.md)。
 
 ## 为什么需要 Airlock？
 
@@ -105,14 +105,14 @@ flowchart LR
 
 ## 安装技术预览版
 
-v0.1.6 的 npm 安装器支持 Apple Silicon 与 Intel Mac（macOS 12 或更高版本）、
+v0.1.7 的 npm 安装器支持 Apple Silicon 与 Intel Mac（macOS 12 或更高版本）、
 Windows x64/x86/arm64 与 Linux x64/arm64。可用以下命令安装已核验的应用：
 
 ```bash
 npm install -g airlock-relay && airlock-installer install --open
 ```
 
-也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.6)
+也可从 [GitHub Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.7)
 下载 DMG 和校验文件，再按照[安装指南](docs/installation.zh-CN.md)操作。安装包已进行
 ad-hoc 签名，但没有 Developer ID 签名与 Apple 公证，请先阅读 Gatekeeper 说明。
 
@@ -211,7 +211,7 @@ deploy/systemd     服务端 systemd 示例
 
 ## 文档
 
-可从[文档索引](docs/README.md)、[v0.1.6 发布说明](docs/releases/v0.1.6.zh-CN.md)、[审计记录](docs/security-audit-2026-07-31.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
+可从[文档索引](docs/README.md)、[v0.1.7 发布说明](docs/releases/v0.1.7.zh-CN.md)、[审计记录](docs/security-audit-2026-07-31.md)与[更新日志](CHANGELOG.md)开始，也可访问 [Airlock 文档网站](https://louisonh.github.io/airlock-relay/)。网页支持中文、英文与日文、深浅外观、协议示例和窄屏布局，不需要启动 Web 管理服务。
 
 ## 许可证
 

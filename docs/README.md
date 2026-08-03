@@ -4,6 +4,7 @@
 
 ## English
 
+- [v0.1.7 window controls and installer fixes](releases/v0.1.7.md)
 - [v0.1.6 cross-platform npm installer release](releases/v0.1.6.md)
 - [v0.1.5 release notes](releases/v0.1.5.md)
 - [v0.1.4 production-readiness security release](releases/v0.1.4.md)
@@ -22,6 +23,7 @@
 
 ## 简体中文
 
+- [v0.1.7 窗口控制与安装器修复](releases/v0.1.7.zh-CN.md)
 - [v0.1.6 全平台 npm 安装器发布说明](releases/v0.1.6.zh-CN.md)
 - [v0.1.5 发布说明](releases/v0.1.5.zh-CN.md)
 - [v0.1.4 生产安全审计版本说明](releases/v0.1.4.zh-CN.md)
@@ -40,6 +42,7 @@
 
 ## 日本語
 
+- [v0.1.7 ウィンドウ操作とインストーラー修正](releases/v0.1.7.ja.md)
 - [v0.1.6 クロスプラットフォーム npm インストーラーリリース](releases/v0.1.6.ja.md)
 - [v0.1.5 リリースノート](releases/v0.1.5.ja.md)
 - [v0.1.4 本番セキュリティ監査リリースノート](releases/v0.1.4.ja.md)
