@@ -109,7 +109,7 @@ artifact and checksum are published.
 
 ## Integrity
 
-Bundled asset: `Airlock_0.1.6_aarch64.dmg`
+Bundled asset: `Airlock_0.1.7_aarch64.dmg`
 
 ```text
 SHA-256 628dbd59cba6b3cb6a68c8866dbd53543540c02cc77565e69540e7701211f832

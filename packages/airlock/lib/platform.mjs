@@ -1,4 +1,4 @@
-export const AIRLOCK_VERSION = "0.1.6";
+export const AIRLOCK_VERSION = "0.1.7";
 
 const releaseTag = `v${AIRLOCK_VERSION}`;
 export const RELEASE_URL = `https://github.com/LouisonH/airlock-relay/releases/tag/${releaseTag}`;
@@ -14,8 +14,8 @@ const targets = [
     secureEntry: "airlock-ssh-wizard+native-os-confirmation",
     status: "released",
     installType: "macos-dmg",
-    artifactName: "Airlock_0.1.6_aarch64.dmg",
-    sha256: "4226c214c17e58082e6cbbc25336b575d4bf879e07c8c5364b0165131e237c9e",
+    artifactName: "Airlock_0.1.7_aarch64.dmg",
+    sha256: "PENDING_MACOS_ARM64",
   },
   {
     id: "macos-x64",
@@ -26,8 +26,8 @@ const targets = [
     secureEntry: "airlock-ssh-wizard+native-os-confirmation",
     status: "released",
     installType: "macos-dmg",
-    artifactName: "Airlock_0.1.6_x64.dmg",
-    sha256: "ea8c07252d94fed56dd74cc12f76ca389323ff76f4391dc18ea33d34dafc82c9",
+    artifactName: "Airlock_0.1.7_x64.dmg",
+    sha256: "PENDING_MACOS_X64",
   },
   {
     id: "windows-x64",
@@ -38,8 +38,8 @@ const targets = [
     secureEntry: "airlock-ssh-wizard+windows-confirmation",
     status: "released",
     installType: "windows-nsis",
-    artifactName: "Airlock_0.1.6_x64-setup.exe",
-    sha256: "209da80a8d145a34f3821a5b7c9e8af557e1b12cce7f02e4095db7751f10125a",
+    artifactName: "Airlock_0.1.7_x64-setup.exe",
+    sha256: "PENDING_WINDOWS_X64",
   },
   {
     id: "windows-arm64",
@@ -50,8 +50,8 @@ const targets = [
     secureEntry: "airlock-ssh-wizard+windows-confirmation",
     status: "released",
     installType: "windows-nsis",
-    artifactName: "Airlock_0.1.6_arm64-setup.exe",
-    sha256: "57f6344f009238b574d8f95f688cf0e8e3da662cc99f4ef8c1a2bd10d9a5a212",
+    artifactName: "Airlock_0.1.7_arm64-setup.exe",
+    sha256: "PENDING_WINDOWS_ARM64",
   },
   {
     id: "windows-x86",
@@ -62,8 +62,8 @@ const targets = [
     secureEntry: "airlock-ssh-wizard+windows-confirmation",
     status: "released",
     installType: "windows-nsis",
-    artifactName: "Airlock_0.1.6_x86-setup.exe",
-    sha256: "3a0e82a324f640b3ce69c30da4d8f8ae0e2af0a4df40700e6d3e9dd7f73eea41",
+    artifactName: "Airlock_0.1.7_x86-setup.exe",
+    sha256: "PENDING_WINDOWS_X86",
   },
   {
     id: "linux-x64",
@@ -74,8 +74,8 @@ const targets = [
     secureEntry: "airlock-ssh-wizard+secret-service",
     status: "released",
     installType: "linux-appimage",
-    artifactName: "Airlock_0.1.6_amd64.AppImage",
-    sha256: "6111aa3bede819f037dfbd9b6bab0aa81d63f9f3ef6e4d7c1c1c1fe69915535f",
+    artifactName: "Airlock_0.1.7_amd64.AppImage",
+    sha256: "PENDING_LINUX_X64",
   },
   {
     id: "linux-arm64",
@@ -86,8 +86,8 @@ const targets = [
     secureEntry: "airlock-ssh-wizard+secret-service",
     status: "released",
     installType: "linux-appimage",
-    artifactName: "Airlock_0.1.6_aarch64.AppImage",
-    sha256: "08eb0bd08d32ed90b9a4a966ea5fbf0e18a1a08897dbd6479b466658ac4bf521",
+    artifactName: "Airlock_0.1.7_aarch64.AppImage",
+    sha256: "PENDING_LINUX_ARM64",
   },
   {
     id: "linux-x86",
