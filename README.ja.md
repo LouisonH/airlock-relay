@@ -2,7 +2,7 @@
   <img src="website/assets/airlock-logo.svg" width="92" height="92" alt="Airlock ロゴ" />
   <h1>Airlock</h1>
   <p><strong>Agent に機能を渡し、認証情報はローカルに保つ。</strong></p>
-  <p>HTTP/Wget、SSH、LLM API 向けのネイティブ認証情報分離リレーです。</p>
+  <p>AI Agent、スクリプト、自動化ツールには必要なアクセスだけを与え、実 URL・パスワード・API Key は一切見せない。</p>
   <p>
     <a href="README.md">English</a> |
     <a href="README.zh-CN.md">简体中文</a> |
@@ -23,6 +23,10 @@
 > Airlock v0.1.7 はテクニカルプレビューです。保守者による本番運用準備セキュリティ監査は完了しましたが、独立した第三者監査、Developer ID 署名、Apple 公証は未完了です。運用前に[監査記録](docs/security-audit-2026-07-31.md)を確認してください。
 
 ## Airlock が必要な理由
+
+<p align="center">
+  <img src="website/assets/airlock-demo.svg" width="720" alt="Airlock を使わない場合、Agent は実 URL・パスワード・API Key を受け取る。Airlock を使う場合、Agent が受け取るのはローカルルートと取り消し可能なトークンだけ。" />
+</p>
 
 信頼できない LLM、Agent、スクリプト、自動化ツール、サードパーティ API 中継サービスが、API 呼び出し、ファイル取得、SSH コマンド実行を必要とすることがあります。実 URL、上流アカウント、パスワード、API Key をそのまま渡すと、プロンプト、ログ、ツール出力、中継事業者に漏れる可能性があります。
 

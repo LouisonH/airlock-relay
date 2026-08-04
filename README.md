@@ -2,7 +2,7 @@
   <img src="website/assets/airlock-logo.svg" width="92" height="92" alt="Airlock logo" />
   <h1>Airlock</h1>
   <p><strong>Give agents capabilities. Keep credentials local.</strong></p>
-  <p>A native credential-isolation relay for HTTP/Wget, SSH, and LLM API traffic.</p>
+  <p>Your AI agents, scripts, and automation get the access they need — without ever seeing your real URLs, passwords, or API keys.</p>
   <p>
     <a href="README.md">English</a> |
     <a href="README.zh-CN.md">简体中文</a> |
@@ -23,6 +23,10 @@
 > Airlock v0.1.7 is a technical preview that has completed a maintainer-run production-readiness security audit. It has not completed an independent third-party audit, Apple Developer ID signing, or notarization. Read the [audit record](docs/security-audit-2026-07-31.md) before production use.
 
 ## Why Airlock?
+
+<p align="center">
+  <img src="website/assets/airlock-demo.svg" width="720" alt="Without Airlock, agents receive real URLs, passwords, and API keys; with Airlock, agents only get a local route and a revocable token." />
+</p>
 
 Untrusted LLMs, agents, scripts, and automation often need to call an API, download a file, or run an SSH command. Giving them the real target URL, upstream account, password, or API key makes that secret available to prompts, logs, tool output, and accidental disclosure.
 

@@ -2,7 +2,7 @@
   <img src="website/assets/airlock-logo.svg" width="92" height="92" alt="Airlock Logo" />
   <h1>Airlock</h1>
   <p><strong>把能力交给 Agent，把凭据留在本机。</strong></p>
-  <p>面向 HTTP/Wget、SSH 和 LLM API 流量的原生凭据隔离转发器。</p>
+  <p>你的 AI Agent、脚本和自动化任务可以拿到完成任务所需的访问权——但永远看不到真实 URL、密码或 API Key。</p>
   <p>
     <a href="README.md">English</a> |
     <a href="README.zh-CN.md">简体中文</a> |
@@ -23,6 +23,10 @@
 > Airlock v0.1.7 是技术预览版，已完成维护者执行的生产就绪安全审计；它尚未完成独立第三方审计、Developer ID 签名或 Apple 公证。生产使用前请阅读[审计记录](docs/security-audit-2026-07-31.md)。
 
 ## 为什么需要 Airlock？
+
+<p align="center">
+  <img src="website/assets/airlock-demo.svg" width="720" alt="没有 Airlock 时，Agent 会拿到真实 URL、密码和 API Key；有 Airlock 时，Agent 只拿到本地路由和可撤销令牌。" />
+</p>
 
 不可信的 LLM、Agent、脚本和自动化任务经常需要调用 API、下载文件或执行 SSH 命令。如果直接把真实目标 URL、上游账户、密码或 API Key 交给它们，这些 Secret 便可能进入提示词、日志、工具输出或被意外泄露。
 

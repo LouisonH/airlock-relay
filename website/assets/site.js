@@ -1,7 +1,7 @@
 const translations = {
   zh: {
-    pageTitle: "Airlock - 本地凭据隔离转发器",
-    pageDescription: "Airlock 是一个面向 HTTP、SSH 和 LLM 流量的本地凭据隔离转发器。",
+    pageTitle: "Airlock - 把能力交给 Agent，把凭据留在本机",
+    pageDescription: "Airlock 是本地凭据隔离转发器：给 AI Agent、脚本和自动化可控访问 HTTP、SSH、LLM API 的能力，真实 URL、密码和 API Key 始终留在本机。",
     skipLink: "跳到主要内容",
     navLabel: "主导航",
     navHome: "首页",
@@ -18,9 +18,9 @@ const translations = {
     navDocs: "文档",
     sourceCode: "源代码",
     menuLabel: "打开导航",
-    heroEyebrow: "LOCAL CREDENTIAL BOUNDARY",
+    heroEyebrow: "SECRETS STAY LOCAL",
     heroLead: "把能力交给 Agent，把凭据留在本机。",
-    heroDetail: "Airlock 使用固定本地路由、可撤销凭据与最小权限策略，为 HTTP、SSH 和 LLM 请求隔离真实上游地址、密码与 API Key。",
+    heroDetail: "Agent 要调用 API、下载文件、执行 SSH 命令，不必交出真实 URL、密码或 API Key。Airlock 在本地提供固定路由：调用者只拿到可撤销的本地凭据，秘密通过策略检查后才注入。",
     seeHow: "了解工作方式",
     releaseCta: "下载安装 v0.1.7",
     quickStartCta: "查看快速用法",
@@ -192,8 +192,8 @@ const translations = {
     footerSecurity: "v0.1.7 · 维护者生产就绪审计完成 · 未经第三方认证或 Apple 公证"
   },
   en: {
-    pageTitle: "Airlock - Local credential-isolation relay",
-    pageDescription: "Airlock is a local credential-isolation relay for HTTP, SSH, and LLM traffic.",
+    pageTitle: "Airlock - Give agents access. Keep secrets local.",
+    pageDescription: "Airlock is a local relay that gives AI agents, scripts, and automation controlled access to HTTP, SSH, and LLM APIs — without exposing real URLs, passwords, or API keys.",
     skipLink: "Skip to main content",
     navLabel: "Primary navigation",
     navHome: "Home",
@@ -210,9 +210,9 @@ const translations = {
     navDocs: "Documentation",
     sourceCode: "Source",
     menuLabel: "Open navigation",
-    heroEyebrow: "LOCAL CREDENTIAL BOUNDARY",
+    heroEyebrow: "SECRETS STAY LOCAL",
     heroLead: "Give agents capabilities. Keep credentials local.",
-    heroDetail: "Airlock uses fixed local routes, revocable credentials, and least-privilege policies to isolate real upstream addresses, passwords, and API keys from HTTP, SSH, and LLM callers.",
+    heroDetail: "Agents, scripts, and automation get controlled access to HTTP, SSH, and LLM APIs — while real URLs, passwords, and API keys stay on your machine.",
     seeHow: "See how it works",
     releaseCta: "Download v0.1.7",
     quickStartCta: "View quick start",
@@ -435,6 +435,8 @@ function applyLanguage(language) {
   const pageTitleKey = document.body.dataset.pageTitle;
   document.title = dictionary[pageTitleKey] || dictionary.pageTitle;
   document.querySelector('meta[name="description"]').setAttribute("content", dictionary.pageDescription);
+  document.querySelector('meta[property="og:title"]').setAttribute("content", dictionary.pageTitle);
+  document.querySelector('meta[property="og:description"]').setAttribute("content", dictionary.pageDescription);
   document.querySelectorAll("[data-i18n]").forEach((element) => {
     const key = element.dataset.i18n;
     if (dictionary[key]) element.textContent = dictionary[key];

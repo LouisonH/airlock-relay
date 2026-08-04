@@ -60,8 +60,8 @@ ssh build@127.0.0.1 -p 4770
 
 ## 想试试的话
 
-当前为 **v0.1.4 技术预览版**，已完成维护者执行的生产就绪安全审计，下载包支持
-**macOS 12+ Apple Silicon**：
+当前为 **v0.1.7 技术预览版**，已完成维护者执行的生产就绪安全审计，下载包支持
+**macOS 12+、Windows x64/x86/arm64 与 Linux x64/arm64**：
 
 ```bash
 npm install -g airlock-relay && airlock-installer install --open
@@ -69,7 +69,7 @@ npm install -g airlock-relay && airlock-installer install --open
 
 项目地址：<https://github.com/LouisonH/airlock-relay>
 
-也可以直接前往 [v0.1.4 Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.4) 下载 DMG 和校验文件。源码开发需要 Go 1.25+、Node.js 20+、Rust/Cargo 与 Tauri 2 平台依赖。
+也可以直接前往 [v0.1.7 Releases](https://github.com/LouisonH/airlock-relay/releases/tag/v0.1.7) 下载安装包和校验文件。源码开发需要 Go 1.25+、Node.js 20+、Rust/Cargo 与 Tauri 2 平台依赖。
 
 ## 也把边界说清楚
 

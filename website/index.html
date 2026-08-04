@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#18201d" />
-    <meta name="description" content="Airlock is a local credential-isolation relay for HTTP, SSH, and LLM traffic." />
+    <meta name="description" content="Airlock 是本地凭据隔离转发器：给 AI Agent、脚本和自动化可控访问 HTTP、SSH、LLM API 的能力，真实 URL、密码和 API Key 始终留在本机。" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Airlock - Local credential-isolation relay" />
-    <meta property="og:description" content="Expose controlled local capabilities without exposing upstream URLs, passwords, or API keys." />
+    <meta property="og:title" content="Airlock - 把能力交给 Agent，把凭据留在本机" />
+    <meta property="og:description" content="Agent 要调用 API、下载文件、执行 SSH 命令，不必交出真实 URL、密码或 API Key。Airlock 在本地提供固定路由：调用者只拿到可撤销的本地凭据，秘密通过策略检查后才注入。" />
     <meta name="twitter:card" content="summary" />
     <title>Airlock - 本地凭据隔离转发器</title>
     <link rel="icon" href="./assets/airlock-logo.svg" type="image/svg+xml" />
@@ -68,10 +68,10 @@
 
         <div class="hero-inner">
           <div class="hero-copy reveal">
-            <p class="eyebrow" data-i18n="heroEyebrow">LOCAL CREDENTIAL BOUNDARY</p>
+            <p class="eyebrow" data-i18n="heroEyebrow">SECRETS STAY LOCAL</p>
             <h1 class="hero-wordmark" aria-label="Airlock"><span aria-hidden="true" style="--letter-index:0">A</span><span aria-hidden="true" style="--letter-index:1">i</span><span aria-hidden="true" style="--letter-index:2">r</span><span aria-hidden="true" style="--letter-index:3">l</span><span aria-hidden="true" style="--letter-index:4">o</span><span aria-hidden="true" style="--letter-index:5">c</span><span aria-hidden="true" style="--letter-index:6">k</span></h1>
             <p class="hero-lead" data-i18n="heroLead">把能力交给 Agent，把凭据留在本机。</p>
-            <p class="hero-detail" data-i18n="heroDetail">Airlock 使用固定本地路由、可撤销凭据与最小权限策略，为 HTTP、SSH 和 LLM 请求隔离真实上游地址、密码与 API Key。</p>
+            <p class="hero-detail" data-i18n="heroDetail">Agent 要调用 API、下载文件、执行 SSH 命令，不必交出真实 URL、密码或 API Key。Airlock 在本地提供固定路由：调用者只拿到可撤销的本地凭据，秘密通过策略检查后才注入。</p>
             <div class="hero-actions">
               <a class="primary-action" href="./downloads.html"><span data-i18n="releaseCta">下载安装 v0.1.7</span></a>
               <a class="secondary-action" href="./security.html"><span data-i18n="quickStartCta">了解安全模型</span></a>
